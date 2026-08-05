@@ -395,6 +395,18 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
     <div class="content">
       <!-- ===================== DASHBOARD ===================== -->
       <section class="view active" id="view-dashboard">
+        <div class="card" id="importPanel" style="margin-bottom:14px">
+          <h3 class="sub" style="margin-top:0">📥 Importar datos de las apps</h3>
+          <p class="hint" style="margin-top:0">Cada app corre en su propio subdominio, por lo que Analytics no puede leer su <code>localStorage</code> directamente. Exportá el JSON desde cada app (menú ⋯ → “Exportar para Analytics”) y cargalo acá. Los datos quedan guardados en este navegador.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+            <button class="btn" onclick="caImportPick('ecosmart')">📥 Importar EcoSmart</button>
+            <button class="btn" onclick="caImportPick('ecoestres')">📥 Importar EcoEstrés</button>
+            <button class="btn" onclick="caImportPick('ergosmart')">📥 Importar ErgoSmart</button>
+            <button class="btn" onclick="caImportPick('cardiosalud')">📥 Importar CardioSalud</button>
+          </div>
+          <input type="file" id="caImportFile" accept="application/json,.json" style="display:none">
+          <div class="hint" id="caImportStatus" style="margin-top:8px"></div>
+        </div>
         <div id="dashAppFilter" class="app-filter"></div>
         <div id="dashKpis" class="grid g4"></div>
         <h3 class="sub">Evolución mensual de estudios por app</h3>
@@ -673,10 +685,58 @@ function readCardioSalud(){
   return out;
 }
 
+/* ---------- Importación por JSON (cross-subdominio) ----------
+   Cada app se exporta a un archivo JSON y se guarda acá bajo su propia clave.
+   loadData() prioriza estos datos importados sobre el localStorage vivo. */
+const CA_KEYS   = {eco:'ca_datos_ecosmart', ergo:'ca_datos_ergosmart', ecoestres:'ca_datos_ecoestres', cardio:'ca_datos_cardiosalud'};
+const CA_BYNAME = {ecosmart:'ca_datos_ecosmart', ergosmart:'ca_datos_ergosmart', ecoestres:'ca_datos_ecoestres', cardiosalud:'ca_datos_cardiosalud'};
+const CA_LABELS = {ecosmart:'EcoSmart', ergosmart:'ErgoSmart', ecoestres:'EcoEstrés', cardiosalud:'CardioSalud'};
+function readImported(app){
+  try{
+    const raw=localStorage.getItem(CA_KEYS[app]); if(!raw) return null;
+    const v=JSON.parse(raw);
+    const arr=Array.isArray(v)?v:(v&&Array.isArray(v.estudios)?v.estudios:(v&&Array.isArray(v.informes)?v.informes:null));
+    return Array.isArray(arr)?arr:null;
+  }catch(e){ console.warn('No se pudo leer datos importados de',app,e); return null; }
+}
+function readAppRaw(app){
+  const imp=readImported(app);
+  if(imp) return imp;
+  return app==='cardio' ? readCardioSalud() : readStore(APPS[app].key);
+}
+let _caImportApp=null;
+function caImportPick(appName){ _caImportApp=appName; const f=$('#caImportFile'); if(f){ f.value=''; f.click(); } }
+function caStatus(msg,isErr){ const el=$('#caImportStatus'); if(el){ el.textContent=msg; el.style.color=isErr?'var(--danger,#e5534b)':'var(--ok,#1baf7a)'; } }
+function caHandleFile(file){
+  const appName=_caImportApp; if(!file||!appName) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let data;
+    try{ data=JSON.parse(e.target.result); }
+    catch(err){ caStatus('❌ El archivo no es un JSON válido.',true); return; }
+    let estudios=null, appField=null;
+    if(Array.isArray(data)){ estudios=data; }
+    else if(data && typeof data==='object'){
+      appField=data.app||null;
+      estudios=Array.isArray(data.estudios)?data.estudios:(Array.isArray(data.informes)?data.informes:null);
+    }
+    if(!Array.isArray(estudios)){ caStatus('❌ Estructura no reconocida (falta el arreglo "estudios").',true); return; }
+    if(appField && normTxt(String(appField))!==normTxt(appName)){
+      caStatus('❌ Este archivo parece ser de "'+appField+'", no de '+CA_LABELS[appName]+'. Verificá el botón usado.',true); return;
+    }
+    try{ localStorage.setItem(CA_BYNAME[appName], JSON.stringify(estudios)); }
+    catch(err){ caStatus('❌ No se pudo guardar (¿almacenamiento lleno?).',true); return; }
+    loadData(); renderCurrent();
+    const msg='✅ '+estudios.length+' estudios importados de '+CA_LABELS[appName];
+    caStatus(msg,false); if(typeof toast==='function') toast(msg);
+  };
+  reader.readAsText(file);
+}
+
 function loadData(){
   STUDIES=[]; PATIENTS=new Map();
   for(const app in APPS){
-    const arr = app==='cardio' ? readCardioSalud() : readStore(APPS[app].key);
+    const arr = readAppRaw(app);
     for(const raw of arr){ STUDIES.push(normalizeStudy(raw, app)); }
   }
   // indexar pacientes
@@ -786,8 +846,8 @@ function renderDashboard(){
     ? `<thead><tr><th>Fecha</th><th>App</th><th>Paciente</th><th>Médico</th></tr></thead><tbody>${recent.map(s=>`<tr><td>${fmtDate(s.fecha)}</td><td><span class="pill">${APPS[s.app].label}</span></td><td>${s._pid.identifiable?esc(initials(s.nombre))+' · '+esc(s.ci||'s/CI'):'<span class="badge n">no identif.</span>'}</td><td>${doctorIdentity(s).label}</td></tr>`).join('')}</tbody>`
     : `<tbody><tr><td class="empty" style="border:none">Sin estudios en el período.</td></tr></tbody>`;
 
-  const missing=Object.keys(APPS).filter(a=>(a==='cardio'?readCardioSalud():readStore(APPS[a].key)).length===0).map(a=>APPS[a].label);
-  $('#dashSrc').textContent = 'Fuente: localStorage ('+Object.values(APPS).map(a=>a.key).join(', ')+'). '+(missing.length?('Sin datos de: '+missing.join(', ')+'.'):'Todas las apps tienen datos.');
+  const missing=Object.keys(APPS).filter(a=>readAppRaw(a).length===0).map(a=>APPS[a].label);
+  $('#dashSrc').textContent = 'Fuente: datos importados (JSON) o localStorage local. '+(missing.length?('Sin datos de: '+missing.join(', ')+'. Importá su JSON desde el panel superior.'):'Todas las apps tienen datos.');
 }
 function monthSpan(list){
   const dates=list.filter(s=>s.fecha).map(s=>s.fecha);
@@ -1311,6 +1371,7 @@ function bindEvents(){
   $('#dFrom').addEventListener('change',renderCurrent);
   $('#dTo').addEventListener('change',renderCurrent);
   $('#refreshBtn').addEventListener('click',()=>{loadData();renderCurrent();toast('Datos actualizados desde localStorage');});
+  { const cif=$('#caImportFile'); if(cif) cif.addEventListener('change',e=>{ if(e.target.files[0]) caHandleFile(e.target.files[0]); }); }
   $('#dashAppFilter').addEventListener('change',e=>{const cb=e.target.closest('input[data-app]');if(!cb)return;dashAppFilter[cb.dataset.app]=cb.checked;const lbl=cb.closest('.app-toggle');if(lbl){lbl.classList.toggle('on',cb.checked);lbl.classList.toggle('off',!cb.checked);}renderDashboard();});
   $('#themeBtn').addEventListener('click',toggleTheme);
   $('#medSel').addEventListener('change',renderMedico);
