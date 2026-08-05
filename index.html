@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CeiboAnalytics · Inteligencia clínica integrada</title>
+<!-- Dependencias externas SOLO por CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* ============================================================
+   CeiboAnalytics · estilos (todo inline, sin archivos externos)
+   Paleta validada dataviz (dark + light por CSS variables)
+   ============================================================ */
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --page:        #0d0d0d;
+  --surface-1:   #1a1a19;
+  --surface-2:   #232322;
+  --surface-3:   #2c2c2a;
+  --text-1:      #ffffff;
+  --text-2:      #c3c2b7;
+  --muted:       #898781;
+  --grid:        #2c2c2a;
+  --baseline:    #383835;
+  --border:      rgba(255,255,255,0.10);
+  --series-1:    #3987e5; /* azul */
+  --series-2:    #d95926; /* naranja */
+  --series-3:    #199e70; /* aqua */
+  --series-4:    #c98500; /* amarillo */
+  --series-5:    #d55181; /* magenta */
+  --series-6:    #008300; /* verde */
+  --series-7:    #9085e9; /* violeta */
+  --series-8:    #e66767; /* rojo */
+  --good:        #0ca30c;
+  --warning:     #fab219;
+  --serious:     #ec835a;
+  --critical:    #d03b3b;
+  --accent:      #3987e5;
+}
+:root[data-theme="light"]{
+  color-scheme: light;
+  --page:        #f9f9f7;
+  --surface-1:   #ffffff;
+  --surface-2:   #fcfcfb;
+  --surface-3:   #f0efec;
+  --text-1:      #0b0b0b;
+  --text-2:      #52514e;
+  --muted:       #898781;
+  --grid:        #e1e0d9;
+  --baseline:    #c3c2b7;
+  --border:      rgba(11,11,11,0.10);
+  --series-1:    #2a78d6;
+  --series-2:    #eb6834;
+  --series-3:    #1baf7a;
+  --series-4:    #eda100;
+  --series-5:    #e87ba4;
+  --series-6:    #008300;
+  --series-7:    #4a3aa7;
+  --series-8:    #e34948;
+  --good:        #0ca30c;
+  --warning:     #fab219;
+  --serious:     #ec835a;
+  --critical:    #d03b3b;
+  --accent:      #2a78d6;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page);
+  color: var(--text-1);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+a{color:var(--accent);}
+button{font-family:inherit;}
+
+/* ---------- Layout ---------- */
+.app{display:flex; min-height:100vh;}
+.sidebar{
+  width: 232px; flex:0 0 232px;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  padding: 18px 12px;
+  display:flex; flex-direction:column; gap:4px;
+  position: sticky; top:0; height:100vh; overflow-y:auto;
+}
+.brand{display:flex; align-items:center; gap:10px; padding:6px 8px 16px;}
+.brand .logo{
+  width:34px;height:34px;border-radius:9px;
+  background: linear-gradient(135deg, var(--series-3), var(--series-1));
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;color:#fff;font-size:16px;
+}
+.brand .t{font-weight:700;font-size:15px;line-height:1.1;}
+.brand .t small{display:block;font-weight:500;color:var(--muted);font-size:11px;}
+.navbtn{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:9px;
+  background:none; border:none; color:var(--text-2);
+  cursor:pointer; text-align:left; width:100%; font-size:14px;
+}
+.navbtn:hover{background:var(--surface-2); color:var(--text-1);}
+.navbtn.active{background:var(--surface-3); color:var(--text-1); font-weight:600;}
+.navbtn .ic{width:18px;text-align:center;opacity:.9;}
+.sidebar .spacer{flex:1;}
+.side-foot{font-size:11px;color:var(--muted);padding:8px;}
+
+.main{flex:1; min-width:0; display:flex; flex-direction:column;}
+.topbar{
+  position: sticky; top:0; z-index:20;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 22px;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+}
+.topbar .title{font-weight:700;font-size:17px;margin-right:auto;}
+.filters{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+select, input[type="date"], input[type="text"]{
+  background: var(--surface-2); color:var(--text-1);
+  border:1px solid var(--border); border-radius:8px;
+  padding:7px 9px; font-size:13px;
+}
+.btn{
+  background: var(--surface-2); color:var(--text-1);
+  border:1px solid var(--border); border-radius:8px;
+  padding:7px 12px; font-size:13px; cursor:pointer;
+}
+.btn:hover{background:var(--surface-3);}
+.btn.primary{background:var(--accent); color:#fff; border-color:transparent;}
+.btn.primary:hover{filter:brightness(1.08);}
+/* Selector de apps del dashboard */
+.app-filter{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 18px;}
+.app-filter .af-lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-right:2px;}
+.app-toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none;background:var(--surface-2);color:var(--text-1);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:500;transition:background .15s,border-color .15s,opacity .15s;}
+.app-toggle:hover{background:var(--surface-3);}
+.app-toggle input{position:absolute;opacity:0;width:0;height:0;}
+.app-toggle .af-dot{width:10px;height:10px;border-radius:50%;background:var(--af-c,var(--muted));flex-shrink:0;transition:.15s;}
+.app-toggle.on{border-color:var(--af-c);}
+.app-toggle.off{opacity:.45;}
+.app-toggle.off .af-dot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--border);}
+#customRange{display:none; align-items:center; gap:6px;}
+#customRange.on{display:flex;}
+
+.content{padding: 22px; max-width:1280px; width:100%;}
+.view{display:none;}
+.view.active{display:block;}
+h2.section{font-size:16px;margin:4px 0 14px;font-weight:700;}
+h3.sub{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:26px 0 12px;font-weight:600;}
+
+/* ---------- Cards / grid ---------- */
+.grid{display:grid; gap:14px;}
+.g4{grid-template-columns:repeat(4,1fr);}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g2{grid-template-columns:repeat(2,1fr);}
+@media(max-width:1000px){.g4{grid-template-columns:repeat(2,1fr);}.g3{grid-template-columns:repeat(2,1fr);}.g2{grid-template-columns:1fr;}}
+@media(max-width:640px){.g4,.g3{grid-template-columns:1fr;}}
+.card{
+  background: var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:12px; padding:16px;
+}
+.card.pad0{padding:0;}
+.stat{display:flex;flex-direction:column;gap:4px;}
+.stat .lbl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.03em;}
+.stat .val{font-size:28px;font-weight:700;line-height:1;}
+.stat .sub{font-size:12px;color:var(--text-2);}
+.chartbox{position:relative;height:280px;}
+.chartbox.sm{height:220px;}
+.chartbox.lg{height:340px;}
+
+/* ---------- Tables ---------- */
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--border);}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+td{color:var(--text-2);}
+tbody tr:hover{background:var(--surface-2);}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
+.tablewrap{overflow-x:auto;}
+
+/* ---------- Semáforos / badges ---------- */
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;}
+.dot.g{background:var(--good);} .dot.y{background:var(--warning);} .dot.r{background:var(--critical);}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;
+  border:1px solid var(--border);
+}
+.badge.g{color:var(--good);}  .badge.y{color:var(--warning);}
+.badge.r{color:var(--critical);} .badge.s{color:var(--serious);}
+.badge.n{color:var(--text-2);}
+.alert-row td{border-left:3px solid transparent;}
+.alert-row.crit td:first-child{border-left-color:var(--critical);}
+.alert-row.warn td:first-child{border-left-color:var(--warning);}
+
+.pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;background:var(--surface-3);color:var(--text-2);margin-right:4px;}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-2);margin-top:6px;}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block;}
+.empty{
+  padding:40px 16px;text-align:center;color:var(--muted);
+  border:1px dashed var(--border);border-radius:12px;background:var(--surface-1);
+}
+.empty .big{font-size:15px;color:var(--text-2);margin-bottom:4px;}
+.hint{font-size:12px;color:var(--muted);margin-top:8px;}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+.kpi-delta{font-size:12px;font-weight:600;}
+.kpi-delta.up{color:var(--good);} .kpi-delta.down{color:var(--critical);} .kpi-delta.flat{color:var(--muted);}
+.src-note{font-size:11px;color:var(--muted);margin-top:10px;}
+.meter{height:8px;background:var(--surface-3);border-radius:6px;overflow:hidden;}
+.meter > i{display:block;height:100%;border-radius:6px;}
+.q-row{display:grid;grid-template-columns:1fr 90px 60px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);}
+.q-row .qn{font-size:13px;}
+.q-row .qp{font-variant-numeric:tabular-nums;font-size:13px;text-align:right;}
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--surface-3);color:var(--text-1);border:1px solid var(--border);
+  padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;
+  transition:opacity .25s, transform .25s;z-index:100;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+.mobile-nav{display:none;}
+@media(max-width:820px){
+  .sidebar{display:none;}
+  .mobile-nav{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;background:var(--surface-1);border-bottom:1px solid var(--border);}
+  .mobile-nav .navbtn{width:auto;white-space:nowrap;}
+}
+</style>
+<style>
+/* ============================================================
+   LOGIN SCREEN
+   ============================================================ */
+#login-screen {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--page);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 32px;
+}
+#login-screen.hidden { display: none; }
+
+/* Ícono animado — barras de gráfico */
+.bars-icon {
+  display: flex; align-items: flex-end; gap: 7px;
+  height: 72px;
+}
+.bar {
+  width: 16px; border-radius: 4px 4px 0 0;
+  background: var(--accent);
+  animation: barPulse 1.2s ease-in-out infinite;
+}
+.bar:nth-child(1){ height: 35%; animation-delay: 0s;    background: var(--series-3); }
+.bar:nth-child(2){ height: 60%; animation-delay: 0.15s; background: var(--series-1); }
+.bar:nth-child(3){ height: 85%; animation-delay: 0.3s;  background: var(--series-2); }
+.bar:nth-child(4){ height: 50%; animation-delay: 0.45s; background: var(--series-4); }
+.bar:nth-child(5){ height: 70%; animation-delay: 0.6s;  background: var(--series-5); }
+
+@keyframes barPulse {
+  0%, 100% { transform: scaleY(1);   opacity: 1; }
+  50%       { transform: scaleY(0.5); opacity: 0.5; }
+}
+
+.login-box {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 36px 40px;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 20px;
+  min-width: 320px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+}
+.login-title {
+  font-size: 22px; font-weight: 800;
+  color: var(--text-1); letter-spacing: -0.5px;
+}
+.login-subtitle {
+  font-size: 12px; color: var(--muted);
+  margin-top: -14px; text-align: center;
+}
+.login-input {
+  width: 100%; padding: 12px 16px;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-1);
+  font-size: 15px; font-family: inherit;
+  text-align: center; letter-spacing: 4px;
+  outline: none; transition: border-color .15s;
+}
+.login-input:focus { border-color: var(--accent); }
+.login-btn {
+  width: 100%; padding: 12px;
+  border-radius: 10px; border: none;
+  background: var(--accent); color: #fff;
+  font-size: 15px; font-weight: 700;
+  cursor: pointer; font-family: inherit;
+  transition: opacity .15s;
+}
+.login-btn:hover { opacity: 0.85; }
+.login-error {
+  font-size: 12px; color: var(--critical);
+  min-height: 16px; text-align: center;
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="bars-icon">
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+    <div class="login-title">CeiboAnalytics</div>
+    <div class="login-subtitle">Inteligencia clínica integrada</div>
+    <input class="login-input" id="login-pwd" type="password" placeholder="Contraseña" autocomplete="off" />
+    <button class="login-btn" id="login-btn">Ingresar</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const PWD = 'ceibo1';
+  const btn = document.getElementById('login-btn');
+  const inp = document.getElementById('login-pwd');
+  const err = document.getElementById('login-error');
+  const scr = document.getElementById('login-screen');
+  function tryLogin(){
+    if(inp.value === PWD){
+      scr.classList.add('hidden');
+    } else {
+      err.textContent = 'Contraseña incorrecta';
+      inp.value = '';
+      inp.focus();
+      setTimeout(()=>err.textContent='', 2000);
+    }
+  }
+  btn.addEventListener('click', tryLogin);
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+})();
+</script>
+
+<div class="app">
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">C</div>
+      <div class="t">CeiboAnalytics<small>Inteligencia clínica</small></div>
+    </div>
+    <button class="navbtn active" data-view="dashboard"><span class="ic">▤</span>Plataforma</button>
+    <button class="navbtn" data-view="poblacion"><span class="ic">👥</span>Población</button>
+    <button class="navbtn" data-view="brechas"><span class="ic">⚠</span>Brechas</button>
+    <button class="navbtn" data-view="medico"><span class="ic">🩺</span>Por Médico</button>
+    <button class="navbtn" data-view="periodos"><span class="ic">⇄</span>Comparar Períodos</button>
+    <button class="navbtn" data-view="calidad"><span class="ic">✓</span>Calidad</button>
+    <button class="navbtn" data-view="informe"><span class="ic">📄</span>Informe PDF</button>
+    <div class="spacer"></div>
+    <div class="side-foot">CeiboMed Suite · datos locales del navegador. Nada sale de este equipo.</div>
+  </aside>
+
+  <div class="main">
+    <!-- ===================== TOPBAR / FILTROS GLOBALES ===================== -->
+    <div class="topbar">
+      <div class="title" id="viewTitle">Plataforma general</div>
+      <div class="filters">
+        <select id="periodSel" title="Período">
+          <option value="30">Últimos 30 días</option>
+          <option value="90">Últimos 90 días</option>
+          <option value="180">Últimos 180 días</option>
+          <option value="365" selected>Últimos 365 días</option>
+          <option value="all">Todo el histórico</option>
+          <option value="custom">Rango personalizado…</option>
+        </select>
+        <span id="customRange">
+          <input type="date" id="dFrom" title="Desde">
+          <input type="date" id="dTo" title="Hasta">
+        </span>
+        <button class="btn" id="refreshBtn" title="Releer datos de localStorage">↻ Actualizar datos</button>
+        <button class="btn" id="themeBtn" title="Día / noche">🌙</button>
+      </div>
+    </div>
+
+    <!-- Nav móvil -->
+    <div class="mobile-nav" id="mobileNav"></div>
+
+    <div class="content">
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="view active" id="view-dashboard">
+        <div id="dashAppFilter" class="app-filter"></div>
+        <div id="dashKpis" class="grid g4"></div>
+        <h3 class="sub">Evolución mensual de estudios por app</h3>
+        <div class="card"><div class="chartbox lg"><canvas id="chEvol"></canvas></div></div>
+        <div class="grid g2" style="margin-top:14px;">
+          <div class="card"><h3 class="sub" style="margin-top:0">Volumen por aplicación</h3><div class="chartbox"><canvas id="chVol"></canvas></div></div>
+          <div class="card"><h3 class="sub" style="margin-top:0">Últimos estudios</h3><div class="tablewrap"><table id="tblRecent"></table></div></div>
+        </div>
+        <p class="src-note" id="dashSrc"></p>
+      </section>
+
+      <!-- ===================== POBLACIÓN ===================== -->
+      <section class="view" id="view-poblacion">
+        <div id="popKpis" class="grid g4"></div>
+        <div class="grid g2" style="margin-top:14px;">
+          <div class="card"><h3 class="sub" style="margin-top:0">Distribución de FEVI (EcoSmart)</h3><div class="chartbox"><canvas id="chFevi"></canvas></div><div class="hint" id="feviHint"></div></div>
+          <div class="card"><h3 class="sub" style="margin-top:0">Distribución por sexo</h3><div class="chartbox"><canvas id="chSexo"></canvas></div></div>
+        </div>
+        <div class="grid g2" style="margin-top:14px;">
+          <div class="card"><h3 class="sub" style="margin-top:0">Distribución etaria</h3><div class="chartbox"><canvas id="chEdad"></canvas></div></div>
+          <div class="card"><h3 class="sub" style="margin-top:0">METs promedio por mes (ErgoSmart)</h3><div class="chartbox"><canvas id="chMets"></canvas></div><div class="hint" id="metsHint"></div></div>
+        </div>
+        <h3 class="sub">Factores de riesgo y hallazgos prevalentes</h3>
+        <div id="popFindings" class="grid g3"></div>
+      </section>
+
+      <!-- ===================== BRECHAS ===================== -->
+      <section class="view" id="view-brechas">
+        <div id="gapKpis" class="grid g4"></div>
+        <h3 class="sub">Alertas de cruce inter-app</h3>
+        <div class="legend" style="margin-bottom:10px;">
+          <span><span class="dot r"></span> Crítica</span>
+          <span><span class="dot y"></span> Advertencia</span>
+        </div>
+        <div class="card pad0"><div class="tablewrap"><table id="tblGaps"></table></div></div>
+        <p class="hint" id="gapUnmatched"></p>
+      </section>
+
+      <!-- ===================== POR MÉDICO ===================== -->
+      <section class="view" id="view-medico">
+        <div class="toolbar">
+          <div class="field"><label>Médico</label>
+            <select id="medSel"><option value="__all">Todos (comparativa del servicio)</option></select>
+          </div>
+        </div>
+        <div id="medBody"></div>
+      </section>
+
+      <!-- ===================== COMPARAR PERÍODOS ===================== -->
+      <section class="view" id="view-periodos">
+        <div class="toolbar">
+          <div class="field"><label>Preajuste</label>
+            <select id="cmpPreset">
+              <option value="sem">1er vs 2do semestre (año actual)</option>
+              <option value="year">Año actual vs año anterior</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
+          <div class="field"><label>Período A · desde</label><input type="date" id="aFrom"></div>
+          <div class="field"><label>A · hasta</label><input type="date" id="aTo"></div>
+          <div class="field"><label>Período B · desde</label><input type="date" id="bFrom"></div>
+          <div class="field"><label>B · hasta</label><input type="date" id="bTo"></div>
+          <button class="btn primary" id="cmpRun">Comparar</button>
+        </div>
+        <div id="cmpBody"></div>
+      </section>
+
+      <!-- ===================== CALIDAD ===================== -->
+      <section class="view" id="view-calidad">
+        <div id="qualKpis" class="grid g3"></div>
+        <div class="grid g2" style="margin-top:14px;">
+          <div class="card"><h3 class="sub" style="margin-top:0">Evolución mensual de completitud</h3><div class="chartbox"><canvas id="chQualEvol"></canvas></div></div>
+          <div class="card"><h3 class="sub" style="margin-top:0">Semáforo por aplicación</h3><div id="qualLights"></div></div>
+        </div>
+        <h3 class="sub">Completitud de campos por indicador</h3>
+        <div id="qualDetail" class="grid g3"></div>
+      </section>
+
+      <!-- ===================== INFORME PDF ===================== -->
+      <section class="view" id="view-informe">
+        <h2 class="section">Informe anual exportable</h2>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="grid g2">
+            <div class="field"><label>Año del informe</label><select id="rptYear"></select></div>
+            <div class="field"><label>Institución / servicio</label><input type="text" id="rptInst" placeholder="Servicio de Cardiología — Institución"></div>
+            <div class="field"><label>Jefe/a de servicio (firma)</label><input type="text" id="rptChief" placeholder="Dr./Dra. Nombre Apellido"></div>
+            <div class="field"><label>Logo institucional</label><input type="file" id="rptLogo" accept="image/*"></div>
+          </div>
+          <p class="hint">El informe se genera 100% en este navegador (jsPDF). Incluye período, estadísticas clave, gráficas, tabla de indicadores de calidad y espacio de firma. El logo se guarda en localStorage para próximos informes.</p>
+          <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn primary" id="genPdf">⬇ Generar PDF</button>
+            <span id="pdfStatus" class="hint" style="align-self:center;"></span>
+          </div>
+        </div>
+        <div id="rptPreview"></div>
+        <!-- canvases ocultos para render de gráficas del PDF -->
+        <div style="position:absolute;left:-9999px;top:0;width:900px;">
+          <canvas id="pdfEvol" width="900" height="360"></canvas>
+          <canvas id="pdfFevi" width="900" height="360"></canvas>
+          <canvas id="pdfPos" width="900" height="360"></canvas>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   CeiboAnalytics — capa de datos, identificación y módulos
+   ============================================================ */
+
+/* ---------- Utilidades ---------- */
+const $  = (s,ctx=document)=>ctx.querySelector(s);
+const $$ = (s,ctx=document)=>Array.from(ctx.querySelectorAll(s));
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function normTxt(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
+function num(v){if(v==null||v==='')return null;const n=parseFloat(String(v).replace(',','.').replace(/[^0-9.\-]/g,''));return isNaN(n)?null:n;}
+function fmt(n,d=0){return n==null||isNaN(n)?'—':Number(n).toLocaleString('es-UY',{minimumFractionDigits:d,maximumFractionDigits:d});}
+function pct(n){return n==null||isNaN(n)?'—':fmt(n,0)+'%';}
+function initials(name){const p=normTxt(name).split(' ').filter(Boolean);if(!p.length)return '—';return (p[0][0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase();}
+
+/* Parseo de fecha robusto: acepta ISO, DD/MM/YYYY, DD-MM-YYYY */
+function parseDate(v){
+  if(!v) return null;
+  if(v instanceof Date) return isNaN(v)?null:v;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+  m=s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+  if(m) return new Date(+m[3],+m[2]-1,+m[1]);
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+function ymKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function ymLabel(k){const[y,m]=k.split('-');return ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][+m-1]+' '+y.slice(2);}
+function daysAgo(n){const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-n);return d;}
+function fmtDate(d){return d?d.toLocaleDateString('es-UY'):'—';}
+
+/* Toma el primer campo existente de una lista de candidatos */
+function pick(obj,cands){for(const c of cands){if(obj&&obj[c]!=null&&obj[c]!=='')return obj[c];}return null;}
+
+/* ---------- Configuración de fuentes ---------- */
+const APPS = {
+  eco:       {key:'ett_informes',      label:'EcoSmart',        color:'--series-1', sub:'ecocardiografía'},
+  ergo:      {key:'ergo_informes',     label:'ErgoSmart',       color:'--series-2', sub:'ergometría'},
+  ecoestres: {key:'ecoestres_informes',label:'EcoEstrés Smart', color:'--series-3', sub:'eco estrés'},
+  // CardioSalud usa claves dinámicas por institución (crd_insts -> crd_d_<id>), leídas en readCardioSalud().
+  cardio:    {key:'crd_insts',         label:'CardioSalud',     color:'--series-4', sub:'cardiología', dynamic:true}
+};
+
+/* ---------- Filtro de apps del dashboard ----------
+   Se genera dinámicamente desde APPS: al sumar una 4.ª app (CardioSalud)
+   aparece sola en el selector y en el filtro, sin tocar este bloque. */
+let dashAppFilter = {};                                  // {appId: true/false}
+function dashActiveApps(){ return Object.keys(APPS).filter(a => dashAppFilter[a] !== false); }
+function renderAppFilterBar(){
+  const host = $('#dashAppFilter'); if(!host) return;
+  Object.keys(APPS).forEach(a => { if(dashAppFilter[a] === undefined) dashAppFilter[a] = true; });
+  host.innerHTML = '<span class="af-lbl">Apps</span>' + Object.keys(APPS).map(a => {
+    const on = dashAppFilter[a] !== false;
+    return `<label class="app-toggle ${on?'on':'off'}" style="--af-c:${cssv(APPS[a].color)}">`
+         + `<input type="checkbox" data-app="${a}" ${on?'checked':''}><span class="af-dot"></span>${esc(APPS[a].label)}</label>`;
+  }).join('');
+}
+
+/* Campos que consideramos "medibles" para calidad, por app */
+const QUALITY_FIELDS = {
+  eco: [
+    ['fevi_simpson','FEVI (Simpson)'],['gls_global','GLS global'],['tapse','TAPSE'],
+    ['lavi','LAVI'],['psap_calc','PSAP'],['ee_prom','E/e′'],['ddvi','DDVI'],
+    ['siv','SIV'],['masa_vi','Masa VI'],['e_mitral','E mitral'],['a_mitral','A mitral'],
+    ['ava','AVA'],['va_gmed','Grad. medio Ao']
+  ],
+  ergo: [
+    [['mets','mets_alcanzados','mets_max'],'METs'],
+    [['fc_max','fcmax','fc_maxima'],'FC máxima'],
+    [['tep','duracion','tiempo_ejercicio'],'Duración ejercicio'],
+    [['resultado','conclusion','conclusión'],'Conclusión'],
+    [['motivo','indicacion','indicación'],'Motivo/indicación']
+  ],
+  ecoestres: [
+    [['fevi_basal','fevi_reposo','fevi_simpson'],'FEVI basal'],
+    [['fevi_pico','fevi_esfuerzo'],'FEVI pico'],
+    [['resultado','conclusion','conclusión'],'Conclusión'],
+    [['protocolo'],'Protocolo'],
+    [['isquemia','induccion_isquemia'],'Isquemia inducible']
+  ]
+};
+
+/* ---------- Estado global ---------- */
+let STUDIES = [];       // estudios normalizados
+let PATIENTS = new Map(); // patientKey -> {key, level, identifiable, initials, ci, studies:[]}
+let currentView = 'dashboard';
+const charts = {};      // registro de instancias Chart
+
+/* ---------- Lectura + normalización ---------- */
+function readStore(key){
+  try{const raw=localStorage.getItem(key);if(!raw)return [];const v=JSON.parse(raw);return Array.isArray(v)?v:(v&&Array.isArray(v.informes)?v.informes:[]);}
+  catch(e){console.warn('No se pudo leer',key,e);return [];}
+}
+
+function normalizeStudy(raw, app){
+  const campos = raw.campos || raw.datos || raw || {};
+  const fecha = parseDate(raw.fecha_estudio || raw.fecha || campos.fecha_estudio || raw.fecha_guardado || raw.fechaGuardado);
+  const nombre = raw.nombre || campos.nombre || pick(campos,['paciente','nombre_paciente']) || '';
+  const ci = raw.ci || campos.ci || pick(raw,['documento','doc']) || pick(campos,['documento','doc']) || '';
+  const doc_tipo = raw.doc_tipo || campos.doc_tipo || 'CI';
+  const nacimiento = parseDate(pick(raw,['fecha_nacimiento','nacimiento'])||pick(campos,['fecha_nacimiento','nacimiento']));
+  // Médico
+  const medMat = pick(raw,['med-matricula','med_matricula','matricula'])||pick(campos,['med-matricula','med_matricula','matricula','med-registro'])||'';
+  const medNom = pick(raw,['med-nombre','med_nombre'])||pick(campos,['med-nombre','med_nombre'])||'';
+  const sexo = normTxt(pick(campos,['sexo'])||pick(raw,['sexo'])||'');
+  const edad = num(pick(campos,['edad'])||pick(raw,['edad']));
+  return {
+    app, id: raw.id||null, raw, campos,
+    nombre, ci:String(ci).trim(), doc_tipo:String(doc_tipo).trim(),
+    fecha, fechaGuardado: parseDate(raw.fecha_guardado||raw.fechaGuardado),
+    importado_pdf: !!(raw.importado_pdf),
+    nacimiento,
+    medMat:String(medMat).trim(), medNom:String(medNom).trim(),
+    sexo, edad
+  };
+}
+
+/* Identificación multicapa de paciente. Devuelve {key, level, identifiable} */
+function patientIdentity(s){
+  const ci=normTxt(s.ci);
+  if(ci){ return {key:'L1:'+normTxt(s.doc_tipo)+':'+ci, level:1, identifiable:true}; }
+  const nm=normTxt(s.nombre);
+  if(nm && s.nacimiento){ return {key:'L2:'+nm+':'+ymKey(s.nacimiento)+s.nacimiento.getDate(), level:2, identifiable:true}; }
+  if(nm){ return {key:'L2b:'+nm, level:2, identifiable:true}; } // fallback: solo nombre normalizado
+  return {key:'L3:'+(s.app)+':'+(s.id||Math.random().toString(36).slice(2)), level:3, identifiable:false};
+}
+
+/* Identidad del médico: matrícula -> fallback nombre */
+function doctorIdentity(s){
+  if(s.medMat) return {key:'M:'+normTxt(s.medMat), label:(s.medNom?esc(s.medNom):'Mat. '+esc(s.medMat)), mat:s.medMat, byMat:true};
+  if(s.medNom) return {key:'N:'+normTxt(s.medNom), label:esc(s.medNom), mat:'', byMat:false};
+  return {key:'__sinmed', label:'Sin médico identificado', mat:'', byMat:false};
+}
+
+/* CardioSalud: claves dinámicas por institución.
+   crd_insts -> [{id,label,...}] ; crd_d_<id> -> {patients, nextPid, nextCid}
+   patient = {id, name, ci, age, matricula, consultations:[{id, date, diagnosis, ...}]}
+   Devuelve una consulta por estudio, con nombre/ci del paciente para identificación cruzada. */
+function readCardioSalud(){
+  const out=[];
+  let insts=[];
+  try{ const raw=localStorage.getItem('crd_insts'); if(raw){ const v=JSON.parse(raw); if(Array.isArray(v)) insts=v; } }catch(e){ console.warn('No se pudo leer crd_insts',e); return out; }
+  for(const inst of insts){
+    if(!inst || inst.id==null) continue;
+    let data=null;
+    try{ const raw=localStorage.getItem('crd_d_'+inst.id); if(raw) data=JSON.parse(raw); }catch(e){ console.warn('No se pudo leer crd_d_'+inst.id,e); continue; }
+    const patients=(data && Array.isArray(data.patients))?data.patients:[];
+    for(const p of patients){
+      const cons=(p && Array.isArray(p.consultations))?p.consultations:[];
+      for(const c of cons){
+        const cc=c||{};
+        out.push({
+          id:'crd_'+inst.id+'_'+(p.id!=null?p.id:'')+'_'+(cc.id!=null?cc.id:Math.random().toString(36).slice(2)),
+          nombre:(p.name!=null?p.name:'')||'',        // CardioSalud usa "name"
+          ci:(p.ci!=null?p.ci:'')||'',
+          doc_tipo:'CI',
+          edad:(p.age!=null?p.age:null),
+          matricula:(p.matricula!=null?p.matricula:'')||'',  // médico tratante (identidad por matrícula)
+          fecha:(cc.date||cc.fecha||''),
+          inst:(inst.label||inst.id),
+          campos:cc                                    // campos de la consulta (diagnosis, treatment, etc.)
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function loadData(){
+  STUDIES=[]; PATIENTS=new Map();
+  for(const app in APPS){
+    const arr = app==='cardio' ? readCardioSalud() : readStore(APPS[app].key);
+    for(const raw of arr){ STUDIES.push(normalizeStudy(raw, app)); }
+  }
+  // indexar pacientes
+  for(const s of STUDIES){
+    const id=patientIdentity(s); s._pid=id;
+    if(!PATIENTS.has(id.key)) PATIENTS.set(id.key,{key:id.key,level:id.level,identifiable:id.identifiable,initials:initials(s.nombre),ci:s.ci,doc_tipo:s.doc_tipo,nombre:s.nombre,apps:new Set(),studies:[]});
+    const p=PATIENTS.get(id.key); p.apps.add(s.app); p.studies.push(s);
+    if(!p.initials||p.initials==='—') p.initials=initials(s.nombre);
+  }
+}
+
+/* ---------- Detección de positividad / valores ---------- */
+function studyPositive(s){
+  // devuelve true / false / null(indeterminado)
+  const direct = pick(s.campos,['positiva','positivo','isquemia','induccion_isquemia']);
+  if(direct!=null){ const t=normTxt(direct); if(['si','sí','true','1','positiv','positiva','positivo'].some(x=>t.includes(x)))return true; if(['no','false','0','negativ'].some(x=>t.includes(x)))return false; }
+  const concl = normTxt(pick(s.campos,['resultado','conclusion','conclusión','informe_texto'])||'');
+  if(concl){
+    if(/no\s+concluyente|indetermin/.test(concl)) return null;
+    if(/negativ/.test(concl)) return false;
+    if(/positiv/.test(concl)) return true;
+  }
+  return null;
+}
+function studyMets(s){ return num(pick(s.campos,['mets','mets_alcanzados','mets_max','mets_pico'])); }
+function feviOf(s){ return num(pick(s.campos,['fevi_simpson','fevi','fevi_basal','fevi_reposo'])); }
+function psapOf(s){ return num(pick(s.campos,['psap_calc','psap'])); }
+
+/* ---------- Filtro de período ---------- */
+function currentRange(){
+  const v=$('#periodSel').value;
+  if(v==='all') return {from:null,to:null,label:'Todo el histórico'};
+  if(v==='custom'){
+    const f=$('#dFrom').value?parseDate($('#dFrom').value):null;
+    const t=$('#dTo').value?parseDate($('#dTo').value):null;
+    if(t)t.setHours(23,59,59,999);
+    return {from:f,to:t,label:'Rango personalizado'};
+  }
+  return {from:daysAgo(+v),to:null,label:'Últimos '+v+' días'};
+}
+function inRange(s,r){
+  if(!s.fecha) return r.from==null&&r.to==null; // sin fecha solo entra en "todo"
+  if(r.from&&s.fecha<r.from) return false;
+  if(r.to&&s.fecha>r.to) return false;
+  return true;
+}
+function filteredStudies(r){ r=r||currentRange(); return STUDIES.filter(s=>inRange(s,r)); }
+function byApp(list){const o={};for(const a in APPS)o[a]=[];for(const s of list){(o[s.app]||(o[s.app]=[])).push(s);}return o;}
+
+/* ---------- Chart.js helpers ---------- */
+const HAS_CHART = (typeof Chart !== 'undefined');
+function destroyChart(id){ if(charts[id]){charts[id].destroy();delete charts[id];} }
+function baseOpts(extra){
+  const grid=cssv('--grid'), muted=cssv('--muted'), text=cssv('--text-2');
+  return Object.assign({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:text,boxWidth:12,boxHeight:12,usePointStyle:true}},tooltip:{}},
+    scales:{
+      x:{grid:{color:grid,drawBorder:false},ticks:{color:muted}},
+      y:{grid:{color:grid,drawBorder:false},ticks:{color:muted},beginAtZero:true}
+    }
+  },extra||{});
+}
+function makeChart(id,cfg){
+  destroyChart(id);const el=document.getElementById(id);if(!el)return;
+  if(!HAS_CHART){ // degradación elegante si el CDN de Chart.js no cargó
+    const box=el.closest('.chartbox'); if(box) box.innerHTML='<div class="empty" style="height:100%;display:flex;align-items:center;justify-content:center;">Gráfica no disponible (sin conexión al CDN de Chart.js)</div>';
+    return;
+  }
+  charts[id]=new Chart(el.getContext('2d'),cfg);return charts[id];
+}
+function seriesColors(){return ['--series-1','--series-2','--series-3','--series-4','--series-5','--series-6','--series-7','--series-8'].map(cssv);}
+
+/* ============================================================
+   MÓDULO 1 · DASHBOARD
+   ============================================================ */
+function renderDashboard(){
+  const r=currentRange();
+  const active=dashActiveApps();
+  const list=filteredStudies(r).filter(s=>dashAppFilter[s.app]!==false);  // excluir apps desmarcadas
+  const g=byApp(list);
+  const total=list.length;
+  const kpis=[{lbl:'Estudios totales',val:fmt(total),sub:r.label}].concat(
+    active.map(app=>({lbl:APPS[app].label,val:fmt((g[app]||[]).length),sub:APPS[app].sub||''}))
+  );
+  $('#dashKpis').innerHTML=kpis.map(k=>`<div class="card stat"><span class="lbl">${k.lbl}</span><span class="val">${k.val}</span><span class="sub">${k.sub}</span></div>`).join('');
+
+  if(!total){ $('#dashKpis').insertAdjacentHTML('afterend',''); destroyChart('chEvol');destroyChart('chVol'); }
+  // Evolución mensual por app
+  const months=monthSpan(list);
+  const cols=seriesColors();
+  const dsEvol=active.map((app)=>({
+    label:APPS[app].label,
+    data:months.map(m=>(g[app]||[]).filter(s=>s.fecha&&ymKey(s.fecha)===m).length),
+    borderColor:cssv(APPS[app].color), backgroundColor:cssv(APPS[app].color),
+    tension:.3, borderWidth:2, pointRadius:3, fill:false
+  }));
+  if(months.length){
+    makeChart('chEvol',{type:'line',data:{labels:months.map(ymLabel),datasets:dsEvol},options:baseOpts()});
+  }else destroyChart('chEvol');
+
+  makeChart('chVol',{type:'bar',data:{labels:active.map(a=>APPS[a].label),datasets:[{label:'Estudios',data:active.map(a=>(g[a]||[]).length),backgroundColor:active.map(a=>cssv(APPS[a].color)),borderRadius:4}]},options:baseOpts({plugins:{legend:{display:false}}})});
+
+  // Últimos estudios
+  const recent=[...list].filter(s=>s.fecha).sort((a,b)=>b.fecha-a.fecha).slice(0,8);
+  $('#tblRecent').innerHTML = recent.length
+    ? `<thead><tr><th>Fecha</th><th>App</th><th>Paciente</th><th>Médico</th></tr></thead><tbody>${recent.map(s=>`<tr><td>${fmtDate(s.fecha)}</td><td><span class="pill">${APPS[s.app].label}</span></td><td>${s._pid.identifiable?esc(initials(s.nombre))+' · '+esc(s.ci||'s/CI'):'<span class="badge n">no identif.</span>'}</td><td>${doctorIdentity(s).label}</td></tr>`).join('')}</tbody>`
+    : `<tbody><tr><td class="empty" style="border:none">Sin estudios en el período.</td></tr></tbody>`;
+
+  const missing=Object.keys(APPS).filter(a=>(a==='cardio'?readCardioSalud():readStore(APPS[a].key)).length===0).map(a=>APPS[a].label);
+  $('#dashSrc').textContent = 'Fuente: localStorage ('+Object.values(APPS).map(a=>a.key).join(', ')+'). '+(missing.length?('Sin datos de: '+missing.join(', ')+'.'):'Todas las apps tienen datos.');
+}
+function monthSpan(list){
+  const dates=list.filter(s=>s.fecha).map(s=>s.fecha);
+  if(!dates.length)return [];
+  let min=new Date(Math.min(...dates)), max=new Date(Math.max(...dates));
+  const keys=[]; let cur=new Date(min.getFullYear(),min.getMonth(),1);
+  const end=new Date(max.getFullYear(),max.getMonth(),1); let guard=0;
+  while(cur<=end&&guard<240){keys.push(ymKey(cur));cur.setMonth(cur.getMonth()+1);guard++;}
+  return keys;
+}
+
+/* ============================================================
+   MÓDULO 2 · PERFIL EPIDEMIOLÓGICO
+   ============================================================ */
+function renderPoblacion(){
+  const r=currentRange(); const list=filteredStudies(r); const g=byApp(list);
+  const edades=list.map(s=>s.edad).filter(v=>v!=null);
+  const edadProm=edades.length?edades.reduce((a,b)=>a+b,0)/edades.length:null;
+  const sexos={f:0,m:0,x:0};
+  list.forEach(s=>{if(/^f|muj/.test(s.sexo))sexos.f++;else if(/^m|hom|masc/.test(s.sexo))sexos.m++;else sexos.x++;});
+  const ergoPos=posRate(g.ergo), eePos=posRate(g.ecoestres);
+  const metsVals=g.ergo.map(studyMets).filter(v=>v!=null);
+  const metsProm=metsVals.length?metsVals.reduce((a,b)=>a+b,0)/metsVals.length:null;
+
+  const kpis=[
+    {lbl:'Edad promedio',val:edadProm!=null?fmt(edadProm,0)+' a':'—',sub:edades.length+' con edad'},
+    {lbl:'Sexo F / M',val:sexos.f+' / '+sexos.m,sub:sexos.x?sexos.x+' sin dato':'—'},
+    {lbl:'METs prom. (Ergo)',val:metsProm!=null?fmt(metsProm,1):'—',sub:metsVals.length+' ergometrías'},
+    {lbl:'Ergometrías +',val:ergoPos.n?pct(ergoPos.rate):'—',sub:ergoPos.n+' concluyentes'}
+  ];
+  $('#popKpis').innerHTML=kpis.map(k=>`<div class="card stat"><span class="lbl">${k.lbl}</span><span class="val">${k.val}</span><span class="sub">${k.sub}</span></div>`).join('');
+
+  // FEVI distribución (EcoSmart)
+  const feviCats=[['Reducida (≤40%)',0,40,'--critical'],['Intermedia (41-49%)',41,49,'--warning'],['Preservada (≥50%)',50,200,'--good']];
+  const feviVals=g.eco.map(feviOf).filter(v=>v!=null);
+  if(feviVals.length){
+    const counts=feviCats.map(c=>feviVals.filter(v=>v>=c[1]&&v<=c[2]).length);
+    makeChart('chFevi',{type:'bar',data:{labels:feviCats.map(c=>c[0]),datasets:[{data:counts,backgroundColor:feviCats.map(c=>cssv(c[3])),borderRadius:4}]},options:baseOpts({plugins:{legend:{display:false}}})});
+    $('#feviHint').textContent=feviVals.length+' estudios con FEVI medida.';
+  }else{ destroyChart('chFevi'); $('#feviHint').innerHTML='<span class="badge n">Sin datos de EcoSmart con FEVI</span>'; }
+
+  // Sexo (doughnut)
+  makeChart('chSexo',{type:'doughnut',data:{labels:['Femenino','Masculino','Sin dato'],datasets:[{data:[sexos.f,sexos.m,sexos.x],backgroundColor:[cssv('--series-5'),cssv('--series-1'),cssv('--surface-3')],borderColor:cssv('--surface-1'),borderWidth:2}]},options:baseOpts({scales:{},cutout:'62%'})});
+
+  // Edad histograma
+  const bins=[[0,29],[30,39],[40,49],[50,59],[60,69],[70,79],[80,200]];
+  const binLbl=['<30','30-39','40-49','50-59','60-69','70-79','80+'];
+  const binCnt=bins.map(b=>edades.filter(e=>e>=b[0]&&e<=b[1]).length);
+  if(edades.length) makeChart('chEdad',{type:'bar',data:{labels:binLbl,datasets:[{data:binCnt,backgroundColor:cssv('--series-1'),borderRadius:4}]},options:baseOpts({plugins:{legend:{display:false}}})});
+  else destroyChart('chEdad');
+
+  // METs por mes
+  const months=monthSpan(g.ergo);
+  if(months.length&&metsVals.length){
+    const data=months.map(m=>{const vs=g.ergo.filter(s=>s.fecha&&ymKey(s.fecha)===m).map(studyMets).filter(v=>v!=null);return vs.length?+(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(1):null;});
+    makeChart('chMets',{type:'line',data:{labels:months.map(ymLabel),datasets:[{label:'METs prom',data,borderColor:cssv('--series-2'),backgroundColor:cssv('--series-2'),tension:.3,borderWidth:2,pointRadius:3,spanGaps:true}]},options:baseOpts({plugins:{legend:{display:false}}})});
+    $('#metsHint').textContent='';
+  }else{ destroyChart('chMets'); $('#metsHint').innerHTML='<span class="badge n">Sin datos de ErgoSmart</span>'; }
+
+  // Hallazgos / FRCV prevalentes
+  const findings=[
+    {lbl:'FEVI reducida (≤40%)',n:feviVals.filter(v=>v<=40).length,d:feviVals.length,tone:'r'},
+    {lbl:'HVI (masa/RWT elevados)',n:g.eco.filter(s=>{const rwt=num(pick(s.campos,['rwt']));const masa=num(pick(s.campos,['masa_vi']));return (rwt!=null&&rwt>0.42)||(masa!=null&&masa>115);}).length,d:g.eco.length,tone:'y'},
+    {lbl:'PSAP elevada (>40)',n:g.eco.filter(s=>{const p=psapOf(s);return p!=null&&p>40;}).length,d:g.eco.filter(s=>psapOf(s)!=null).length,tone:'y'},
+    {lbl:'Disfunción diastólica (E/e′>14)',n:g.eco.filter(s=>{const ee=num(pick(s.campos,['ee_prom']));return ee!=null&&ee>14;}).length,d:g.eco.filter(s=>num(pick(s.campos,['ee_prom']))!=null).length,tone:'y'},
+    {lbl:'Ergometrías positivas',n:ergoPos.pos,d:ergoPos.n,tone:'r'},
+    {lbl:'Eco estrés positivos',n:eePos.pos,d:eePos.n,tone:'r'}
+  ];
+  $('#popFindings').innerHTML=findings.map(f=>{
+    const rate=f.d?Math.round(100*f.n/f.d):null;
+    return `<div class="card stat"><span class="lbl">${f.lbl}</span><span class="val">${f.d?f.n:'—'}</span><span class="sub">${f.d?('de '+f.d+' · '+pct(rate)):'sin datos'}</span></div>`;
+  }).join('');
+}
+function posRate(arr){let pos=0,n=0;arr.forEach(s=>{const p=studyPositive(s);if(p===true){pos++;n++;}else if(p===false){n++;}});return {pos,n,rate:n?Math.round(100*pos/n):null};}
+
+/* ============================================================
+   MÓDULO 3 · BRECHAS INTER-APP
+   ============================================================ */
+function renderBrechas(){
+  const r=currentRange();
+  const alerts=[];
+  let unmatched=0;
+  const now=new Date();
+  PATIENTS.forEach(p=>{
+    if(!p.identifiable){ return; }
+    const inR=p.studies.filter(s=>inRange(s,r));
+    if(!inR.length) return;
+    const eco=inR.filter(s=>s.app==='eco'), ergo=inR.filter(s=>s.app==='ergo'), ee=inR.filter(s=>s.app==='ecoestres');
+    const allEco=p.studies.filter(s=>s.app==='eco');
+    // Regla 1: FEVI ≤35 + ergometría positiva
+    const feviLow=eco.find(s=>{const f=feviOf(s);return f!=null&&f<=35;});
+    const ergoP=ergo.find(s=>studyPositive(s)===true);
+    if(feviLow&&ergoP){alerts.push(mkAlert(p,'crit','FEVI ≤35% + ergometría positiva','FEVI '+fmt(feviOf(feviLow))+'% (EcoSmart) con ergometría positiva. Riesgo isquémico sobre disfunción severa — priorizar.',[feviLow,ergoP]));}
+    // Regla 2: PSAP >40 + eco estrés positivo
+    const psapHi=eco.find(s=>{const v=psapOf(s);return v!=null&&v>40;});
+    const eeP=ee.find(s=>studyPositive(s)===true);
+    if(psapHi&&eeP){alerts.push(mkAlert(p,'crit','PSAP >40 mmHg + eco estrés positivo','PSAP '+fmt(psapOf(psapHi))+' mmHg (EcoSmart) con eco estrés positivo. Evaluar componente vascular pulmonar.',[psapHi,eeP]));}
+    // Regla 3: eco estrés positivo sin ECO de seguimiento en 6 meses
+    const eePosAny=ee.find(s=>studyPositive(s)===true);
+    if(eePosAny){
+      const sixMonths=new Date(); sixMonths.setMonth(sixMonths.getMonth()-6);
+      const ecoFollow=allEco.find(s=>s.fecha&&s.fecha>=sixMonths);
+      if(!ecoFollow){alerts.push(mkAlert(p,'warn','Eco estrés + sin seguimiento EcoSmart (6 m)','Eco estrés positivo sin ecocardiograma en los últimos 6 meses. Sugerir control ecocardiográfico.',[eePosAny]));}
+    }
+  });
+  STUDIES.filter(s=>inRange(s,r)&&!s._pid.identifiable).forEach(()=>unmatched++);
+
+  alerts.sort((a,b)=>(a.tone==='crit'?0:1)-(b.tone==='crit'?0:1));
+  const crit=alerts.filter(a=>a.tone==='crit').length, warn=alerts.length-crit;
+  const patCross=[...PATIENTS.values()].filter(p=>p.identifiable&&new Set(p.studies.filter(s=>inRange(s,r)).map(s=>s.app)).size>1).length;
+  $('#gapKpis').innerHTML=[
+    {lbl:'Alertas totales',val:alerts.length,sub:'en '+currentRange().label.toLowerCase()},
+    {lbl:'Críticas',val:crit,sub:'requieren revisión'},
+    {lbl:'Advertencias',val:warn,sub:'seguimiento sugerido'},
+    {lbl:'Pacientes multi-app',val:patCross,sub:'aparecen en 2+ apps'}
+  ].map(k=>`<div class="card stat"><span class="lbl">${k.lbl}</span><span class="val">${k.val}</span><span class="sub">${k.sub}</span></div>`).join('');
+
+  $('#tblGaps').innerHTML = alerts.length
+    ? `<thead><tr><th>Nivel</th><th>Paciente</th><th>Alerta</th><th>Detalle</th><th>Apps</th></tr></thead><tbody>${alerts.map(a=>`
+      <tr class="alert-row ${a.tone==='crit'?'crit':'warn'}">
+        <td><span class="badge ${a.tone==='crit'?'r':'y'}"><span class="dot ${a.tone==='crit'?'r':'y'}"></span>${a.tone==='crit'?'Crítica':'Advert.'}</span></td>
+        <td><strong>${esc(a.pat.initials)}</strong> · ${esc(a.pat.ci||'s/CI')}<br><span class="hint">nivel ${a.pat.level}</span></td>
+        <td>${esc(a.title)}</td>
+        <td class="hint">${esc(a.detail)}</td>
+        <td>${[...new Set(a.studies.map(s=>APPS[s.app].label))].map(x=>'<span class="pill">'+x+'</span>').join('')}</td>
+      </tr>`).join('')}</tbody>`
+    : `<tbody><tr><td class="empty" style="border:none">Sin alertas de cruce en el período. ${STUDIES.length?'':'Cargá estudios en las apps de CeiboMed.'}</td></tr></tbody>`;
+
+  $('#gapUnmatched').innerHTML = unmatched
+    ? `<span class="dot y"></span> ${unmatched} estudio(s) no identificable(s) en el período: cuentan en estadísticas poblacionales pero no generan alertas individuales (falta CI/nombre+fecha de nacimiento).`
+    : '';
+}
+function mkAlert(p,tone,title,detail,studies){return {pat:p,tone,title,detail,studies};}
+
+/* ============================================================
+   MÓDULO 4 · POR MÉDICO
+   ============================================================ */
+function doctorMap(list){
+  const m=new Map();
+  list.forEach(s=>{const d=doctorIdentity(s);if(d.key==='__sinmed')return;if(!m.has(d.key))m.set(d.key,{...d,studies:[]});m.get(d.key).studies.push(s);});
+  return m;
+}
+function completeness(studies){
+  // % de campos medibles presentes, promediado, por app
+  const perApp={};
+  ['eco','ergo','ecoestres'].forEach(app=>{
+    const ss=studies.filter(s=>s.app===app); if(!ss.length)return;
+    const fields=QUALITY_FIELDS[app];
+    let filled=0,total=0;
+    ss.forEach(s=>{fields.forEach(([k])=>{total++;const cands=Array.isArray(k)?k:[k];if(pick(s.campos,cands)!=null)filled++;});});
+    perApp[app]=total?Math.round(100*filled/total):null;
+  });
+  const vals=Object.values(perApp).filter(v=>v!=null);
+  return {perApp, overall:vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null};
+}
+function fillMedSelect(){
+  const list=filteredStudies(); const m=doctorMap(list);
+  const sel=$('#medSel'); const prev=sel.value;
+  sel.innerHTML='<option value="__all">Todos (comparativa del servicio)</option>'+[...m.values()].sort((a,b)=>b.studies.length-a.studies.length).map(d=>`<option value="${esc(d.key)}">${d.label} (${d.studies.length})</option>`).join('');
+  if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
+}
+function renderMedico(){
+  fillMedSelect();
+  const list=filteredStudies(); const m=doctorMap(list);
+  const sel=$('#medSel').value;
+  const box=$('#medBody');
+  if(!m.size){ box.innerHTML='<div class="empty"><div class="big">Sin médicos identificados</div>Los estudios no tienen matrícula ni nombre de médico en el período seleccionado.</div>'; destroyChart('chMed'); return; }
+
+  if(sel==='__all'){
+    const docs=[...m.values()].sort((a,b)=>b.studies.length-a.studies.length);
+    // Comparativa: barras horizontales de volumen + completitud
+    const cols=seriesColors();
+    makeChart('chMed',{type:'bar',data:{labels:docs.map(d=>stripTags(d.label)),datasets:[{label:'Estudios',data:docs.map(d=>d.studies.length),backgroundColor:cssv('--series-1'),borderRadius:4}]},options:baseOpts({indexAxis:'y'})});
+    const rows=docs.map(d=>{const c=completeness(d.studies);const posE=posRate(d.studies.filter(s=>s.app==='ergo'));return {d,c,posE};});
+    box.innerHTML=`
+      <div class="card" style="margin-bottom:14px;"><h3 class="sub" style="margin-top:0">Volumen por médico</h3><div class="chartbox lg"><canvas id="chMed"></canvas></div></div>
+      <p class="hint">Indicadores objetivos, sin juicio de valor. La completitud mide presencia de campos, no exactitud clínica.</p>
+      <div class="card pad0"><div class="tablewrap"><table>
+        <thead><tr><th>Médico</th><th>Id.</th><th class="num">Estudios</th><th class="num">Completitud</th><th>Semáforo</th><th class="num">Ergo +</th></tr></thead>
+        <tbody>${rows.map(({d,c,posE})=>`<tr>
+          <td>${d.label}</td>
+          <td>${d.byMat?'<span class="badge g">matrícula</span>':'<span class="badge n">nombre</span>'}</td>
+          <td class="num">${d.studies.length}</td>
+          <td class="num">${c.overall!=null?pct(c.overall):'—'}</td>
+          <td>${light(c.overall)}</td>
+          <td class="num">${posE.n?pct(posE.rate):'—'}</td>
+        </tr>`).join('')}</tbody></table></div></div>`;
+    // re-render chart (fue reemplazado el canvas)
+    makeChart('chMed',{type:'bar',data:{labels:docs.map(d=>stripTags(d.label)),datasets:[{label:'Estudios',data:docs.map(d=>d.studies.length),backgroundColor:cssv('--series-1'),borderRadius:4}]},options:baseOpts({indexAxis:'y',plugins:{legend:{display:false}}})});
+  }else{
+    const d=m.get(sel); if(!d){box.innerHTML='';return;}
+    const c=completeness(d.studies); const g=byApp(d.studies);
+    const posE=posRate(g.ergo), posEE=posRate(g.ecoestres);
+    const findings=frequentFindings(d.studies);
+    box.innerHTML=`
+      <div class="grid g4" style="margin-bottom:14px;">
+        <div class="card stat"><span class="lbl">Estudios</span><span class="val">${d.studies.length}</span><span class="sub">${g.eco.length} eco · ${g.ergo.length} ergo · ${g.ecoestres.length} ee</span></div>
+        <div class="card stat"><span class="lbl">Completitud</span><span class="val">${c.overall!=null?pct(c.overall):'—'}</span><span class="sub">${light(c.overall)} calidad de registro</span></div>
+        <div class="card stat"><span class="lbl">Ergometrías +</span><span class="val">${posE.n?pct(posE.rate):'—'}</span><span class="sub">${posE.n} concluyentes</span></div>
+        <div class="card stat"><span class="lbl">Eco estrés +</span><span class="val">${posEE.n?pct(posEE.rate):'—'}</span><span class="sub">${posEE.n} concluyentes</span></div>
+      </div>
+      <div class="grid g2">
+        <div class="card"><h3 class="sub" style="margin-top:0">Completitud por app</h3>${['eco','ergo','ecoestres'].map(app=>c.perApp[app]!=null?`<div class="q-row"><span class="qn">${APPS[app].label}</span><span class="meter"><i style="width:${c.perApp[app]}%;background:${lightColor(c.perApp[app])}"></i></span><span class="qp">${c.perApp[app]}%</span></div>`:'').join('')||'<p class="hint">Sin datos</p>'}</div>
+        <div class="card"><h3 class="sub" style="margin-top:0">Hallazgos frecuentes</h3>${findings.length?findings.map(f=>`<div class="q-row"><span class="qn">${esc(f.lbl)}</span><span class="qp">${f.n}</span><span class="qp">${pct(f.rate)}</span></div>`).join(''):'<p class="hint">Sin hallazgos computables</p>'}</div>
+      </div>`;
+    destroyChart('chMed');
+  }
+}
+function stripTags(h){const d=document.createElement('div');d.innerHTML=h;return d.textContent;}
+function frequentFindings(studies){
+  const g=byApp(studies);
+  const out=[];
+  const feviV=g.eco.map(feviOf).filter(v=>v!=null);
+  if(feviV.length)out.push({lbl:'FEVI reducida (≤40%)',n:feviV.filter(v=>v<=40).length,rate:Math.round(100*feviV.filter(v=>v<=40).length/feviV.length)});
+  const psapV=g.eco.map(psapOf).filter(v=>v!=null);
+  if(psapV.length)out.push({lbl:'PSAP >40',n:psapV.filter(v=>v>40).length,rate:Math.round(100*psapV.filter(v=>v>40).length/psapV.length)});
+  const pe=posRate(g.ergo); if(pe.n)out.push({lbl:'Ergometría positiva',n:pe.pos,rate:pe.rate});
+  const pee=posRate(g.ecoestres); if(pee.n)out.push({lbl:'Eco estrés positivo',n:pee.pos,rate:pee.rate});
+  return out;
+}
+
+/* ============================================================
+   MÓDULO 5 · COMPARAR PERÍODOS
+   ============================================================ */
+function setCmpPreset(){
+  const p=$('#cmpPreset').value; const y=new Date().getFullYear();
+  const set=(a,b,c,d)=>{$('#aFrom').value=a;$('#aTo').value=b;$('#bFrom').value=c;$('#bTo').value=d;};
+  if(p==='sem'){ set(y+'-01-01',y+'-06-30',y+'-07-01',y+'-12-31'); }
+  else if(p==='year'){ set((y-1)+'-01-01',(y-1)+'-12-31',y+'-01-01',y+'-12-31'); }
+}
+function renderPeriodos(run){
+  if(!$('#aFrom').value){ setCmpPreset(); }
+  if(!run) return;
+  const A={from:parseDate($('#aFrom').value),to:endOf($('#aTo').value),label:'A'};
+  const B={from:parseDate($('#bFrom').value),to:endOf($('#bTo').value),label:'B'};
+  if(!A.from||!B.from){ $('#cmpBody').innerHTML='<div class="empty">Definí ambas fechas de inicio para comparar.</div>'; return; }
+  const la=STUDIES.filter(s=>inRange(s,A)), lb=STUDIES.filter(s=>inRange(s,B));
+  const mA=metrics(la), mB=metrics(lb);
+  const rows=[
+    ['Volumen total',mA.total,mB.total,'n'],
+    ['EcoSmart',mA.eco,mB.eco,'n'],['ErgoSmart',mA.ergo,mB.ergo,'n'],['EcoEstrés',mA.ecoestres,mB.ecoestres,'n'],
+    ['Edad promedio',mA.edad,mB.edad,'a'],
+    ['METs promedio',mA.mets,mB.mets,'d'],
+    ['% Ergometrías +',mA.ergoPos,mB.ergoPos,'%'],
+    ['% Eco estrés +',mA.eePos,mB.eePos,'%'],
+    ['Completitud global',mA.quality,mB.quality,'%']
+  ];
+  const lblA=fmtDate(A.from)+' – '+fmtDate(A.to||new Date());
+  const lblB=fmtDate(B.from)+' – '+fmtDate(B.to||new Date());
+  $('#cmpBody').innerHTML=`
+    <div class="grid g2" style="margin-bottom:14px;">
+      <div class="card stat"><span class="lbl">Período A</span><span class="val">${mA.total}</span><span class="sub">${lblA}</span></div>
+      <div class="card stat"><span class="lbl">Período B</span><span class="val">${mB.total}</span><span class="sub">${lblB}</span></div>
+    </div>
+    <div class="card pad0"><div class="tablewrap"><table>
+      <thead><tr><th>Indicador</th><th class="num">Período A</th><th class="num">Período B</th><th class="num">Δ</th></tr></thead>
+      <tbody>${rows.map(([lbl,a,b,u])=>{
+        const av=a==null?'—':(u==='%'?pct(a):u==='d'?fmt(a,1):fmt(a,0))+(u==='a'?' a':'');
+        const bv=b==null?'—':(u==='%'?pct(b):u==='d'?fmt(b,1):fmt(b,0))+(u==='a'?' a':'');
+        let delta='—',cls='flat';
+        if(a!=null&&b!=null){const d=b-a;const rel=a!==0?Math.round(100*d/Math.abs(a)):null;cls=d>0?'up':d<0?'down':'flat';delta=(d>0?'▲ ':d<0?'▼ ':'· ')+(u==='%'?fmt(Math.abs(d),0)+' pp':(rel!=null?fmt(Math.abs(rel),0)+'%':fmt(Math.abs(d),1)));}
+        return `<tr><td>${lbl}</td><td class="num">${av}</td><td class="num">${bv}</td><td class="num"><span class="kpi-delta ${cls}">${delta}</span></td></tr>`;
+      }).join('')}</tbody></table></div></div>
+    <p class="hint">Δ en % para tasas se expresa en puntos porcentuales (pp). Positivo no implica mejor ni peor — es un indicador objetivo.</p>`;
+}
+function endOf(v){if(!v)return null;const d=parseDate(v);if(d)d.setHours(23,59,59,999);return d;}
+function metrics(list){
+  const g=byApp(list);
+  const edades=list.map(s=>s.edad).filter(v=>v!=null);
+  const mets=g.ergo.map(studyMets).filter(v=>v!=null);
+  const pe=posRate(g.ergo), pee=posRate(g.ecoestres);
+  return {
+    total:list.length, eco:g.eco.length, ergo:g.ergo.length, ecoestres:g.ecoestres.length,
+    edad:edades.length?edades.reduce((a,b)=>a+b,0)/edades.length:null,
+    mets:mets.length?mets.reduce((a,b)=>a+b,0)/mets.length:null,
+    ergoPos:pe.rate, eePos:pee.rate,
+    quality:completeness(list).overall
+  };
+}
+
+/* ============================================================
+   MÓDULO 6 · CALIDAD DEL LABORATORIO
+   ============================================================ */
+function qualityByApp(list){
+  const out={};
+  ['eco','ergo','ecoestres'].forEach(app=>{
+    const ss=list.filter(s=>s.app===app);
+    const fields=QUALITY_FIELDS[app];
+    const perField=fields.map(([k,lbl])=>{
+      const cands=Array.isArray(k)?k:[k];
+      const filled=ss.filter(s=>pick(s.campos,cands)!=null).length;
+      return {lbl,filled,total:ss.length,rate:ss.length?Math.round(100*filled/ss.length):null};
+    });
+    const vals=perField.map(f=>f.rate).filter(v=>v!=null);
+    out[app]={n:ss.length,perField,overall:vals.length?Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):null};
+  });
+  return out;
+}
+function light(v){if(v==null)return '<span class="badge n">—</span>';if(v>=80)return '<span class="badge g"><span class="dot g"></span>Verde</span>';if(v>=50)return '<span class="badge y"><span class="dot y"></span>Amarillo</span>';return '<span class="badge r"><span class="dot r"></span>Rojo</span>';}
+function lightColor(v){if(v==null)return cssv('--muted');if(v>=80)return cssv('--good');if(v>=50)return cssv('--warning');return cssv('--critical');}
+function renderCalidad(){
+  const r=currentRange(); const list=filteredStudies(r);
+  const q=qualityByApp(list);
+  $('#qualKpis').innerHTML=['eco','ergo','ecoestres'].map(app=>{
+    const d=q[app];
+    return `<div class="card stat"><span class="lbl">${APPS[app].label}</span><span class="val">${d.overall!=null?pct(d.overall):'—'}</span><span class="sub">${d.n} estudios · ${d.overall!=null?stripTags(light(d.overall)):'sin datos'}</span></div>`;
+  }).join('');
+
+  // Evolución mensual de completitud
+  const months=monthSpan(list);
+  if(months.length){
+    const ds=['eco','ergo','ecoestres'].map(app=>({
+      label:APPS[app].label,
+      data:months.map(m=>{const sub=list.filter(s=>s.app===app&&s.fecha&&ymKey(s.fecha)===m);return sub.length?completeness(sub).perApp[app]:null;}),
+      borderColor:cssv(APPS[app].color),backgroundColor:cssv(APPS[app].color),tension:.3,borderWidth:2,pointRadius:3,spanGaps:true
+    }));
+    makeChart('chQualEvol',{type:'line',data:{labels:months.map(ymLabel),datasets:ds},options:baseOpts({scales:{x:{grid:{color:cssv('--grid')},ticks:{color:cssv('--muted')}},y:{beginAtZero:true,max:100,grid:{color:cssv('--grid')},ticks:{color:cssv('--muted'),callback:v=>v+'%'}}}})});
+  }else destroyChart('chQualEvol');
+
+  // Semáforo por app
+  $('#qualLights').innerHTML=['eco','ergo','ecoestres'].map(app=>{
+    const d=q[app]; if(!d.n)return `<div class="q-row"><span class="qn">${APPS[app].label}</span><span></span><span class="qp"><span class="badge n">sin datos</span></span></div>`;
+    return `<div class="q-row"><span class="qn">${APPS[app].label}</span><span class="meter"><i style="width:${d.overall||0}%;background:${lightColor(d.overall)}"></i></span><span class="qp">${light(d.overall)}</span></div>`;
+  }).join('');
+
+  // Detalle por indicador
+  $('#qualDetail').innerHTML=['eco','ergo','ecoestres'].map(app=>{
+    const d=q[app];
+    if(!d.n)return `<div class="card"><h3 class="sub" style="margin-top:0">${APPS[app].label}</h3><p class="empty" style="padding:20px">Sin datos de ${APPS[app].label}</p></div>`;
+    return `<div class="card"><h3 class="sub" style="margin-top:0">${APPS[app].label}</h3>${d.perField.map(f=>`<div class="q-row"><span class="qn">${esc(f.lbl)}</span><span class="meter"><i style="width:${f.rate||0}%;background:${lightColor(f.rate)}"></i></span><span class="qp">${f.rate!=null?f.rate+'%':'—'}</span></div>`).join('')}</div>`;
+  }).join('');
+}
+
+/* ============================================================
+   MÓDULO 7 · INFORME PDF
+   ============================================================ */
+const LOGO_KEY='ceibomed_logo';
+function initReport(){
+  const years=new Set(STUDIES.filter(s=>s.fecha).map(s=>s.fecha.getFullYear()));
+  const y=new Date().getFullYear(); years.add(y);
+  const sel=$('#rptYear'); sel.innerHTML=[...years].sort((a,b)=>b-a).map(yr=>`<option value="${yr}">${yr}</option>`).join('');
+  const savedInst=localStorage.getItem('ceibomed_inst'); if(savedInst)$('#rptInst').value=savedInst;
+  const savedChief=localStorage.getItem('ceibomed_chief'); if(savedChief)$('#rptChief').value=savedChief;
+  renderReportPreview();
+}
+function renderReportPreview(){
+  const yr=+$('#rptYear').value;
+  const list=STUDIES.filter(s=>s.fecha&&s.fecha.getFullYear()===yr);
+  const m=metrics(list);
+  $('#rptPreview').innerHTML=`
+    <h3 class="sub">Vista previa del informe ${yr}</h3>
+    <div class="grid g4">
+      <div class="card stat"><span class="lbl">Estudios ${yr}</span><span class="val">${m.total}</span><span class="sub">total del año</span></div>
+      <div class="card stat"><span class="lbl">Edad prom.</span><span class="val">${m.edad!=null?fmt(m.edad,0)+' a':'—'}</span></div>
+      <div class="card stat"><span class="lbl">Ergo +</span><span class="val">${m.ergoPos!=null?pct(m.ergoPos):'—'}</span></div>
+      <div class="card stat"><span class="lbl">Completitud</span><span class="val">${m.quality!=null?pct(m.quality):'—'}</span></div>
+    </div>
+    <p class="hint" style="margin-top:12px;">El PDF incluye estas cifras + gráficas (evolución mensual, distribución FEVI, positividad) + tabla de indicadores de calidad + espacio de firma.</p>`;
+}
+function loadLogo(file){
+  const reader=new FileReader();
+  reader.onload=e=>{try{localStorage.setItem(LOGO_KEY,e.target.result);toast('Logo guardado');}catch(err){toast('Logo muy grande para guardar');}};
+  reader.readAsDataURL(file);
+}
+/* Genera una gráfica offscreen y devuelve dataURL (promise) */
+function offscreenChart(canvasId,cfg){
+  return new Promise(resolve=>{
+    destroyChart(canvasId);
+    const el=document.getElementById(canvasId);
+    cfg.options=cfg.options||{};
+    cfg.options.responsive=false; cfg.options.animation=false;
+    cfg.options.plugins=cfg.options.plugins||{};
+    // fondo blanco para PDF
+    const white='#ffffff', ink='#222';
+    cfg.options.scales=cfg.options.scales||{};
+    charts[canvasId]=new Chart(el.getContext('2d'),cfg);
+    setTimeout(()=>{
+      // pintar fondo blanco detrás
+      const ctx=el.getContext('2d');
+      ctx.save();ctx.globalCompositeOperation='destination-over';ctx.fillStyle=white;ctx.fillRect(0,0,el.width,el.height);ctx.restore();
+      const url=el.toDataURL('image/png',1.0);
+      resolve(url);
+    },260);
+  });
+}
+async function generatePDF(){
+  if(!window.jspdf){toast('jsPDF no cargó (revisá conexión al CDN)');return;}
+  const status=$('#pdfStatus'); status.textContent='Generando…';
+  const yr=+$('#rptYear').value;
+  const inst=$('#rptInst').value.trim(); const chief=$('#rptChief').value.trim();
+  localStorage.setItem('ceibomed_inst',inst); localStorage.setItem('ceibomed_chief',chief);
+  const list=STUDIES.filter(s=>s.fecha&&s.fecha.getFullYear()===yr);
+  const g=byApp(list); const m=metrics(list); const q=qualityByApp(list);
+  const months=monthSpan(list);
+
+  // Gráficas
+  const ink='#333', grid='#e1e0d9';
+  const evolCfg={type:'line',data:{labels:months.map(ymLabel),datasets:Object.keys(APPS).map(app=>({label:APPS[app].label,data:months.map(mm=>g[app].filter(s=>s.fecha&&ymKey(s.fecha)===mm).length),borderColor:['#2a78d6','#eb6834','#1baf7a','#eda100'][['eco','ergo','ecoestres','cardio'].indexOf(app)],backgroundColor:'transparent',tension:.3,borderWidth:2,pointRadius:2}))},options:{plugins:{legend:{labels:{color:ink}}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,ticks:{color:ink},grid:{color:grid}}}}};
+  const feviV=g.eco.map(feviOf).filter(v=>v!=null);
+  const feviCounts=[feviV.filter(v=>v<=40).length,feviV.filter(v=>v>40&&v<50).length,feviV.filter(v=>v>=50).length];
+  const feviCfg={type:'bar',data:{labels:['≤40%','41-49%','≥50%'],datasets:[{data:feviCounts,backgroundColor:['#d03b3b','#fab219','#0ca30c']}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,ticks:{color:ink},grid:{color:grid}}}}};
+  const posMonths=months.map(mm=>{const sub=g.ergo.filter(s=>s.fecha&&ymKey(s.fecha)===mm);return posRate(sub).rate;});
+  const posCfg={type:'line',data:{labels:months.map(ymLabel),datasets:[{label:'% ergometrías +',data:posMonths,borderColor:'#d03b3b',backgroundColor:'transparent',tension:.3,borderWidth:2,pointRadius:2,spanGaps:true}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,max:100,ticks:{color:ink},grid:{color:grid}}}}};
+
+  let imgEvol=null,imgFevi=null,imgPos=null;
+  try{
+    if(months.length) imgEvol=await offscreenChart('pdfEvol',evolCfg);
+    if(feviV.length)   imgFevi=await offscreenChart('pdfFevi',feviCfg);
+    if(months.length&&g.ergo.length) imgPos=await offscreenChart('pdfPos',posCfg);
+  }catch(e){console.warn(e);}
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'a4'});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
+  const M=48; let y=M;
+  const logo=localStorage.getItem(LOGO_KEY);
+  // Encabezado
+  if(logo){ try{doc.addImage(logo,'PNG',M,y,52,52);}catch(e){} }
+  doc.setTextColor(20,20,20);
+  doc.setFont('helvetica','bold'); doc.setFontSize(20);
+  doc.text('Informe anual '+yr, logo?M+66:M, y+22);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(90,90,90);
+  doc.text(inst||'Servicio de Cardiología', logo?M+66:M, y+40);
+  doc.text('CeiboAnalytics · Suite CeiboMed', logo?M+66:M, y+55);
+  y+= (logo?70:64);
+  doc.setDrawColor(220); doc.line(M,y,W-M,y); y+=22;
+
+  // Estadísticas clave
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,20,20);
+  doc.text('Estadísticas clave',M,y); y+=8;
+  const kv=[
+    ['Estudios totales',fmt(m.total)],['EcoSmart',fmt(g.eco.length)],['ErgoSmart',fmt(g.ergo.length)],['EcoEstrés Smart',fmt(g.ecoestres.length)],
+    ['Edad promedio',m.edad!=null?fmt(m.edad,0)+' años':'—'],['METs promedio',m.mets!=null?fmt(m.mets,1):'—'],
+    ['% Ergometrías positivas',m.ergoPos!=null?pct(m.ergoPos):'—'],['% Eco estrés positivos',m.eePos!=null?pct(m.eePos):'—']
+  ];
+  y+=10; doc.setFontSize(10);
+  const colW=(W-2*M)/2;
+  kv.forEach((row,i)=>{
+    const cx=M+(i%2)*colW; const cy=y+Math.floor(i/2)*20;
+    doc.setFont('helvetica','normal');doc.setTextColor(90,90,90);doc.text(row[0]+':',cx,cy);
+    doc.setFont('helvetica','bold');doc.setTextColor(20,20,20);doc.text(String(row[1]),cx+colW-70,cy);
+  });
+  y+= Math.ceil(kv.length/2)*20 + 16;
+
+  // Gráfica evolución
+  const imgW=W-2*M, imgH=imgW*0.34;
+  function ensureSpace(h){ if(y+h>H-M){ doc.addPage(); y=M; } }
+  if(imgEvol){ ensureSpace(imgH+24); doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20,20,20);doc.text('Evolución mensual de estudios',M,y);y+=8; doc.addImage(imgEvol,'PNG',M,y,imgW,imgH); y+=imgH+18; }
+  if(imgFevi){ ensureSpace(imgH+24); doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('Distribución de FEVI (EcoSmart)',M,y);y+=8; doc.addImage(imgFevi,'PNG',M,y,imgW,imgH); y+=imgH+18; }
+  if(imgPos){ ensureSpace(imgH+24); doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('% Ergometrías positivas por mes',M,y);y+=8; doc.addImage(imgPos,'PNG',M,y,imgW,imgH); y+=imgH+18; }
+
+  // Tabla de indicadores de calidad
+  ensureSpace(120);
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20,20,20);doc.text('Indicadores de calidad (completitud)',M,y); y+=16;
+  doc.setFontSize(10);
+  const tblX=[M,M+220,M+330,M+430];
+  doc.setFont('helvetica','bold');doc.setTextColor(120,120,120);
+  doc.text('Aplicación',tblX[0],y);doc.text('Estudios',tblX[1],y);doc.text('Completitud',tblX[2],y);doc.text('Semáforo',tblX[3],y); y+=6;
+  doc.setDrawColor(225);doc.line(M,y,W-M,y);y+=14;
+  ['eco','ergo','ecoestres'].forEach(app=>{
+    const d=q[app];
+    doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);
+    doc.text(APPS[app].label,tblX[0],y);
+    doc.text(String(d.n),tblX[1],y);
+    doc.text(d.overall!=null?pct(d.overall):'—',tblX[2],y);
+    const col=d.overall==null?[150,150,150]:d.overall>=80?[12,163,12]:d.overall>=50?[200,140,0]:[208,59,59];
+    doc.setFillColor(col[0],col[1],col[2]); doc.circle(tblX[3]+6,y-3,4,'F');
+    doc.setTextColor(90,90,90); doc.text(d.overall==null?'—':d.overall>=80?'Verde':d.overall>=50?'Amarillo':'Rojo',tblX[3]+16,y);
+    y+=18;
+  });
+  y+=30;
+
+  // Firma
+  ensureSpace(80);
+  doc.setDrawColor(120); doc.line(M,y,M+220,y); y+=14;
+  doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);doc.setFontSize(10);
+  doc.text(chief||'Jefe/a de Servicio',M,y);
+  doc.setTextColor(120,120,120);doc.text('Jefatura del Servicio — firma y aclaración',M,y+14);
+
+  // Pie
+  const pages=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150);doc.text('CeiboAnalytics · generado localmente · '+new Date().toLocaleDateString('es-UY')+' · pág. '+i+'/'+pages,M,H-20);}
+
+  doc.save('Informe_CeiboAnalytics_'+yr+'.pdf');
+  status.textContent='PDF generado ✓';
+  // limpiar charts offscreen
+  destroyChart('pdfEvol');destroyChart('pdfFevi');destroyChart('pdfPos');
+}
+
+/* ============================================================
+   NAVEGACIÓN / EVENTOS
+   ============================================================ */
+const VIEW_TITLES={dashboard:'Plataforma general',poblacion:'Perfil epidemiológico cruzado',brechas:'Brechas asistenciales inter-app',medico:'Análisis por médico',periodos:'Comparación entre períodos',calidad:'Calidad del laboratorio consolidada',informe:'Informe anual exportable'};
+function switchView(v){
+  currentView=v;
+  $$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
+  $$('.view').forEach(s=>s.classList.toggle('active',s.id==='view-'+v));
+  $('#viewTitle').textContent=VIEW_TITLES[v]||'';
+  renderCurrent();
+}
+function renderCurrent(){
+  try{
+    if(currentView==='dashboard')renderDashboard();
+    else if(currentView==='poblacion')renderPoblacion();
+    else if(currentView==='brechas')renderBrechas();
+    else if(currentView==='medico')renderMedico();
+    else if(currentView==='periodos')renderPeriodos(false);
+    else if(currentView==='calidad')renderCalidad();
+    else if(currentView==='informe')initReport();
+  }catch(e){console.error('Error al renderizar',currentView,e);toast('Error al renderizar (ver consola)');}
+}
+
+function setupMobileNav(){
+  $('#mobileNav').innerHTML=$$('.sidebar .navbtn').map(b=>`<button class="navbtn ${b.classList.contains('active')?'active':''}" data-view="${b.dataset.view}">${b.textContent}</button>`).join('');
+}
+
+function bindEvents(){
+  $$('.navbtn').forEach(b=>b.addEventListener('click',()=>{switchView(b.dataset.view);setupMobileNav();}));
+  document.addEventListener('click',e=>{const b=e.target.closest('#mobileNav .navbtn');if(b){switchView(b.dataset.view);setupMobileNav();}});
+  $('#periodSel').addEventListener('change',()=>{$('#customRange').classList.toggle('on',$('#periodSel').value==='custom');renderCurrent();});
+  $('#dFrom').addEventListener('change',renderCurrent);
+  $('#dTo').addEventListener('change',renderCurrent);
+  $('#refreshBtn').addEventListener('click',()=>{loadData();renderCurrent();toast('Datos actualizados desde localStorage');});
+  $('#dashAppFilter').addEventListener('change',e=>{const cb=e.target.closest('input[data-app]');if(!cb)return;dashAppFilter[cb.dataset.app]=cb.checked;const lbl=cb.closest('.app-toggle');if(lbl){lbl.classList.toggle('on',cb.checked);lbl.classList.toggle('off',!cb.checked);}renderDashboard();});
+  $('#themeBtn').addEventListener('click',toggleTheme);
+  $('#medSel').addEventListener('change',renderMedico);
+  $('#cmpPreset').addEventListener('change',()=>{setCmpPreset();});
+  $('#cmpRun').addEventListener('click',()=>renderPeriodos(true));
+  $('#rptYear').addEventListener('change',renderReportPreview);
+  $('#rptLogo').addEventListener('change',e=>{if(e.target.files[0])loadLogo(e.target.files[0]);});
+  $('#genPdf').addEventListener('click',generatePDF);
+}
+function toggleTheme(){
+  const root=document.documentElement;
+  const now=root.getAttribute('data-theme')==='dark'?'light':'dark';
+  root.setAttribute('data-theme',now);
+  $('#themeBtn').textContent=now==='dark'?'🌙':'☀';
+  try{localStorage.setItem('ceibo_analytics_theme',now);}catch(e){}
+  renderCurrent(); // re-colorear gráficas
+}
+
+/* ---------- Init ---------- */
+function init(){
+  const savedTheme=(()=>{try{return localStorage.getItem('ceibo_analytics_theme');}catch(e){return null;}})();
+  if(savedTheme){document.documentElement.setAttribute('data-theme',savedTheme);$('#themeBtn').textContent=savedTheme==='dark'?'🌙':'☀';}
+  if(HAS_CHART){
+    Chart.defaults.font.family='system-ui, -apple-system, "Segoe UI", sans-serif';
+    Chart.defaults.color=cssv('--text-2');
+  }
+  bindEvents();
+  loadData();
+  renderAppFilterBar();
+  setupMobileNav();
+  switchView('dashboard');
+  if(!STUDIES.length){toast('Sin datos en localStorage — cargá estudios en EcoSmart / ErgoSmart / EcoEstrés');}
+}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
