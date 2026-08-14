@@ -578,10 +578,12 @@ function renderAppFilterBar(){
 /* Campos que consideramos "medibles" para calidad, por app */
 const QUALITY_FIELDS = {
   eco: [
-    ['fevi_simpson','FEVI (Simpson)'],['gls_global','GLS global'],['tapse','TAPSE'],
-    ['lavi','LAVI'],['psap_calc','PSAP'],['ee_prom','E/e′'],['ddvi','DDVI'],
-    ['siv','SIV'],['masa_vi','Masa VI'],['e_mitral','E mitral'],['a_mitral','A mitral'],
-    ['ava','AVA'],['va_gmed','Grad. medio Ao']
+    [['fevi_simpson','fevi'],'FEVI (Simpson)'],[['gls_global','sgl'],'GLS global'],['tapse','TAPSE'],
+    [['lavi','ai_vol_index','lavi_calc'],'LAVI'],[['psap_calc','psap'],'PSAP'],[['ee_prom','ee_calc'],'E/e′'],[['ddvi','ddfvi'],'DDVI'],
+    ['siv','SIV'],[['masa_vi','masa_idx'],'Masa VI'],[['e_mitral','onda_e'],'E mitral'],[['a_mitral','onda_a'],'A mitral'],
+    ['ava','AVA'],[['va_gmed','gmedio_ao'],'Grad. medio Ao'],
+    [['grado_diastolico','diastol_grado'],'Grado diastólico'],[['geometria_vi','geometria'],'Geometría VI'],
+    [['indicaciones'],'Indicaciones']
   ],
   ergo: [
     [['mets','mets_alcanzados','mets_max'],'METs'],
@@ -623,6 +625,61 @@ function normalizeStudy(raw, app){
   const medNom = pick(raw,['med-nombre','med_nombre'])||pick(campos,['med-nombre','med_nombre'])||'';
   const sexo = normTxt(pick(campos,['sexo'])||pick(raw,['sexo'])||'');
   const edad = num(pick(campos,['edad'])||pick(raw,['edad']));
+  // Campos clínicos completos de EcoSmart (app interna 'eco'). Se leen aquí para uso en gráficas/brechas.
+  let eco = {};
+  if(app==='eco'||app==='ecosmart'){
+    const oe=num(pick(campos,['onda_e','e_mitral'])), oa=num(pick(campos,['onda_a','a_mitral']));
+    const tsTxt=pick(campos,['contractilidad_texto','en_suma']);
+    const eaR=num(pick(campos,['ea','e_a']));
+    eco = {
+      // función sistólica
+      fevi_simpson:num(pick(campos,['fevi_simpson','fevi'])),
+      gls_global:num(pick(campos,['gls_global','sgl'])),
+      fa:num(pick(campos,['fa'])),
+      trastornos_sectoriales:(tsTxt && /trastorno|hipoquin|aquin|disquin|hipocontract/i.test(String(tsTxt)))?String(tsTxt):null,
+      // función diastólica
+      grado_diastolico:_normDiastGrado(pick(campos,['grado_diastolico','diastol_grado'])),
+      onda_e:oe, onda_a:oa,
+      ea_ratio:(eaR!=null?eaR:((oe!=null&&oa)?+(oe/oa).toFixed(2):null)),
+      ee_prom:num(pick(campos,['ee_prom','ee_calc'])),
+      lavi:num(pick(campos,['ai_vol_index','lavi','lavi_calc'])),
+      // ventrículo derecho
+      tapse:num(pick(campos,['tapse'])),
+      s_prime:num(pick(campos,['s_prime','s_prima'])),
+      tap:num(pick(campos,['tvia','tap'])),
+      vd_bas:num(pick(campos,['vd_bas'])),
+      // VI estructura
+      siv:num(pick(campos,['siv'])),
+      ddvi:num(pick(campos,['ddfvi','ddvi'])),
+      dsvi:num(pick(campos,['dsfvi','dsvi'])),
+      pp:num(pick(campos,['ppvi','pp'])),
+      masa_vi:num(pick(campos,['masa_vi','masa_idx'])),
+      rwt:num(pick(campos,['rwt'])),
+      geometria_vi:pick(campos,['geometria_vi','geometria']),
+      vdfvi_idx:num(pick(campos,['vdfvi_idx','vdfvi'])),
+      // valvulopatías — grado texto + binarias
+      im_grado_txt:_gradoTxt(pick(campos,['im_grado'])),
+      im_leve:num(pick(campos,['IM_I (Leve)']))||0, im_mod:num(pick(campos,['IM_II (Moderada)']))||0, im_sev:num(pick(campos,['IM_III (Severa)']))||0,
+      iao_grado_txt:_gradoTxt(pick(campos,['ia_grado'])),
+      iao_leve:num(pick(campos,['IAo_I (Leve)']))||0, iao_mod:num(pick(campos,['IAo_II (Moderada)']))||0, iao_sev:num(pick(campos,['IAo_III (Severa)']))||0,
+      it_grado_txt:_gradoTxt(pick(campos,['it_grado'])),
+      it_leve:num(pick(campos,['IT_I (Leve)']))||0, it_mod:num(pick(campos,['IT_II (Moderada)']))||0, it_sev:num(pick(campos,['IT_III (Severa)']))||0,
+      eao_grado_txt:_gradoTxt(pick(campos,['ea_grado'])),
+      eao_leve:num(pick(campos,['EAo_I (Leve)']))||0, eao_mod:num(pick(campos,['EAo_II (Moderada)']))||0, eao_sev:num(pick(campos,['EAo_III (Severa)']))||0,
+      htp_leve:num(pick(campos,['HTP_I (Leve 36-50)']))||0, htp_mod:num(pick(campos,['HTP_II (Mod. 51-70)']))||0, htp_sev:num(pick(campos,['HTP_III (Severa >70)']))||0,
+      dd_I:num(pick(campos,['DD_I (Grado I)']))||0, dd_II:num(pick(campos,['DD_II (Grado II)']))||0, dd_III:num(pick(campos,['DD_III (Grado III)']))||0, dd_sin:num(pick(campos,['DD_Sin (Sin disfunción)']))||0,
+      geom_normal:num(pick(campos,['Geom_Normal']))||0, geom_rem:num(pick(campos,['Geom_RemConcentrico']))||0, geom_hvi_conc:num(pick(campos,['Geom_HVI_Concentrica']))||0, geom_hvi_exc:num(pick(campos,['Geom_HVI_Excentrica']))||0,
+      ts_presente:num(pick(campos,['TS_Presente']))||0,
+      // indicaciones / antecedentes
+      indicaciones:pick(campos,['indicaciones']),
+      antecedentes:pick(campos,['antecedentes_sel','antecedentes']),
+      // aorta y otros
+      ao_sin:num(pick(campos,['ao_sin'])),
+      psap:num(pick(campos,['psap_calc','psap'])),
+      pap_media:num(pick(campos,['pap_med','pap_media'])),
+      pericardio:pick(campos,['pericardio'])
+    };
+  }
   return {
     app, id: raw.id||null, raw, campos,
     nombre, ci:String(ci).trim(), doc_tipo:String(doc_tipo).trim(),
@@ -630,7 +687,8 @@ function normalizeStudy(raw, app){
     importado_pdf: !!(raw.importado_pdf),
     nacimiento,
     medMat:String(medMat).trim(), medNom:String(medNom).trim(),
-    sexo, edad
+    sexo, edad,
+    eco
   };
 }
 
@@ -764,6 +822,28 @@ function studyPositive(s){
 function studyMets(s){ return num(pick(s.campos,['mets','mets_alcanzados','mets_max','mets_pico'])); }
 function feviOf(s){ return num(pick(s.campos,['fevi_simpson','fevi','fevi_basal','fevi_reposo'])); }
 function psapOf(s){ return num(pick(s.campos,['psap_calc','psap'])); }
+function laviOf(s){ return num(pick(s.campos,['ai_vol_index','lavi','lavi_calc'])); }
+
+/* Grado valvular en texto: acepta numérico 1-4 (EcoSmart) o texto ya legible */
+function _gradoTxt(raw){
+  if(!raw && raw!==0) return null;
+  const s=String(raw).trim();
+  if(/^[1-4]$/.test(s)) return (['','Leve','Moderada','Moderada-severa','Severa'][parseInt(s)])||null;
+  return s||null;
+}
+/* Normaliza el grado de disfunción diastólica a 'I','II','III','sin' o null */
+function _normDiastGrado(raw){
+  if(raw==null||raw==='') return null;
+  const s=String(raw).trim().toLowerCase().replace(/grado\s*/,'');
+  if(s==='iii'||s==='3'||/restrict/.test(s)) return 'III';
+  if(s==='ii'||s==='2'||/pseudonormal/.test(s)) return 'II';
+  if(s==='i'||s==='1'||/relaj/.test(s)) return 'I';
+  if(s==='sin'||s==='0'||/sin\s+disfunc|diast[oó]lica\s+normal|funci[oó]n\s+normal/.test(s)) return 'sin';
+  if(/\biii\b/.test(s)) return 'III';
+  if(/\bii\b/.test(s)) return 'II';
+  if(/\bi\b/.test(s)) return 'I';
+  return null;
+}
 
 /* ---------- Filtro de período ---------- */
 function currentRange(){
@@ -880,12 +960,17 @@ function renderPoblacion(){
   ];
   $('#popKpis').innerHTML=kpis.map(k=>`<div class="card stat"><span class="lbl">${k.lbl}</span><span class="val">${k.val}</span><span class="sub">${k.sub}</span></div>`).join('');
 
-  // FEVI distribución (EcoSmart)
-  const feviCats=[['Reducida (≤40%)',0,40,'--critical'],['Intermedia (41-49%)',41,49,'--warning'],['Preservada (≥50%)',50,200,'--good']];
+  // FEVI distribución (EcoSmart) — 4 rangos consistentes con EcoSmart
+  const feviCats=[
+    ['Severamente reducida (≤30%)',   v=>v<=30,          '--critical'],
+    ['Moderadamente reducida (31–40%)',v=>v>30&&v<=40,   '--serious'],
+    ['Levemente reducida (41–50%)',   v=>v>40&&v<=50,    '--warning'],
+    ['Normal/conservada (>50%)',      v=>v>50,           '--good']
+  ];
   const feviVals=g.eco.map(feviOf).filter(v=>v!=null);
   if(feviVals.length){
-    const counts=feviCats.map(c=>feviVals.filter(v=>v>=c[1]&&v<=c[2]).length);
-    makeChart('chFevi',{type:'bar',data:{labels:feviCats.map(c=>c[0]),datasets:[{data:counts,backgroundColor:feviCats.map(c=>cssv(c[3])),borderRadius:4}]},options:baseOpts({plugins:{legend:{display:false}}})});
+    const counts=feviCats.map(c=>feviVals.filter(c[1]).length);
+    makeChart('chFevi',{type:'bar',data:{labels:feviCats.map(c=>c[0]),datasets:[{data:counts,backgroundColor:feviCats.map(c=>cssv(c[2])),borderRadius:4}]},options:baseOpts({plugins:{legend:{display:false}}})});
     $('#feviHint').textContent=feviVals.length+' estudios con FEVI medida.';
   }else{ destroyChart('chFevi'); $('#feviHint').innerHTML='<span class="badge n">Sin datos de EcoSmart con FEVI</span>'; }
 
