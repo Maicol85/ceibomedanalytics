@@ -550,6 +550,10 @@ function fmtDate(d){return d?d.toLocaleDateString('es-UY'):'—';}
 
 /* Toma el primer campo existente de una lista de candidatos */
 function pick(obj,cands){for(const c of cands){if(obj&&obj[c]!=null&&obj[c]!=='')return obj[c];}return null;}
+// Presencia de un campo de calidad: busca en campos y en raw (dual-save de primer nivel);
+// trata cadena vacía y array vacío como AUSENTE.
+function _hasVal(v){ if(v==null||v==='')return false; if(Array.isArray(v))return v.length>0; return true; }
+function hasField(s,cands){ for(const c of cands){ if(s&&s.campos&&_hasVal(s.campos[c]))return true; if(s&&s.raw&&_hasVal(s.raw[c]))return true; } return false; }
 
 /* ---------- Configuración de fuentes ---------- */
 const APPS = {
@@ -590,7 +594,13 @@ const QUALITY_FIELDS = {
     [['fc_max','fcmax','fc_maxima'],'FC máxima'],
     [['tep','duracion','tiempo_ejercicio'],'Duración ejercicio'],
     [['resultado','conclusion','conclusión'],'Conclusión'],
-    [['motivo','indicacion','indicación'],'Motivo/indicación']
+    [['motivo','indicacion','indicación'],'Motivo/indicación'],
+    [['indicacion_sel'],'Indicación registrada'],
+    [['antec_cv_sel'],'Antecedentes registrados'],
+    [['conducta'],'Conducta sugerida registrada'],
+    [['rfc1','rfc2'],'RFC documentada'],
+    [['rpress'],'Respuesta presora registrada'],
+    [['complicaciones'],'Complicaciones registradas']
   ],
   ecoestres: [
     [['fevi_basal','fevi_reposo','fevi_simpson'],'FEVI basal'],
@@ -680,6 +690,49 @@ function normalizeStudy(raw, app){
       pericardio:pick(campos,['pericardio'])
     };
   }
+  // Campos de ErgoSmart (app interna 'ergo'). Dual-save: los campos nuevos viven en PRIMER NIVEL del objeto
+  // guardado (raw.*); se leen de raw primero y campos como respaldo.
+  let ergo = {};
+  if(app==='ergo'||app==='ergosmart'){
+    const rc = (cands)=>{ const r=pick(raw,cands); return r!=null?r:pick(campos,cands); };
+    const _arr = (v)=>{
+      if(v==null) return [];
+      if(Array.isArray(v)) return v;
+      if(typeof v==='string'){ const t=v.trim(); if(!t) return [];
+        try{ const p=JSON.parse(t); return Array.isArray(p)?p:[t]; }catch(e){ return t.split(/[;,\n]/).map(x=>x.trim()).filter(Boolean); } }
+      return [v];
+    };
+    const _bool = (v)=>{ if(v===true||v===false) return v; const s=String(v==null?'':v).toLowerCase().trim(); return s==='true'||s==='si'||s==='sí'||s==='1'||s==='on'; };
+    ergo = {
+      // Indicación
+      indicacion_sel: _arr(rc(['indicacion_sel'])),
+      // Antecedentes CV
+      antec_cv_sel: _arr(rc(['antec_cv_sel'])),
+      // Medicación activa
+      med_activa_sel: _arr(rc(['med_activa_sel'])),
+      // Betabloqueante
+      bbs: rc(['bbs']) || null,
+      bb_toma: _bool(rc(['bb_toma'])),
+      bb_suspendio: _bool(rc(['bb_suspendio'])),
+      // Respuesta hemodinámica
+      rpress: rc(['rpress']) || null,
+      rcrono: rc(['rcrono']) || null,
+      rfc1: num(rc(['rfc1'])),
+      rfc2: num(rc(['rfc2'])),
+      dpmax: num(rc(['dpmax'])),
+      ircdisp: num(rc(['ircdisp'])),
+      // Causa de interrupción
+      motivo_interrupcion: rc(['motivo_interrupcion']) || null,
+      // Conducta sugerida
+      conducta: rc(['conducta']) || null,
+      // Criterios de alto riesgo
+      criterios_ar: _arr(rc(['criterios_ar'])),
+      // Complicaciones
+      complicaciones: _arr(rc(['complicaciones'])),
+      // En suma
+      ensuma: rc(['ensuma']) || null
+    };
+  }
   return {
     app, id: raw.id||null, raw, campos,
     nombre, ci:String(ci).trim(), doc_tipo:String(doc_tipo).trim(),
@@ -688,7 +741,7 @@ function normalizeStudy(raw, app){
     nacimiento,
     medMat:String(medMat).trim(), medNom:String(medNom).trim(),
     sexo, edad,
-    eco
+    eco, ergo
   };
 }
 
@@ -1082,7 +1135,7 @@ function completeness(studies){
     const ss=studies.filter(s=>s.app===app); if(!ss.length)return;
     const fields=QUALITY_FIELDS[app];
     let filled=0,total=0;
-    ss.forEach(s=>{fields.forEach(([k])=>{total++;const cands=Array.isArray(k)?k:[k];if(pick(s.campos,cands)!=null)filled++;});});
+    ss.forEach(s=>{fields.forEach(([k])=>{total++;const cands=Array.isArray(k)?k:[k];if(hasField(s,cands))filled++;});});
     perApp[app]=total?Math.round(100*filled/total):null;
   });
   const vals=Object.values(perApp).filter(v=>v!=null);
@@ -1223,7 +1276,7 @@ function qualityByApp(list){
     const fields=QUALITY_FIELDS[app];
     const perField=fields.map(([k,lbl])=>{
       const cands=Array.isArray(k)?k:[k];
-      const filled=ss.filter(s=>pick(s.campos,cands)!=null).length;
+      const filled=ss.filter(s=>hasField(s,cands)).length;
       return {lbl,filled,total:ss.length,rate:ss.length?Math.round(100*filled/ss.length):null};
     });
     const vals=perField.map(f=>f.rate).filter(v=>v!=null);
