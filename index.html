@@ -7,6 +7,7 @@
 <!-- Dependencias externas SOLO por CDN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* ============================================================
    CeiboAnalytics · estilos (todo inline, sin archivos externos)
@@ -362,6 +363,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
     <button class="navbtn" data-view="medico"><span class="ic">🩺</span>Por Médico</button>
     <button class="navbtn" data-view="periodos"><span class="ic">⇄</span>Comparar Períodos</button>
     <button class="navbtn" data-view="calidad"><span class="ic">✓</span>Calidad</button>
+    <button class="navbtn" data-view="estadistica"><span class="ic">📊</span>Estadística avanzada</button>
     <button class="navbtn" data-view="informe"><span class="ic">📄</span>Informe PDF</button>
     <div class="spacer"></div>
     <div class="side-foot">CeiboMed Suite · datos locales del navegador. Nada sale de este equipo.</div>
@@ -483,6 +485,88 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         </div>
         <h3 class="sub">Completitud de campos por indicador</h3>
         <div id="qualDetail" class="grid g3"></div>
+      </section>
+
+      <!-- ===================== ESTADÍSTICA AVANZADA ===================== -->
+      <section class="view" id="view-estadistica">
+        <style>
+          #view-estadistica .est-subtab{padding:8px 16px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;}
+          #view-estadistica .est-subtab.active{background:var(--accent,#2dd4bf);color:#08110f;border-color:var(--accent,#2dd4bf);}
+          #view-estadistica table.est-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+          #view-estadistica table.est-tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);padding:6px 8px;border-bottom:1px solid var(--border);}
+          #view-estadistica table.est-tbl td{padding:6px 8px;border-bottom:1px solid var(--border);}
+          #view-estadistica table.est-tbl tbody tr{cursor:pointer;}
+          #view-estadistica table.est-tbl tbody tr:hover{background:var(--surface-3);}
+        </style>
+        <h2 class="section">Estadística avanzada</h2>
+        <div id="est-crossinfo" class="card" style="margin-bottom:14px;"></div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button class="est-subtab active" data-est="asoc" onclick="estSubtab('asoc',this)">Asociaciones</button>
+          <button class="est-subtab" data-est="ia" onclick="estSubtab('ia',this)">Análisis IA</button>
+        </div>
+
+        <!-- PANEL ASOCIACIONES -->
+        <div id="est-panel-asoc">
+          <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+            <div class="field"><label>Significancia</label><select id="est-f-sig" onchange="estAsocRender()"><option value="all">Todos</option><option value="05">p&lt;0.05</option><option value="01">p&lt;0.01</option></select></div>
+            <div class="field"><label>N mínimo</label><select id="est-f-n" onchange="estAsocRender()"><option value="0">Todos</option><option value="15">≥15</option><option value="30">≥30</option></select></div>
+            <div class="field"><label>Categoría</label><select id="est-f-cat" onchange="estAsocRender()"><option value="all">Todas</option><option value="Eco+Ergo">Eco+Ergo</option><option value="EcoEstrés+Ergo">EcoEstrés+Ergo</option></select></div>
+            <div class="field"><label>Fuerza</label><select id="est-f-fuerza" onchange="estAsocRender()"><option value="all">Todas</option><option value="debil">Débil (r&lt;0.3)</option><option value="mod">Moderada</option><option value="fuerte">Fuerte (r&gt;0.6)</option></select></div>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end;">
+              <button class="btn" onclick="estExportPDF()">📄 Exportar tabla → PDF</button>
+              <button class="btn" onclick="estExportXLSX()">📊 Exportar tabla → Excel</button>
+            </div>
+          </div>
+          <div class="card" style="margin:12px 0 16px;overflow-x:auto;"><div id="est-asoc-tabla"></div></div>
+          <div id="est-scatter-wrap" class="card" style="display:none;margin-bottom:16px;position:relative;">
+            <button onclick="estCloseScatter()" title="Cerrar" style="position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text-2);font-size:18px;cursor:pointer;">✕</button>
+            <div id="est-scatter-title" style="font-weight:600;margin-bottom:10px;"></div>
+            <div style="position:relative;height:340px;"><canvas id="est-scatter"></canvas></div>
+          </div>
+          <div class="card" style="margin-bottom:16px;">
+            <h3 class="section" style="font-size:15px;">Forest plot — asociaciones significativas (IC 95%)</h3>
+            <div style="position:relative;height:360px;"><canvas id="est-forest"></canvas></div>
+          </div>
+          <div class="card">
+            <h3 class="section" style="font-size:15px;">Heatmap de correlaciones</h3>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">FEVI · E/e' · PSAP · TAPSE · Vol AI · METs — azul (−) → blanco (0) → rojo (+).</div>
+            <div style="position:relative;height:360px;"><canvas id="est-heatmap"></canvas></div>
+          </div>
+        </div>
+
+        <!-- PANEL ANÁLISIS IA -->
+        <div id="est-panel-ia" style="display:none;">
+          <div class="card" style="margin-bottom:16px;">
+            <h3 class="section" style="font-size:15px;">Configuración — API key de Anthropic</h3>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Se guarda solo en este navegador (localStorage). Nunca se envía a otro servidor salvo la propia API de Anthropic.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="password" id="est-api-key" placeholder="sk-ant-..." style="flex:1;min-width:240px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text-1);">
+              <button class="btn" onclick="estGuardarKey()">Guardar clave</button>
+              <span id="est-key-status" style="font-size:12px;color:var(--text-2);"></span>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:16px;">
+            <h3 class="section" style="font-size:15px;">Informe básico (sin IA)</h3>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Texto narrativo automático con plantillas condicionales sobre las asociaciones calculadas.</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn" onclick="estInformeBasico()">Generar informe básico</button>
+              <button class="btn" onclick="estInformeCopiar('est-informe-basico')">Copiar texto</button>
+              <button class="btn" onclick="estInformePDF('est-informe-basico','Informe básico')">Exportar a PDF</button>
+            </div>
+            <div id="est-informe-basico" style="white-space:pre-wrap;font-size:13px;line-height:1.55;margin-top:12px;"></div>
+          </div>
+          <div class="card">
+            <h3 class="section" style="font-size:15px;">Informe avanzado (con Claude)</h3>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Análisis clínico-estadístico generado por Claude (claude-sonnet-4-6) a partir del resumen de asociaciones. Requiere API key configurada.</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button class="btn" id="est-ia-btn" onclick="estInformeAvanzado()">Generar informe avanzado (IA)</button>
+              <button class="btn" onclick="estInformeCopiar('est-informe-ia')">Copiar texto</button>
+              <button class="btn" onclick="estInformePDF('est-informe-ia','Informe avanzado (IA)')">Exportar a PDF</button>
+              <span id="est-ia-spinner" style="display:none;font-size:13px;color:var(--accent,#2dd4bf);">⏳ Consultando a Claude…</span>
+            </div>
+            <div id="est-informe-ia" style="white-space:pre-wrap;font-size:13px;line-height:1.55;margin-top:12px;"></div>
+          </div>
+        </div>
       </section>
 
       <!-- ===================== INFORME PDF ===================== -->
@@ -1478,7 +1562,7 @@ async function generatePDF(){
 /* ============================================================
    NAVEGACIÓN / EVENTOS
    ============================================================ */
-const VIEW_TITLES={dashboard:'Plataforma general',poblacion:'Perfil epidemiológico cruzado',brechas:'Brechas asistenciales inter-app',medico:'Análisis por médico',periodos:'Comparación entre períodos',calidad:'Calidad del laboratorio consolidada',informe:'Informe anual exportable'};
+const VIEW_TITLES={dashboard:'Plataforma general',poblacion:'Perfil epidemiológico cruzado',brechas:'Brechas asistenciales inter-app',medico:'Análisis por médico',periodos:'Comparación entre períodos',calidad:'Calidad del laboratorio consolidada',estadistica:'Estadística avanzada',informe:'Informe anual exportable'};
 function switchView(v){
   currentView=v;
   $$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
@@ -1494,9 +1578,217 @@ function renderCurrent(){
     else if(currentView==='medico')renderMedico();
     else if(currentView==='periodos')renderPeriodos(false);
     else if(currentView==='calidad')renderCalidad();
+    else if(currentView==='estadistica' && typeof estRender==='function')estRender();
     else if(currentView==='informe')initReport();
   }catch(e){console.error('Error al renderizar',currentView,e);toast('Error al renderizar (ver consola)');}
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// Estadística avanzada — Asociaciones (Pearson/Spearman/Mann-Whitney/Chi²/KW) + IA
+// ══════════════════════════════════════════════════════════════════════════
+(function(){
+  const _num = v => { if(v==null)return null; const f=parseFloat(String(v).replace(',','.')); return isNaN(f)?null:f; };
+  const _pick = (o,ks) => { if(!o)return null; for(const k of ks){ if(o[k]!=null&&String(o[k]).trim()!=='')return o[k]; } return null; };
+  const ecoF = (s,sub,cks) => { if(!s)return null; if(s.eco&&s.eco[sub]!=null)return _num(s.eco[sub]); return _num(_pick(s.campos,cks)); };
+  const posOf = s => { if(!s)return null; if(typeof studyPositive==='function'){try{return studyPositive(s);}catch(e){}} const t=String(_pick(s.campos,['resultado','conclusion','conclusión','positiva','positivo'])||'').toLowerCase(); if(/positiv/.test(t))return true; if(/negativ/.test(t))return false; return null; };
+  const metsOf = s => { if(!s)return null; if(typeof studyMets==='function'){const m=studyMets(s); if(m!=null)return m;} return _num(_pick(s.campos,['mets','mets_alcanzados','mets_max','mets_pico'])); };
+
+  function cross(a,b){ const out=[]; if(typeof PATIENTS==='undefined')return out; PATIENTS.forEach(p=>{ if(!p.identifiable)return; const sa=p.studies.find(s=>s.app===a), sb=p.studies.find(s=>s.app===b); if(sa&&sb)out.push({[a]:sa,[b]:sb}); }); return out; }
+
+  // getters por par
+  const FEVI=pr=>ecoF(pr.eco,'fevi_simpson',['fevi_simpson','fevi','fevi_basal','fevi_reposo']);
+  const EE  =pr=>ecoF(pr.eco,'ee_prom',['ee_prom']);
+  const PSAP=pr=>ecoF(pr.eco,'psap',['psap_calc','psap']);
+  const TAPSE=pr=>ecoF(pr.eco,'tapse',['tapse']);
+  const LAVI=pr=>ecoF(pr.eco,'lavi',['ai_vol_index','lavi','lavi_calc']);
+  const METS=pr=>metsOf(pr.ergo);
+  const POS =pr=>posOf(pr.ergo);
+  const DIAST=pr=>{ const g=(pr.eco.eco&&pr.eco.eco.grado_diastolico)||_pick(pr.eco.campos,['grado_diastolico']); if(!g)return null; const t=String(g).toLowerCase(); return /iii|ii|\bi\b|alterad|pseudo|restrict|relajaci/.test(t)&&!/sin|normal/.test(t)?'Disfunción':(/sin|normal/.test(t)?'Normal':'Disfunción'); };
+  const GEOM=pr=>{ const g=(pr.eco.eco&&pr.eco.eco.geometria_vi)||_pick(pr.eco.campos,['geometria_vi','geometria']); return g?String(g):null; };
+  const HTP =pr=>{ const p=PSAP(pr); return p==null?null:(p>35?'HTP':'No HTP'); };
+  const YN  =v=>v==null?null:(v?'Sí':'No');
+  // ecoestres
+  const FEVIrep=pr=>_num(_pick(pr.ecoestres.campos,['fevi_basal','fevi_reposo']));
+  const FEVIstr=pr=>_num(_pick(pr.ecoestres.campos,['fevi_pico','fevi_estres','fevi_max']));
+  const RESERVA=pr=>{ const a=FEVIrep(pr), b=FEVIstr(pr); return (a!=null&&b!=null)?b-a:null; };
+  const PSAPstr=pr=>{ const b=_num(_pick(pr.ecoestres.campos,['psap_pico','psap_estres','psap_max'])); const a=_num(_pick(pr.ecoestres.campos,['psap_basal','psap_reposo','psap'])); return (b!=null&&a!=null)?b-a:b; };
+  const METSee=pr=>metsOf(pr.ergo);
+
+  // ── distribuciones ──
+  const avg=a=>a.reduce((s,b)=>s+b,0)/a.length;
+  const erf=x=>{const s=x<0?-1:1;x=Math.abs(x);const t=1/(1+0.3275911*x);const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return s*y;};
+  const normCdf=z=>0.5*(1+erf(z/Math.SQRT2));
+  const gln=x=>{const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];let y=x,tmp=x+5.5;tmp-=(x+0.5)*Math.log(tmp);let ser=1.000000000190015;for(let j=0;j<6;j++){y++;ser+=c[j]/y;}return -tmp+Math.log(2.5066282746310005*ser/x);};
+  const gammaP=(a,x)=>{if(x<=0)return 0;if(x<a+1){let ap=a,sum=1/a,del=sum;for(let i=0;i<300;i++){ap++;del*=x/ap;sum+=del;if(Math.abs(del)<Math.abs(sum)*1e-13)break;}return sum*Math.exp(-x+a*Math.log(x)-gln(a));}let b=x+1-a,c=1e300,d=1/b,h=d;for(let i=1;i<300;i++){const an=-i*(i-a);b+=2;d=an*d+b;if(Math.abs(d)<1e-300)d=1e-300;c=b+an/c;if(Math.abs(c)<1e-300)c=1e-300;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<1e-13)break;}return 1-Math.exp(-x+a*Math.log(x)-gln(a))*h;};
+  const chi2p=(x,k)=>x<=0?1:1-gammaP(k/2,x/2);
+  const ranks=arr=>{const idx=arr.map((v,i)=>[v,i]).sort((a,b)=>a[0]-b[0]);const r=new Array(arr.length);let i=0;while(i<idx.length){let j=i;while(j+1<idx.length&&idx[j+1][0]===idx[i][0])j++;const av=(i+j)/2+1;for(let k=i;k<=j;k++)r[idx[k][1]]=av;i=j+1;}return r;};
+  const fisherCI=(r,n)=>{if(n<4||Math.abs(r)>=1)return null;const z=Math.atanh(r),se=1/Math.sqrt(n-3);return [Math.tanh(z-1.96*se),Math.tanh(z+1.96*se)];};
+
+  function pearson(pairs){const n=pairs.length;if(n<3)return null;const mx=avg(pairs.map(p=>p[0])),my=avg(pairs.map(p=>p[1]));let sxy=0,sxx=0,syy=0;pairs.forEach(([x,y])=>{sxy+=(x-mx)*(y-my);sxx+=(x-mx)**2;syy+=(y-my)**2;});if(sxx===0||syy===0)return{r:0,p:1,n,ci:null,slope:0,intercept:my};const r=sxy/Math.sqrt(sxx*syy);const rc=Math.max(-0.999999,Math.min(0.999999,r));const z=Math.atanh(rc)*Math.sqrt(n-3);const p=2*(1-normCdf(Math.abs(z)));return{r,p:Math.max(0,Math.min(1,p)),n,ci:fisherCI(r,n),slope:sxy/sxx,intercept:my-(sxy/sxx)*mx};}
+  function spearman(pairs){const n=pairs.length;if(n<3)return null;const rx=ranks(pairs.map(p=>p[0])),ry=ranks(pairs.map(p=>p[1]));const mx=avg(rx),my=avg(ry);let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(rx[i]-mx)*(ry[i]-my);sxx+=(rx[i]-mx)**2;syy+=(ry[i]-my)**2;}if(sxx===0||syy===0)return{rho:0,p:1,n,ci:null};const rho=sxy/Math.sqrt(sxx*syy);const z=Math.abs(rho)*Math.sqrt(n-1);return{rho,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n,ci:fisherCI(rho,n)};}
+  function mannwhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2;if(n1<1||n2<1)return null;const all=g1.map(v=>[v,0]).concat(g2.map(v=>[v,1]));const r=ranks(all.map(a=>a[0]));let R1=0;for(let i=0;i<N;i++)if(all[i][1]===0)R1+=r[i];const U1=R1-n1*(n1+1)/2,U2=n1*n2-U1,U=Math.min(U1,U2),mU=n1*n2/2;const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const sU=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1)||1)));if(sU===0)return{U,p:1,n1,n2};const z=(Math.abs(U-mU)-0.5)/sU;return{U,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n1,n2};}
+  function chi2test(tbl){const R=tbl.length,C=tbl[0].length;const rt=tbl.map(r=>r.reduce((a,b)=>a+b,0)),ct=[];for(let c=0;c<C;c++){let s=0;for(let r=0;r<R;r++)s+=tbl[r][c];ct.push(s);}const N=rt.reduce((a,b)=>a+b,0);if(N===0)return null;let chi2=0,minE=Infinity;for(let r=0;r<R;r++)for(let c=0;c<C;c++){const e=rt[r]*ct[c]/N;if(e>0){minE=Math.min(minE,e);chi2+=(tbl[r][c]-e)**2/e;}}const df=(R-1)*(C-1);if(df<1)return null;return{chi2,p:chi2p(chi2,df),df,N,minE};}
+  function kruskal(gs){gs=gs.filter(g=>g.length>0);if(gs.length<2)return null;const all=[];gs.forEach((g,gi)=>g.forEach(v=>all.push([v,gi])));const N=all.length;if(N<3)return null;const r=ranks(all.map(a=>a[0]));const Rg=new Array(gs.length).fill(0),ng=gs.map(g=>g.length);for(let i=0;i<N;i++)Rg[all[i][1]]+=r[i];let H=0;for(let g=0;g<gs.length;g++)H+=Rg[g]**2/ng[g];H=12/(N*(N+1))*H-3*(N+1);const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const cf=1-tie/(N**3-N);if(cf>0)H/=cf;const df=gs.length-1;return{H,p:chi2p(H,df),N,k:gs.length};}
+
+  const sigLight=(p,ok)=>p==null?'⚫':(p<0.05?(ok?'🟢':'🟡'):'⚫');
+  const pTxt=p=>p==null?'—':(p<0.001?'<0.001':p.toFixed(3));
+  const ciTxt=ci=>ci?('['+ci[0].toFixed(2)+', '+ci[1].toFixed(2)+']'):'—';
+
+  // ── definición de asociaciones ──
+  const ASSOC=[
+    {cat:'Eco+Ergo', lbl:'FEVI ↔ METs', t:'pe', x:FEVI, y:METS},
+    {cat:'Eco+Ergo', lbl:"E/e' ↔ METs", t:'sp', x:EE, y:METS},
+    {cat:'Eco+Ergo', lbl:'PSAP ↔ METs', t:'sp', x:PSAP, y:METS},
+    {cat:'Eco+Ergo', lbl:'TAPSE ↔ METs', t:'sp', x:TAPSE, y:METS},
+    {cat:'Eco+Ergo', lbl:'Vol AI idx ↔ METs', t:'sp', x:LAVI, y:METS},
+    {cat:'Eco+Ergo', lbl:'METs → disfunción diastólica', t:'mw', val:METS, grp:pr=>{const d=DIAST(pr);return d==null?null:(d==='Disfunción'?1:0);}},
+    {cat:'Eco+Ergo', lbl:'METs → geometría VI', t:'kw', val:METS, catg:GEOM},
+    {cat:'Eco+Ergo', lbl:'METs → HTP (PSAP>35)', t:'mw', val:METS, grp:pr=>{const h=HTP(pr);return h==null?null:(h==='HTP'?1:0);}},
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → FEVI', t:'mw', val:FEVI, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
+    {cat:'Eco+Ergo', lbl:"Ergo positiva → E/e'", t:'mw', val:EE, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → TAPSE', t:'mw', val:TAPSE, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → disfunción diastólica', t:'chi', ca:pr=>YN(POS(pr)), cb:DIAST},
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → geometría VI', t:'chi', ca:pr=>YN(POS(pr)), cb:GEOM},
+    {cat:'EcoEstrés+Ergo', lbl:'FEVI reposo ↔ FEVI estrés', t:'pe', ee:1, x:FEVIrep, y:FEVIstr},
+    {cat:'EcoEstrés+Ergo', lbl:'Reserva contráctil ↔ METs', t:'sp', ee:1, x:RESERVA, y:METSee},
+    {cat:'EcoEstrés+Ergo', lbl:'Respuesta PSAP estrés ↔ METs', t:'sp', ee:1, x:PSAPstr, y:METSee},
+  ];
+
+  let _ecoErgo=[], _eeErgo=[];
+  function rebuildCross(){ _ecoErgo=cross('eco','ergo'); _eeErgo=cross('ecoestres','ergo'); }
+
+  function runOne(d){
+    const ds=d.ee?_eeErgo:_ecoErgo, base={cat:d.cat,lbl:d.lbl};
+    if(d.t==='pe'||d.t==='sp'){
+      const pairs=[]; ds.forEach(pr=>{const x=d.x(pr),y=d.y(pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);});
+      const r=d.t==='pe'?pearson(pairs):spearman(pairs);
+      if(!r)return {...base,n:pairs.length,method:d.t==='pe'?'Pearson':'Spearman',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+      const coef=d.t==='pe'?r.r:r.rho, ok=r.n>=15;
+      return {...base,n:r.n,method:d.t==='pe'?'Pearson':'Spearman',stat:(d.t==='pe'?'r=':'ρ=')+coef.toFixed(2),p:r.p,ci:ciTxt(r.ci),sig:sigLight(r.p,ok),coef,plot:{type:'scatter',pairs,slope:r.slope,intercept:r.intercept,ci:r.ci}};
+    }
+    if(d.t==='mw'){
+      const g1=[],g2=[],raw={g1:[],g2:[]}; ds.forEach(pr=>{const v=d.val(pr),gr=d.grp(pr);if(v!=null&&!isNaN(v)&&gr!=null){(gr?g1:g2).push(v);}});
+      const r=mannwhitney(g1,g2);
+      if(!r)return {...base,n:g1.length+g2.length,method:'Mann-Whitney U',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+      return {...base,n:r.n1+r.n2,method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:sigLight(r.p,r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:'Grupo +',vals:g1},{lbl:'Grupo −',vals:g2}]}};
+    }
+    if(d.t==='kw'){
+      const map={}; ds.forEach(pr=>{const v=d.val(pr),c=d.catg(pr);if(v!=null&&!isNaN(v)&&c!=null){(map[c]=map[c]||[]).push(v);}});
+      const cats=Object.keys(map), gs=cats.map(c=>map[c]);
+      const r=kruskal(gs);
+      if(!r)return {...base,n:gs.reduce((a,g)=>a+g.length,0),method:'Kruskal-Wallis',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+      return {...base,n:r.N,method:'Kruskal-Wallis',stat:'H='+r.H.toFixed(2)+' (k='+r.k+')',p:r.p,ci:'—',sig:sigLight(r.p,r.N>=15),coef:null,plot:{type:'strip',groups:cats.map((c,i)=>({lbl:c,vals:gs[i]}))}};
+    }
+    // chi
+    const data=[]; ds.forEach(pr=>{const a=d.ca(pr),b=d.cb(pr);if(a!=null&&b!=null)data.push([String(a),String(b)]);});
+    if(!data.length)return {...base,n:0,method:'Chi²',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+    const aV=[...new Set(data.map(x=>x[0]))],bV=[...new Set(data.map(x=>x[1]))];
+    const tbl=aV.map(a=>bV.map(b=>data.filter(x=>x[0]===a&&x[1]===b).length));
+    const r=chi2test(tbl);
+    if(!r)return {...base,n:data.length,method:'Chi²',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+    return {...base,n:r.N,method:'Chi²',stat:'χ²='+r.chi2.toFixed(2)+(r.minE<5?' ⚠fe<5':''),p:r.p,ci:'—',sig:sigLight(r.p,r.N>=20&&r.minE>=5),coef:null,plot:{type:'bar',aV,bV,tbl}};
+  }
+
+  let _results=[];
+  function computeAll(){ rebuildCross(); _results=ASSOC.map(runOne); return _results; }
+
+  function filtered(){
+    const fs=(document.getElementById('est-f-sig')||{}).value||'all';
+    const fn=parseInt((document.getElementById('est-f-n')||{}).value||'0');
+    const fc=(document.getElementById('est-f-cat')||{}).value||'all';
+    const ff=(document.getElementById('est-f-fuerza')||{}).value||'all';
+    return _results.filter(r=>{
+      if(fs==='05'&&!(r.p!=null&&r.p<0.05))return false;
+      if(fs==='01'&&!(r.p!=null&&r.p<0.01))return false;
+      if(fn&&r.n<fn)return false;
+      if(fc!=='all'&&r.cat!==fc)return false;
+      if(ff!=='all'){ const a=r.coef==null?null:Math.abs(r.coef); if(a==null)return false; if(ff==='debil'&&!(a<0.3))return false; if(ff==='mod'&&!(a>=0.3&&a<=0.6))return false; if(ff==='fuerte'&&!(a>0.6))return false; }
+      return true;
+    });
+  }
+
+  // ── charts ──
+  let _chScatter=null,_chForest=null,_chHeat=null;
+  const HAS_CHART=typeof Chart!=='undefined';
+  window.estCloseScatter=function(){ const w=document.getElementById('est-scatter-wrap'); if(w)w.style.display='none'; };
+  function openPlot(r){
+    if(!HAS_CHART||!r.plot)return;
+    const w=document.getElementById('est-scatter-wrap'); w.style.display='block';
+    document.getElementById('est-scatter-title').textContent=r.lbl+'  ('+r.method+', N='+r.n+', p='+pTxt(r.p)+')';
+    if(_chScatter)_chScatter.destroy();
+    const ctx=document.getElementById('est-scatter').getContext('2d');
+    if(r.plot.type==='scatter'){
+      const pts=r.plot.pairs.map(p=>({x:p[0],y:p[1]}));
+      const xs=r.plot.pairs.map(p=>p[0]); const xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs);
+      const line=[{x:xmin,y:r.plot.intercept+r.plot.slope*xmin},{x:xmax,y:r.plot.intercept+r.plot.slope*xmax}];
+      _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:[
+        {label:'Pacientes',data:pts,backgroundColor:'rgba(45,212,191,0.7)',pointRadius:4},
+        {label:'Regresión',type:'line',data:line,borderColor:'#f59e0b',borderWidth:2,pointRadius:0,fill:false}
+      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}}}});
+    } else if(r.plot.type==='strip'){
+      const ds=r.plot.groups.map((g,i)=>({label:g.lbl+' (n='+g.vals.length+')',data:g.vals.map(v=>({x:i+1+(Math.round(v*7)%10-5)/60,y:v})),backgroundColor:['rgba(45,212,191,.7)','rgba(244,63,94,.7)','rgba(59,130,246,.7)','rgba(234,179,8,.7)'][i%4],pointRadius:4}));
+      _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,scales:{x:{min:0.5,max:r.plot.groups.length+0.5,ticks:{stepSize:1,callback:(v)=>r.plot.groups[v-1]?r.plot.groups[v-1].lbl:''}}}}});
+    } else {
+      const datasets=r.plot.bV.map((b,ci)=>({label:String(b),data:r.plot.aV.map((a,ri)=>r.plot.tbl[ri][ci]),backgroundColor:['#2dd4bf','#f43f5e','#3b82f6','#eab308','#a78bfa'][ci%5]}));
+      _chScatter=new Chart(ctx,{type:'bar',data:{labels:r.plot.aV.map(String),datasets},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}}}});
+    }
+    document.getElementById('est-scatter-wrap').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  function renderForest(){
+    if(!HAS_CHART)return; if(_chForest)_chForest.destroy();
+    const sig=_results.filter(r=>r.p!=null&&r.p<0.05&&r.ci!=='—'&&r.coef!=null);
+    const el=document.getElementById('est-forest'); if(!el)return;
+    if(!sig.length){ if(_chForest){_chForest.destroy();_chForest=null;} const c=el.getContext('2d'); c.clearRect(0,0,el.width,el.height); return; }
+    const labels=sig.map(r=>r.lbl);
+    const bars=sig.map(r=>{ const m=r.ci.replace(/[\[\]]/g,'').split(',').map(x=>parseFloat(x)); return [m[0],m[1]]; });
+    _chForest=new Chart(el.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:'IC 95% del coeficiente',data:bars,backgroundColor:sig.map(r=>r.coef<0?'rgba(59,130,246,.6)':'rgba(244,63,94,.6)'),borderColor:'#888',borderWidth:1}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const r=sig[c.dataIndex];return 'coef='+r.coef.toFixed(2)+'  IC '+r.ci+'  p='+pTxt(r.p);}}}},scales:{x:{title:{display:true,text:'Coeficiente (r/ρ) — IC 95%'},suggestedMin:-1,suggestedMax:1,grid:{color:(c)=>c.tick.value===0?'#888':'rgba(128,128,128,.15)'}}}}});
+  }
+
+  const colorR=r=>{ const a=Math.min(1,Math.abs(r)); if(r>=0){ const g=Math.round(255*(1-a)); return 'rgb(255,'+g+','+g+')'; } const g=Math.round(255*(1-a)); return 'rgb('+g+','+g+',255)'; };
+  function renderHeatmap(){
+    if(!HAS_CHART)return; const el=document.getElementById('est-heatmap'); if(!el)return;
+    const vars=[['FEVI',FEVI],['E/e\'',EE],['PSAP',PSAP],['TAPSE',TAPSE],['Vol AI',LAVI],['METs',METS]];
+    const n=vars.length; const pts=[];
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){ const pairs=[]; _ecoErgo.forEach(pr=>{const x=vars[i][1](pr),y=vars[j][1](pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);}); const r=i===j?{r:1}:(pearson(pairs)||{r:null}); pts.push({x:j,y:n-1-i,r:r.r}); }
+    if(_chHeat)_chHeat.destroy();
+    _chHeat=new Chart(el.getContext('2d'),{type:'scatter',data:{datasets:[{data:pts,pointStyle:'rectRounded',radius:26,backgroundColor:pts.map(p=>p.r==null?'rgba(128,128,128,.15)':colorR(p.r)),borderColor:'#555',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const p=pts[c.dataIndex];return vars[n-1-p.y][0]+' × '+vars[p.x][0]+': r='+(p.r==null?'—':p.r.toFixed(2));}}}},scales:{x:{min:-0.5,max:n-0.5,ticks:{stepSize:1,callback:v=>vars[v]?vars[v][0]:''},grid:{display:false}},y:{min:-0.5,max:n-0.5,ticks:{stepSize:1,callback:v=>vars[n-1-v]?vars[n-1-v][0]:''},grid:{display:false}}}}});
+  }
+
+  window.estAsocRender=function(){
+    const host=document.getElementById('est-asoc-tabla'); if(!host)return;
+    const rows=filtered();
+    if(!rows.length){ host.innerHTML='<div style="padding:16px;color:var(--text-2);text-align:center;">Sin asociaciones que cumplan los filtros (o pocos pacientes con datos cruzados).</div>'; renderForest(); return; }
+    let body='';
+    rows.forEach((r,idx)=>{ body+='<tr data-ri="'+idx+'"><td>'+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td>'+r.ci+'</td><td style="text-align:center;font-size:15px;">'+r.sig+'</td></tr>'; });
+    host.innerHTML='<table class="est-tbl"><thead><tr><th>Asociación</th><th>N</th><th>Método</th><th>Estadístico</th><th>p</th><th>IC 95%</th><th>Sig.</th></tr></thead><tbody>'+body+'</tbody></table>';
+    host.querySelectorAll('tbody tr').forEach(tr=>tr.addEventListener('click',()=>openPlot(rows[parseInt(tr.dataset.ri)])));
+    renderForest();
+  };
+
+  window.estRender=function(){
+    computeAll();
+    const ci=document.getElementById('est-crossinfo');
+    if(ci)ci.innerHTML='<div style="font-size:13px;"><b>Datos cruzados por CI:</b> '+_ecoErgo.length+' pacientes con <b>Eco+Ergo</b> · '+_eeErgo.length+' con <b>EcoEstrés+Ergo</b>. Total estudios: '+((typeof STUDIES!=='undefined')?STUDIES.length:'—')+'.</div>';
+    const k=localStorage.getItem('ca_anthropic_key')||'';
+    const st=document.getElementById('est-key-status'); if(st)st.textContent=k?('Clave guardada: sk-ant-…'+k.slice(-4)):'Sin clave configurada.';
+    estAsocRender(); renderHeatmap();
+  };
+
+  window.estSubtab=function(id,el){ document.querySelectorAll('#view-estadistica .est-subtab').forEach(b=>b.classList.remove('active')); el.classList.add('active'); document.getElementById('est-panel-asoc').style.display=id==='asoc'?'block':'none'; document.getElementById('est-panel-ia').style.display=id==='ia'?'block':'none'; if(id==='asoc'){ estAsocRender(); renderHeatmap(); } };
+
+  // ── exportar ──
+  window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const H=['Categoría','Asociación','N','Método','Estadístico','p','IC 95%','Significativo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.ci,r.sig==='🟢'?'Sí':(r.sig==='🟡'?'Sí (N bajo)':'No')])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
+  window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. Verde=sig N ok / Amarillo=sig N bajo / Negro=no sig.',mL,y);y+=7; const cols=[['Asociacion',66],['N',12],['Metodo',34],['Estadistico',40],['p',18],['IC 95%',34],['Sig',14]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=r.sig==='🟢'?'SI':(r.sig==='🟡'?'si*':'no'); const vals=[r.lbl,String(r.n),r.method,r.stat.replace(/[χ²ρ→↔⚠]/g,m=>({'χ':'X','²':'2','ρ':'r','→':'->','↔':'-','⚠':'!'}[m]||m)),pTxt(r.p),r.ci,sg]; let x=mL; vals.forEach((v,i)=>{doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
+
+  // ── Análisis IA ──
+  window.estGuardarKey=function(){ const inp=document.getElementById('est-api-key'); const k=(inp.value||'').trim(); if(!k){toast('Ingresá una clave');return;} localStorage.setItem('ca_anthropic_key',k); inp.value=''; document.getElementById('est-key-status').textContent='Clave guardada: sk-ant-…'+k.slice(-4); toast('✅ Clave guardada (solo en este navegador)'); };
+  function resumenAsoc(){ const sig=_results.filter(r=>r.p!=null&&r.p<0.05); const strong=_results.filter(r=>r.coef!=null&&Math.abs(r.coef)>0).sort((a,b)=>Math.abs(b.coef)-Math.abs(a.coef)); return {ecoErgo:_ecoErgo.length,eeErgo:_eeErgo.length,total:_results.length,significativas:sig.length,masFuerte:strong[0]||null,sig,todas:_results}; }
+  window.estInformeBasico=function(){ computeAll(); const R=resumenAsoc(); const el=document.getElementById('est-informe-basico'); let t=''; t+='Se analizaron '+R.ecoErgo+' pacientes con datos cruzados Eco+Ergo'+(R.eeErgo?(' y '+R.eeErgo+' con EcoEstrés+Ergo'):'')+'. '; t+='Sobre '+R.total+' asociaciones evaluadas, se encontraron '+R.significativas+' significativas (p<0.05).'; if(R.masFuerte&&R.masFuerte.coef!=null){ t+=' La asociación de mayor magnitud fue '+R.masFuerte.lbl+' ('+R.masFuerte.stat+', p='+pTxt(R.masFuerte.p)+', IC 95% '+R.masFuerte.ci+').'; } t+='\n\n'; if(R.sig.length){ t+='Asociaciones significativas:\n'; R.sig.forEach(r=>{ t+='• '+r.lbl+' — '+r.method+' '+r.stat+', p='+pTxt(r.p)+(r.ci!=='—'?(', IC95 '+r.ci):'')+' '+r.sig+'\n'; }); } else t+='No se hallaron asociaciones estadísticamente significativas con la muestra actual.\n'; t+='\nNota: N bajo (🟡) indica significancia con tamaño muestral por debajo del umbral recomendado — interpretar con cautela.'; el.textContent=t; };
+  window.estInformeCopiar=function(id){ const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Nada para copiar');return;} navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ Copiado')).catch(()=>toast('No se pudo copiar')); };
+  window.estInformePDF=function(id,titulo){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Generá el informe primero');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'}); const mL=14,mR=196; let y=18; doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — '+titulo,mL,y);y+=8; doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30,30,30); const lines=doc.splitTextToSize(el.textContent,mR-mL); lines.forEach(l=>{ if(y>282){doc.addPage();y=18;} doc.text(l,mL,y); y+=5.2; }); doc.save('ceiboanalytics_'+id+'.pdf'); toast('✅ PDF exportado'); };
+  window.estInformeAvanzado=async function(){ const key=localStorage.getItem('ca_anthropic_key'); const el=document.getElementById('est-informe-ia'); if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; toast('Falta la API key'); return; } computeAll(); const R=resumenAsoc(); const payload={ pacientes_eco_ergo:R.ecoErgo, pacientes_ecoestres_ergo:R.eeErgo, asociaciones:R.todas.map(r=>({asociacion:r.lbl,categoria:r.cat,metodo:r.method,estadistico:r.stat,p:r.p,ic95:r.ci,n:r.n,significativa:r.p!=null&&r.p<0.05})) }; const btn=document.getElementById('est-ia-btn'), sp=document.getElementById('est-ia-spinner'); btn.disabled=true; sp.style.display='inline'; el.textContent=''; try{ const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Sos un cardiólogo especialista en bioestadística clínica. Analizás resultados estadísticos de una población cardiovascular uruguaya y generás conclusiones clínicas, comparación con literatura internacional, hipótesis para investigación futura y recomendaciones para el servicio. Respondé en español, con formato clínico profesional.',messages:[{role:'user',content:'Resumen de asociaciones estadísticas encontradas (JSON):\n'+JSON.stringify(payload,null,2)}]})}); const data=await res.json(); if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); } else { const txt=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)'; el.textContent=txt; toast('✅ Informe generado'); } }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); } finally{ btn.disabled=false; sp.style.display='none'; } };
+})();
 
 function setupMobileNav(){
   $('#mobileNav').innerHTML=$$('.sidebar .navbtn').map(b=>`<button class="navbtn ${b.classList.contains('active')?'active':''}" data-view="${b.dataset.view}">${b.textContent}</button>`).join('');
