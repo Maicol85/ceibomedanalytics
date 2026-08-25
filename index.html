@@ -701,15 +701,80 @@ let PATIENTS = new Map(); // patientKey -> {key, level, identifiable, initials, 
 let currentView = 'dashboard';
 const charts = {};      // registro de instancias Chart
 
+/* ---------- Lectura desde la IndexedDB compartida de la suite ---------- */
+/* Las apps de CeiboMed guardan sus estudios en la base `ceibomed`, store
+   `informes`, con un campo `app` por registro ('eco', 'ergo', 'ecoestres').
+   Analytics NO escribe ahí: sólo lee.
+   Se hidrata una caché en memoria al arrancar para que readStore() siga siendo
+   SÍNCRONA y loadData() no tenga que volverse asíncrona entera.
+   Si una app todavía no migró, su lectura cae sola a la clave vieja de
+   localStorage, así la transición no deja huecos. */
+const CeiboRead = (function(){
+  const DB_NAME='ceibomed', DB_VER=1, STORE='informes';
+  let _porApp = null;                       // null = todavía no hidratado
+  function _abrir(){ return new Promise(function(res){ var f=false; function fin(v){ if(!f){f=true;res(v);} } var q;
+    try{ if(!window.indexedDB) return fin(null); q=indexedDB.open(DB_NAME,DB_VER); }catch(e){ return fin(null); }
+    // Analytics puede ser la primera en abrir la base en este equipo: crea el
+    // store para no chocar de versión con las otras apps.
+    q.onupgradeneeded=function(ev){ var db=ev.target.result;
+      if(!db.objectStoreNames.contains(STORE)){ var os=db.createObjectStore(STORE,{keyPath:'_pk'}); os.createIndex('app','app',{unique:false}); } };
+    q.onsuccess=function(){fin(q.result);}; q.onerror=function(){fin(null);}; q.onblocked=function(){fin(null);};
+    setTimeout(function(){fin(null);},3000); }); }
+  async function hidratar(){
+    _porApp = {};
+    var db = await _abrir();
+    if(!db) return _porApp;
+    var todos = await new Promise(function(res){
+      try{ var tx=db.transaction(STORE,'readonly'); var r=tx.objectStore(STORE).getAll();
+        r.onsuccess=function(){res(r.result||[]);}; r.onerror=function(){res([]);}; }catch(e){ res([]); } });
+    // Dedup por id dentro de cada app: EcoSmart guarda dos baldes (estudios
+    // propios e importados) y su lista fusionada queda repetida en la base.
+    // Sin esto el dashboard contaría casi el doble de estudios.
+    var vistos = {};
+    todos.forEach(function(rec, i){
+      if(!rec || !rec.app || !rec.data) return;
+      var app = rec.app;
+      var id  = (rec.data.id != null) ? String(rec.data.id) : ('_' + i);
+      if(!vistos[app]) vistos[app] = {};
+      if(vistos[app][id]) return;
+      vistos[app][id] = 1;
+      (_porApp[app] || (_porApp[app]=[])).push(rec.data);
+    });
+    return _porApp;
+  }
+  return { hidratar: hidratar,
+           get: function(app){ return (_porApp && _porApp[app]) ? _porApp[app] : null; },
+           disponible: function(){ return _porApp !== null; },
+           resumen: function(){ var o={}; for(var k in (_porApp||{})) o[k]=_porApp[k].length; return o; } };
+})();
+
 /* ---------- Lectura + normalización ---------- */
-function readStore(key){
+/* `app` es la clave interna de APPS ('eco','ergo','ecoestres'), que es la misma
+   que las apps escriben en el campo `app` de la base compartida. */
+function readStore(key, app){
+  const idb = app ? CeiboRead.get(app) : null;
+  if (idb && idb.length) return idb;
   try{const raw=localStorage.getItem(key);if(!raw)return [];const v=JSON.parse(raw);return Array.isArray(v)?v:(v&&Array.isArray(v.informes)?v.informes:[]);}
   catch(e){console.warn('No se pudo leer',key,e);return [];}
 }
 
 function normalizeStudy(raw, app){
-  const campos = raw.campos || raw.datos || raw || {};
-  const fecha = parseDate(raw.fecha_estudio || raw.fecha || campos.fecha_estudio || raw.fecha_guardado || raw.fechaGuardado);
+  // EcoEstrés no guarda `campos`: guarda `vals`, indexado por id del input del
+  // formulario ('p-nombre', 'p-hc', 'p-fecha'...). Sin traducir esos nombres sus
+  // estudios entraban sin fecha y quedaban fuera de la ventana de 365 días, así
+  // que el dashboard los mostraba en 0.
+  const _v = raw.vals || null;
+  const campos = raw.campos || raw.datos || (_v ? {
+    nombre:        _v['p-nombre'],
+    ci:            _v['p-hc'],
+    fecha_estudio: _v['p-fecha'],
+    edad:          _v['p-edad'],
+    sexo:          _v['p-sexo'],
+    centro:        _v['p-centro'],
+    'med-nombre':  _v['p-medico']
+  } : raw) || {};
+  const fecha = parseDate(raw.fecha_estudio || raw.fecha || campos.fecha_estudio || raw.fecha_guardado || raw.fechaGuardado
+                          || (raw.ts ? new Date(raw.ts) : null));
   const nombre = raw.nombre || campos.nombre || pick(campos,['paciente','nombre_paciente']) || '';
   const ci = raw.ci || campos.ci || pick(raw,['documento','doc']) || pick(campos,['documento','doc']) || '';
   const doc_tipo = raw.doc_tipo || campos.doc_tipo || 'CI';
@@ -897,7 +962,7 @@ function readImported(app){
 function readAppRaw(app){
   const imp=readImported(app);
   if(imp) return imp;
-  return app==='cardio' ? readCardioSalud() : readStore(APPS[app].key);
+  return app==='cardio' ? readCardioSalud() : readStore(APPS[app].key, app);
 }
 let _caImportApp=null;
 function caImportPick(appName){ _caImportApp=appName; const f=$('#caImportFile'); if(f){ f.value=''; f.click(); } }
@@ -921,7 +986,7 @@ function caHandleFile(file){
     }
     try{ localStorage.setItem(CA_BYNAME[appName], JSON.stringify(estudios)); }
     catch(err){ caStatus('❌ No se pudo guardar (¿almacenamiento lleno?).',true); return; }
-    loadData(); renderCurrent();
+    CeiboRead.hidratar().then(()=>{ loadData(); renderCurrent(); });
     const msg='✅ '+estudios.length+' estudios importados de '+CA_LABELS[appName];
     caStatus(msg,false); if(typeof toast==='function') toast(msg);
   };
@@ -1800,7 +1865,7 @@ function bindEvents(){
   $('#periodSel').addEventListener('change',()=>{$('#customRange').classList.toggle('on',$('#periodSel').value==='custom');renderCurrent();});
   $('#dFrom').addEventListener('change',renderCurrent);
   $('#dTo').addEventListener('change',renderCurrent);
-  $('#refreshBtn').addEventListener('click',()=>{loadData();renderCurrent();toast('Datos actualizados desde localStorage');});
+  $('#refreshBtn').addEventListener('click',async()=>{await CeiboRead.hidratar();loadData();renderCurrent();toast('Datos actualizados');});
   { const cif=$('#caImportFile'); if(cif) cif.addEventListener('change',e=>{ if(e.target.files[0]) caHandleFile(e.target.files[0]); }); }
   $('#dashAppFilter').addEventListener('change',e=>{const cb=e.target.closest('input[data-app]');if(!cb)return;dashAppFilter[cb.dataset.app]=cb.checked;const lbl=cb.closest('.app-toggle');if(lbl){lbl.classList.toggle('on',cb.checked);lbl.classList.toggle('off',!cb.checked);}renderDashboard();});
   $('#themeBtn').addEventListener('click',toggleTheme);
@@ -1821,7 +1886,7 @@ function toggleTheme(){
 }
 
 /* ---------- Init ---------- */
-function init(){
+async function init(){
   const savedTheme=(()=>{try{return localStorage.getItem('ceibo_analytics_theme');}catch(e){return null;}})();
   if(savedTheme){document.documentElement.setAttribute('data-theme',savedTheme);$('#themeBtn').textContent=savedTheme==='dark'?'🌙':'☀';}
   if(HAS_CHART){
@@ -1829,11 +1894,14 @@ function init(){
     Chart.defaults.color=cssv('--text-2');
   }
   bindEvents();
+  // Hay que esperar la base compartida antes del primer loadData(): si no,
+  // el dashboard se pintaría vacío y recién aparecerían los datos al refrescar.
+  await CeiboRead.hidratar();
   loadData();
   renderAppFilterBar();
   setupMobileNav();
   switchView('dashboard');
-  if(!STUDIES.length){toast('Sin datos en localStorage — cargá estudios en EcoSmart / ErgoSmart / EcoEstrés');}
+  if(!STUDIES.length){toast('Sin datos — cargá estudios en EcoSmart / ErgoSmart / EcoEstrés');}
 }
 document.addEventListener('DOMContentLoaded',init);
 </script>
