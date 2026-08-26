@@ -712,7 +712,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div class="field"><label>Jefe/a de servicio (firma)</label><input type="text" id="rptChief" placeholder="Dr./Dra. Nombre Apellido"></div>
             <div class="field"><label>Logo institucional</label><input type="file" id="rptLogo" accept="image/*"></div>
           </div>
-          <p class="hint">El informe se genera 100% en este navegador (jsPDF). Incluye período, estadísticas clave, gráficas, tabla de indicadores de calidad y espacio de firma. El logo se guarda en localStorage para próximos informes.</p>
+          <p class="hint">El informe se genera 100% en este navegador (jsPDF). Incluye portada con el N por app, descriptivas y completitud por aplicación, histogramas de FEVI/METs/E&nbsp;sobre&nbsp;e'/PSAP, tabla de asociaciones significativas ajustadas por FDR, forest plot, informe narrativo y espacio de firma. El logo se guarda en localStorage para próximos informes.</p>
           <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
             <button class="btn primary" id="genPdf">⬇ Generar PDF</button>
             <span id="pdfStatus" class="hint" style="align-self:center;"></span>
@@ -722,8 +722,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         <!-- canvases ocultos para render de gráficas del PDF -->
         <div style="position:absolute;left:-9999px;top:0;width:900px;">
           <canvas id="pdfEvol" width="900" height="360"></canvas>
-          <canvas id="pdfFevi" width="900" height="360"></canvas>
-          <canvas id="pdfPos" width="900" height="360"></canvas>
+          <!-- offscreenChart() busca el canvas por id en el DOM: sin estos nodos la
+               gráfica no se genera y la sección sale como "no se pudo generar". -->
+          <canvas id="pdfHFevi" width="760" height="470"></canvas>
+          <canvas id="pdfHMets" width="760" height="470"></canvas>
+          <canvas id="pdfHEe"   width="760" height="470"></canvas>
+          <canvas id="pdfHPsap" width="760" height="470"></canvas>
+          <canvas id="pdfForest" width="900" height="520"></canvas>
         </div>
       </section>
     </div>
@@ -1707,7 +1712,7 @@ function renderReportPreview(){
       <div class="card stat"><span class="lbl">Ergo +</span><span class="val">${m.ergoPos!=null?pct(m.ergoPos):'—'}</span></div>
       <div class="card stat"><span class="lbl">Completitud</span><span class="val">${m.quality!=null?pct(m.quality):'—'}</span></div>
     </div>
-    <p class="hint" style="margin-top:12px;">El PDF incluye estas cifras + gráficas (evolución mensual, distribución FEVI, positividad) + tabla de indicadores de calidad + espacio de firma.</p>`;
+    <p class="hint" style="margin-top:12px;">El PDF completo suma: descriptivas y completitud por app, histogramas, asociaciones significativas con su IC 95%, forest plot, el informe narrativo y el espacio de firma.</p>`;
 }
 function loadLogo(file){
   const reader=new FileReader();
@@ -1760,116 +1765,346 @@ function offscreenChart(canvasId,cfg){
     },260);
   });
 }
+let _pdfEnCurso=false;
 async function generatePDF(){
-  if(!window.jspdf){toast('jsPDF no cargó (revisá conexión al CDN)');return;}
-  /* Sin Chart.js el informe se generaba igual, sin sus tres gráficas y con el estado
-     diciendo que todo salió bien: es un entregable que se firma, así que el médico tiene
-     que saber qué está firmando. */
+  if(!window.jspdf||!window.jspdf.jsPDF){toast('jsPDF no cargó (revisá conexión al CDN)');return;}
+  /* Dos corridas simultáneas comparten los ids de canvas y el mapa global de charts: la
+     segunda destruiría el chart que la primera está por capturar, y podría salir un
+     histograma rotulado "FEVI" con los datos de METs en un documento que se firma. */
+  if(_pdfEnCurso){ toast('Ya se está generando un informe'); return; }
+  _pdfEnCurso=true;
+  const btn=document.getElementById('genPdf'); if(btn) btn.disabled=true;
   if(!HAS_CHART) toast('⚠️ Chart.js no cargó: el PDF va a salir sin gráficas');
   const status=$('#pdfStatus'); status.textContent='Generando…';
+  try{
   const yr=+$('#rptYear').value;
   const inst=$('#rptInst').value.trim(); const chief=$('#rptChief').value.trim();
-  localStorage.setItem('ceibomed_inst',inst); localStorage.setItem('ceibomed_chief',chief);
+  // Guardar la preferencia no puede abortar el entregable (Safari privado tira acá).
+  try{ localStorage.setItem('ceibomed_inst',inst); localStorage.setItem('ceibomed_chief',chief); }
+  catch(e){ console.warn('[PDF] no se pudo guardar institución/jefatura',e); }
+
   const list=STUDIES.filter(s=>s.fecha&&s.fecha.getFullYear()===yr);
   const g=byApp(list); const m=metrics(list); const q=qualityByApp(list);
   const months=monthSpan(list);
+  const hoy=new Date();
+  const fechaGen=hoy.toLocaleDateString('es-UY');
 
-  // Gráficas
+  /* ── Gráficas ──
+     Se renderizan offscreen con fondo blanco (offscreenChart ya lo pinta con
+     destination-over) y se capturan con toDataURL. Todo el bloque va en un try: una
+     gráfica que falle no puede impedir que salga el resto del informe. */
   const ink='#333', grid='#e1e0d9';
-  const evolCfg={type:'line',data:{labels:months.map(ymLabel),datasets:Object.keys(APPS).map(app=>({label:APPS[app].label,data:months.map(mm=>g[app].filter(s=>s.fecha&&ymKey(s.fecha)===mm).length),borderColor:['#2a78d6','#eb6834','#1baf7a','#eda100'][['eco','ergo','ecoestres','cardio'].indexOf(app)],backgroundColor:'transparent',tension:.3,borderWidth:2,pointRadius:2}))},options:{plugins:{legend:{labels:{color:ink}}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,ticks:{color:ink},grid:{color:grid}}}}};
-  const feviV=g.eco.map(feviOf).filter(v=>v!=null);
-  const feviCounts=[feviV.filter(v=>v<=40).length,feviV.filter(v=>v>40&&v<50).length,feviV.filter(v=>v>=50).length];
-  const feviCfg={type:'bar',data:{labels:['≤40%','41-49%','≥50%'],datasets:[{data:feviCounts,backgroundColor:['#d03b3b','#fab219','#0ca30c']}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,ticks:{color:ink},grid:{color:grid}}}}};
-  const posMonths=months.map(mm=>{const sub=g.ergo.filter(s=>s.fecha&&ymKey(s.fecha)===mm);return posRate(sub).rate;});
-  const posCfg={type:'line',data:{labels:months.map(ymLabel),datasets:[{label:'% ergometrías +',data:posMonths,borderColor:'#d03b3b',backgroundColor:'transparent',tension:.3,borderWidth:2,pointRadius:2,spanGaps:true}]},options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,max:100,ticks:{color:ink},grid:{color:grid}}}}};
+  const histCfg=(h,color)=>({type:'bar',
+    data:{labels:h.labels,datasets:[{data:h.counts,backgroundColor:color,borderWidth:0}]},
+    options:{plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:ink,maxRotation:60,minRotation:0,font:{size:9}},grid:{display:false}},
+              y:{beginAtZero:true,ticks:{color:ink,precision:0},grid:{color:grid}}}}});
 
-  let imgEvol=null,imgFevi=null,imgPos=null;
+  // Histogramas pedidos: FEVI, METs, E/e' y PSAP.
+  const serie=(arr)=>arr.filter(v=>v!=null&&!isNaN(v)).map(Number).sort((a,b)=>a-b);
+  const HISTS=[
+    {id:'pdfHFevi', lbl:'FEVI (%)',            color:'#2a78d6', vals:serie(g.eco.map(feviOf))},
+    {id:'pdfHMets', lbl:'METs alcanzados',     color:'#eb6834', vals:serie(g.ergo.map(s=>(typeof studyMets==='function')?studyMets(s):null))},
+    {id:'pdfHEe',   lbl:"E/e' promedio",       color:'#1baf7a', vals:serie(g.eco.map(s=>s.eco?s.eco.ee_prom:null))},
+    {id:'pdfHPsap', lbl:'PSAP (mmHg)',         color:'#eda100', vals:serie(g.eco.map(s=>s.eco?s.eco.psap:null))}
+  ];
+  const evolCfg={type:'line',data:{labels:months.map(ymLabel),datasets:Object.keys(APPS).map(app=>({label:APPS[app].label,data:months.map(mm=>g[app].filter(s=>s.fecha&&ymKey(s.fecha)===mm).length),borderColor:['#2a78d6','#eb6834','#1baf7a','#eda100'][['eco','ergo','ecoestres','cardio'].indexOf(app)],backgroundColor:'transparent',tension:.3,borderWidth:2,pointRadius:2}))},options:{plugins:{legend:{labels:{color:ink}}},scales:{x:{ticks:{color:ink},grid:{color:grid}},y:{beginAtZero:true,ticks:{color:ink},grid:{color:grid}}}}};
+
+  let imgEvol=null; const imgsHist=[];
+  const fallos=[], fallosCalculo=[];
+  try{ if(months.length) imgEvol=await offscreenChart('pdfEvol',evolCfg); }
+  catch(e){ fallos.push('evolución mensual'); console.warn('[PDF] evolución',e); }
+  for(const h of HISTS){
+    if(h.vals.length<2){ imgsHist.push({...h,img:null,motivo:'Sin datos suficientes (N<2)'}); continue; }
+    try{
+      const hh=paHist(h.vals);
+      const img=hh?await offscreenChart(h.id,histCfg(hh,h.color)):null;
+      imgsHist.push({...h,img,motivo:img?null:'Sin datos suficientes'});
+    }catch(e){ fallos.push(h.lbl); console.warn('[PDF] histograma',h.lbl,e); imgsHist.push({...h,img:null,motivo:'No se pudo generar la gráfica'}); }
+  }
+
+  /* ── Estadística: se calcula sobre la MISMA lista del informe ──
+     generatePDF filtra por año y el panel por período: sin fijar la población, la tabla
+     de asociaciones describiría un conjunto distinto del que anuncia la portada. */
+  let est=null;
   try{
-    if(months.length) imgEvol=await offscreenChart('pdfEvol',evolCfg);
-    if(feviV.length)   imgFevi=await offscreenChart('pdfFevi',feviCfg);
-    if(months.length&&g.ergo.length) imgPos=await offscreenChart('pdfPos',posCfg);
-  }catch(e){console.warn('[CeiboAnalytics] no se pudieron generar las gráficas del PDF',e);}
-  const sinGraficas = !HAS_CHART || (months.length && !imgEvol) || (feviV.length && !imgFevi);
+    if(typeof estDatosPDF==='function') est=estDatosPDF(list, 'año '+yr);
+  }catch(e){ console.error('[PDF] no se pudo calcular la estadística',e); fallosCalculo.push('asociaciones y narrativo'); }
+
+  // Forest plot, con la misma escala para todos los coeficientes.
+  let imgForest=null;
+  if(est && est.forest.length){
+    try{
+      const fcfg={type:'bar',
+        data:{labels:est.forest.map(r=>r.lbl),
+          datasets:[{data:est.forest.map(r=>[r.lo,r.hi]),
+            backgroundColor:est.forest.map(r=>r.coef<0?'rgba(59,130,246,.65)':'rgba(244,63,94,.65)'),
+            borderColor:'#666',borderWidth:1}]},
+        options:{indexAxis:'y',plugins:{legend:{display:false}},
+          scales:{x:{min:-1,max:1,title:{display:true,text:'Coeficiente (r / ρ) — IC 95%',color:ink},
+                     ticks:{color:ink},grid:{color:c=>c.tick.value===0?'#888':grid}},
+                  y:{ticks:{color:ink,font:{size:9}},grid:{display:false}}}}};
+      imgForest=await offscreenChart('pdfForest',fcfg);
+    }catch(e){ fallos.push('forest plot'); console.warn('[PDF] forest',e); }
+  }
 
   const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({unit:'pt',format:'a4'});
+  /* compress:true comprime los content streams. Sin esto las gráficas se embeben en
+     crudo y el informe pesa decenas de MB: inservible para adjuntar a un envío a
+     congreso o a una auditoría. */
+  const doc=new jsPDF({unit:'pt',format:'a4',compress:true});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
   const M=48; let y=M;
+  const PIE=34;                       // reservado para el pie de página
   const logo=localStorage.getItem(LOGO_KEY);
-  // Encabezado
-  if(logo){ try{doc.addImage(logo,'PNG',M,y,52,52);}catch(e){} }
-  doc.setTextColor(20,20,20);
-  doc.setFont('helvetica','bold'); doc.setFontSize(20);
-  doc.text('Informe anual '+yr, logo?M+66:M, y+22);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(90,90,90);
-  doc.text(inst||'Servicio de Cardiología', logo?M+66:M, y+40);
-  doc.text('CeiboAnalytics · Suite CeiboMed', logo?M+66:M, y+55);
-  y+= (logo?70:64);
-  doc.setDrawColor(220); doc.line(M,y,W-M,y); y+=22;
 
-  // Estadísticas clave
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,20,20);
-  doc.text('Estadísticas clave',M,y); y+=8;
-  const kv=[
-    ['Estudios totales',fmt(m.total)],['EcoSmart',fmt(g.eco.length)],['ErgoSmart',fmt(g.ergo.length)],['EcoEstrés Smart',fmt(g.ecoestres.length)],
-    ['Edad promedio',m.edad!=null?fmt(m.edad,0)+' años':'—'],['METs promedio',m.mets!=null?fmt(m.mets,1):'—'],
-    ['% Ergometrías positivas',m.ergoPos!=null?pct(m.ergoPos):'—'],['% Eco estrés positivos',m.eePos!=null?pct(m.eePos):'—']
-  ];
-  y+=10; doc.setFontSize(10);
-  const colW=(W-2*M)/2;
-  kv.forEach((row,i)=>{
-    const cx=M+(i%2)*colW; const cy=y+Math.floor(i/2)*20;
-    doc.setFont('helvetica','normal');doc.setTextColor(90,90,90);doc.text(row[0]+':',cx,cy);
-    doc.setFont('helvetica','bold');doc.setTextColor(20,20,20);doc.text(String(row[1]),cx+colW-70,cy);
+  const ensureSpace=h=>{ if(y+h>H-M-PIE){ doc.addPage(); y=M; } };
+  const titulo=(txt,size)=>{ ensureSpace((size||13)+18);
+    doc.setFont('helvetica','bold'); doc.setFontSize(size||13); doc.setTextColor(20,40,80);
+    doc.text(txt,M,y); y+=(size||13)+6;
+    doc.setDrawColor(225); doc.line(M,y,W-M,y); y+=12; };
+  const parrafo=(txt,size,color)=>{
+    doc.setFont('helvetica','normal'); doc.setFontSize(size||9);
+    doc.setTextColor.apply(doc,color||[70,70,70]);
+    doc.splitTextToSize(txt,W-2*M).forEach(l=>{ ensureSpace((size||9)+4); doc.text(l,M,y); y+=(size||9)+3; });
+  };
+  const vacio=txt=>{ ensureSpace(20); doc.setFont('helvetica','italic'); doc.setFontSize(9);
+    doc.setTextColor(140,140,140); doc.text(ascii(txt),M,y); y+=18; };
+  /* Recorta midiendo el ancho real: con un divisor fijo las celdas largas invadían la
+     columna siguiente (Helvetica 8pt promedia más de los 3,9pt que se asumían). */
+  const celdaTxt=(txt,ancho)=>{ let t=ascii(txt);
+    if(doc.getTextWidth(t)<=ancho-4) return t;
+    while(t.length>1 && doc.getTextWidth(t+'…')>ancho-4) t=t.slice(0,-1);
+    return t+'…'; };
+  // jsPDF usa Latin-1: los símbolos estadísticos saldrían como basura.
+  const ascii=t=>String(t).replace(/[χ²ρ→↔⚠±–—′″Δ−▸•≥≤]/g,c=>({'χ':'X','²':'2','ρ':'r','→':'->','↔':'-',
+    '⚠':'!','±':'+/-','–':'-','—':'-','′':"'",'″':'"','Δ':'D','−':'-','▸':'>','•':'-','≥':'>=','≤':'<='}[c]||c));
+
+  /* ── 1. Portada ── */
+  if(logo){ try{ doc.addImage(logo,'PNG',M,y,64,64); }catch(e){} }
+  y+= logo?78:10;
+  doc.setFont('helvetica','bold'); doc.setFontSize(24); doc.setTextColor(20,40,80);
+  doc.text('Informe anual '+yr, M, y); y+=30;
+  doc.setFont('helvetica','normal'); doc.setFontSize(13); doc.setTextColor(40,40,40);
+  doc.text(inst||'Servicio de Cardiología', M, y); y+=20;
+  doc.setFontSize(10); doc.setTextColor(110,110,110);
+  doc.text('CeiboAnalytics · Suite CeiboMed', M, y); y+=14;
+  doc.text('Período analizado: año '+yr+(months.length?(' ('+ymLabel(months[0])+' a '+ymLabel(months[months.length-1])+')'):''), M, y); y+=14;
+  doc.text('Generado el '+fechaGen, M, y); y+=26;
+
+  doc.setDrawColor(225); doc.line(M,y,W-M,y); y+=22;
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(20,40,80);
+  doc.text('Estudios incluidos', M, y); y+=18;
+  const apps=[['eco','EcoSmart'],['ergo','ErgoSmart'],['ecoestres','EcoEstrés Smart'],['cardio','CardioSalud']];
+  doc.setFontSize(11);
+  apps.forEach(([k,lbl])=>{
+    const n=(g[k]||[]).length;
+    doc.setFont('helvetica','normal'); doc.setTextColor(70,70,70); doc.text(lbl, M+10, y);
+    doc.setFont('helvetica','bold'); doc.setTextColor(n?20:150,n?20:150,n?20:150);
+    doc.text(String(n), M+200, y);
+    if(!n){ doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(150,150,150);
+            doc.text('sin estudios en el período', M+230, y); doc.setFontSize(11); }
+    y+=17;
   });
-  y+= Math.ceil(kv.length/2)*20 + 16;
+  y+=4; doc.setDrawColor(240); doc.line(M+10,y,M+260,y); y+=16;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20,20,20);
+  doc.text('Total', M+10, y); doc.text(String(list.length), M+200, y); y+=24;
+  if(est){ doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
+    doc.text('Pacientes con estudios cruzados — Eco+Ergo: '+est.crossEcoErgo+' · EcoEstrés+Ergo: '+est.crossEeErgo, M, y); y+=16; }
+  if(fallos.length){ parrafo('Nota: no se pudieron generar estas gráficas: '+fallos.join(', ')+'. El resto del informe no se vio afectado.',9,[150,90,10]); }
+  if(fallosCalculo.length){ parrafo('Atención: falló el cálculo de '+fallosCalculo.join(', ')+'. Esas secciones salen vacías por un error, NO porque falten datos.',9,[170,40,40]); }
 
-  // Gráfica evolución
-  const imgW=W-2*M, imgH=imgW*0.34;
-  function ensureSpace(h){ if(y+h>H-M){ doc.addPage(); y=M; } }
-  if(imgEvol){ ensureSpace(imgH+24); doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20,20,20);doc.text('Evolución mensual de estudios',M,y);y+=8; doc.addImage(imgEvol,'PNG',M,y,imgW,imgH); y+=imgH+18; }
-  if(imgFevi){ ensureSpace(imgH+24); doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('Distribución de FEVI (EcoSmart)',M,y);y+=8; doc.addImage(imgFevi,'PNG',M,y,imgW,imgH); y+=imgH+18; }
-  if(imgPos){ ensureSpace(imgH+24); doc.setFont('helvetica','bold');doc.setFontSize(12);doc.text('% Ergometrías positivas por mes',M,y);y+=8; doc.addImage(imgPos,'PNG',M,y,imgW,imgH); y+=imgH+18; }
+  /* ── 2. Descriptivas por app ── */
+  doc.addPage(); y=M;
+  titulo('Estadísticas descriptivas por aplicación');
+  const filasDesc=(typeof paFilas==='function')
+    ? (typeof estConLista==='function' ? estConLista(list, ()=>paFilas()) : paFilas())
+    : [];
+  if(!filasDesc.length){ vacio('Sin datos suficientes para calcular descriptivas.'); }
+  else{
+    const cols=[['App',78],['Variable',108],['N',26],['Media',44],['Mediana',48],['DS',40],['P25',44],['P75',44]];
+    const cab=()=>{ doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+      let x=M; cols.forEach(c=>{ doc.text(c[0],x,y); x+=c[1]; }); y+=4;
+      doc.setDrawColor(225); doc.line(M,y,W-M,y); y+=11; };
+    cab();
+    let appPrev=null;
+    filasDesc.forEach(f=>{
+      if(y>H-M-PIE-14){ doc.addPage(); y=M; cab(); }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(40,40,40);
+      const vals=[ f[0]===appPrev?'':f[0], f[1], f[2], f[3], f[5], f[4], f[6], f[7] ];
+      appPrev=f[0];
+      let x=M; vals.forEach((v,i)=>{ doc.text(celdaTxt(v,cols[i][1]),x,y); x+=cols[i][1]; });
+      y+=12;
+    });
+    y+=6; parrafo('Media, mediana, desvío estándar y cuartiles de cada variable, sobre los estudios del período que la tienen cargada (N válido por variable).',8);
+  }
 
-  // Tabla de indicadores de calidad
-  ensureSpace(120);
-  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20,20,20);doc.text('Indicadores de calidad (completitud)',M,y); y+=16;
-  doc.setFontSize(10);
-  const tblX=[M,M+220,M+330,M+430];
-  doc.setFont('helvetica','bold');doc.setTextColor(120,120,120);
-  doc.text('Aplicación',tblX[0],y);doc.text('Estudios',tblX[1],y);doc.text('Completitud',tblX[2],y);doc.text('Semáforo',tblX[3],y); y+=6;
-  doc.setDrawColor(225);doc.line(M,y,W-M,y);y+=14;
+  // Completitud por app: es el indicador que mira una auditoría, así que va junto a las
+  // descriptivas y no en una sección aparte.
+  y+=10; ensureSpace(110);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20,40,80);
+  doc.text('Completitud de los registros', M, y); y+=16;
+  const colsQ=[M,M+200,M+300,M+390];
+  doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+  doc.text('Aplicación',colsQ[0],y); doc.text('Estudios',colsQ[1],y);
+  doc.text('Completitud',colsQ[2],y); doc.text('Semáforo',colsQ[3],y); y+=4;
+  doc.setDrawColor(225); doc.line(M,y,W-M,y); y+=12;
+  let hayQ=false;
   ['eco','ergo','ecoestres'].forEach(app=>{
-    const d=q[app];
-    doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);
-    doc.text(APPS[app].label,tblX[0],y);
-    doc.text(String(d.n),tblX[1],y);
-    doc.text(d.overall!=null?pct(d.overall):'—',tblX[2],y);
+    const d=q[app]; if(!d) return;
+    hayQ=true;
+    ensureSpace(16);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(40,40,40);
+    doc.text(APPS[app].label,colsQ[0],y);
+    doc.text(String(d.n),colsQ[1],y);
+    doc.text(d.overall!=null?pct(d.overall):'—',colsQ[2],y);
     const col=d.overall==null?[150,150,150]:d.overall>=80?[12,163,12]:d.overall>=50?[200,140,0]:[208,59,59];
-    doc.setFillColor(col[0],col[1],col[2]); doc.circle(tblX[3]+6,y-3,4,'F');
-    doc.setTextColor(90,90,90); doc.text(d.overall==null?'—':d.overall>=80?'Verde':d.overall>=50?'Amarillo':'Rojo',tblX[3]+16,y);
-    y+=18;
+    doc.setFillColor(col[0],col[1],col[2]); doc.circle(colsQ[3]+5,y-3,4,'F');
+    doc.setTextColor(90,90,90);
+    doc.text(d.overall==null?'—':d.overall>=80?'Verde':d.overall>=50?'Amarillo':'Rojo',colsQ[3]+14,y);
+    y+=15;
   });
-  y+=30;
+  if(!hayQ) vacio('Sin datos suficientes para calcular completitud.');
 
-  // Firma
-  ensureSpace(80);
-  doc.setDrawColor(120); doc.line(M,y,M+220,y); y+=14;
-  doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);doc.setFontSize(10);
-  doc.text(chief||'Jefe/a de Servicio',M,y);
-  doc.setTextColor(120,120,120);doc.text('Jefatura del Servicio — firma y aclaración',M,y+14);
+  /* ── 3. Histogramas ── */
+  doc.addPage(); y=M;
+  titulo('Distribución de las variables principales');
+  const hw=(W-2*M-16)/2, hh2=hw*0.62;
+  let col=0;
+  imgsHist.forEach(h=>{
+    if(col===0) ensureSpace(hh2+30);
+    const x=M+col*(hw+16);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,20,20);
+    doc.text(h.lbl+(h.vals.length?('  (n='+h.vals.length+')'):''), x, y);
+    if(h.img){ try{ doc.addImage(h.img,'PNG',x,y+6,hw,hh2,undefined,'FAST'); }catch(e){ doc.setFont('helvetica','italic'); doc.setTextColor(150); doc.text('No se pudo insertar la gráfica',x,y+22); } }
+    else { doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(150,150,150);
+           doc.text(h.motivo||'Sin datos suficientes', x, y+22); }
+    col++; if(col===2){ col=0; y+=hh2+30; }
+  });
+  if(col===1) y+=hh2+30;
+  if(imgEvol){ ensureSpace(hh2+28);
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,20,20);
+    doc.text('Evolución mensual de estudios', M, y); y+=8;
+    try{ doc.addImage(imgEvol,'PNG',M,y,W-2*M,(W-2*M)*0.30,undefined,'FAST'); y+=(W-2*M)*0.30+16; }catch(e){ y+=8; }
+  }
 
-  // Pie
+  /* ── 4. Asociaciones significativas ── */
+  doc.addPage(); y=M;
+  titulo('Asociaciones estadísticamente significativas');
+  if(!est){ vacio(fallosCalculo.length
+      ? 'Esta sección no se pudo calcular por un error del motor de asociaciones (ver consola). No significa que falten datos.'
+      : 'Sin datos suficientes para calcular asociaciones.'); }
+  else if(!est.significativas.length){
+    vacio('Ninguna de las '+est.calculables+' asociaciones calculables superó la corrección por FDR.');
+    parrafo('Que no haya hallazgos no equivale a ausencia de asociación: con el N de este período, un efecto real puede no alcanzar significación.',8);
+  } else {
+    const cols=[['Asociación',150],['N',26],['Método',76],['Estadístico',72],['p ajust.',46],['IC 95%',68],['Fuerza',48]];
+    const cab=()=>{ doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+      let x=M; cols.forEach(c=>{ doc.text(c[0],x,y); x+=c[1]; }); y+=4;
+      doc.setDrawColor(225); doc.line(M,y,W-M,y); y+=11; };
+    cab();
+    est.significativas.forEach(r=>{
+      if(y>H-M-PIE-14){ doc.addPage(); y=M; cab(); }
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(40,40,40);
+      const vals=[r.lbl, String(r.n), r.method, r.stat, pTxtPDF(r.q), r.ci, r.fuerza];
+      let x=M; vals.forEach((v,i)=>{ doc.text(celdaTxt(v,cols[i][1]),x,y); x+=cols[i][1]; });
+      y+=12;
+    });
+    y+=6;
+    parrafo('La columna "p ajust." es el valor q de Benjamini-Hochberg: controla la proporción de falsos '+
+      'descubrimientos entre las '+est.calculables+' asociaciones calculadas. Se listan sólo las que sobreviven '+
+      'a esa corrección. Los análisis son observacionales y transversales: describen asociación, no causalidad.',8);
+  }
+
+  /* ── 5. Forest plot ── */
+  if(imgForest){
+    /* Alto proporcional al canvas (900×520): antes se calculaba por número de filas, así
+       que con 1 asociación salía aplastado 3,8× y con 15 estirado 1,5×. En un informe de
+       congreso el forest es LA figura, y deformarla arruina la tipografía de los rótulos.
+       La página se decide por el espacio disponible, no por el mínimo entre espacio y
+       alto deseado —que con N=1 disparaba un salto de página aunque la hoja estuviera
+       vacía, dejando el título huérfano al pie de la anterior. */
+    const anchoF=W-2*M, altoF=anchoF*520/900;
+    if(y+altoF+56 > H-M-PIE){ doc.addPage(); y=M; }
+    titulo('Forest plot — intervalos de confianza',12);
+    try{ doc.addImage(imgForest,'PNG',M,y,anchoF,altoF,undefined,'FAST'); y+=altoF+12; }
+    catch(e){ vacio('No se pudo insertar el forest plot.'); }
+    parrafo('Cada barra es el intervalo de confianza del 95% del coeficiente. Si la barra cruza el cero, '+
+      'el efecto no se distingue del azar. Sólo se grafican las asociaciones con coeficiente e intervalo '+
+      'definidos ('+est.forest.length+' de '+est.significativas.length+' significativas).',8);
+  } else if(est && est.significativas.length){
+    ensureSpace(50); titulo('Forest plot — intervalos de confianza',12);
+    /* No es lo mismo "ninguna es graficable" que "la gráfica falló": lo primero es una
+       afirmación estadística y este documento se firma. */
+    vacio(est.forest.length
+      ? 'La gráfica no se pudo generar (Chart.js no disponible o error de render). Las '+est.forest.length+
+        ' asociaciones graficables están en la tabla de la sección anterior con su IC 95%.'
+      : 'Sin datos suficientes: ninguna asociación significativa tiene coeficiente e intervalo graficables.');
+  }
+
+  /* ── 6. Informe narrativo ── */
+  doc.addPage(); y=M;
+  titulo('Informe estadístico narrativo');
+  if(est && est.narrativa){
+    est.narrativa.split('\n').forEach(l=>{
+      if(!l.trim()){ y+=6; return; }
+      /* Los hallazgos del narrativo también empiezan con "N. ", así que exigir mayúsculas
+         sostenidas es lo que distingue "1. PANORAMA" de "1. FEVI ↔ METs [EcoSmart]". */
+      const esTit=/^\d\.\s[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]+$/.test(l);
+      ensureSpace(esTit?18:13);
+      doc.setFont('helvetica',esTit?'bold':'normal');
+      doc.setFontSize(esTit?10:8.5);
+      doc.setTextColor.apply(doc, esTit?[20,40,80]:[50,50,50]);
+      doc.splitTextToSize(ascii(l),W-2*M).forEach((sl,i)=>{ ensureSpace(12); doc.text(sl,M,y); y+=esTit?13:11; });
+      if(esTit) y+=2;
+    });
+  } else vacio('Sin datos suficientes para generar el informe narrativo.');
+
+  /* ── 7. Firma ── */
+  ensureSpace(110);
+  y+=20;
+  doc.setDrawColor(120); doc.line(M,y,M+240,y); y+=15;
+  doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(30,30,30);
+  doc.text(chief||'Jefe/a de Servicio', M, y); y+=14;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
+  doc.text('Jefatura del Servicio — firma y aclaración', M, y); y+=13;
+  doc.text(inst||'Servicio de Cardiología', M, y); y+=13;
+  doc.text('Fecha: '+fechaGen, M, y);
+
+  /* ── Pie con paginación ── */
   const pages=doc.internal.getNumberOfPages();
-  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150);doc.text('CeiboAnalytics · generado localmente · '+new Date().toLocaleDateString('es-UY')+' · pág. '+i+'/'+pages,M,H-20);}
+  for(let i=1;i<=pages;i++){
+    doc.setPage(i);
+    doc.setDrawColor(235); doc.line(M,H-PIE+6,W-M,H-PIE+6);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text('CeiboAnalytics · Suite CeiboMed · generado el '+fechaGen, M, H-PIE+20);
+    doc.text('pág. '+i+'/'+pages, W-M-46, H-PIE+20);
+  }
 
   doc.save('Informe_CeiboAnalytics_'+yr+'.pdf');
-  status.textContent = sinGraficas
-    ? 'PDF generado, PERO SIN GRÁFICAS (Chart.js no cargó) ⚠️'
+  /* Se distingue "faltaron gráficas" de "falló el cálculo": son problemas distintos y
+     antes los dos salían como "secciones gráficas incompletas". */
+  const partes=[];
+  if(fallos.length)       partes.push('gráficas: '+fallos.join(', '));
+  if(fallosCalculo.length) partes.push('cálculo: '+fallosCalculo.join(', '));
+  status.textContent = partes.length
+    ? ('PDF generado, con secciones incompletas ⚠️ ('+partes.join(' · ')+')')
     : 'PDF generado ✓';
-  // limpiar charts offscreen
-  destroyChart('pdfEvol');destroyChart('pdfFevi');destroyChart('pdfPos');
+  }catch(e){
+    console.error('[PDF] no se pudo generar el informe',e);
+    const st=$('#pdfStatus'); if(st) st.textContent='No se pudo generar el PDF: '+e.message;
+    toast('❌ No se pudo generar el informe');
+  }finally{
+    /* La limpieza de los charts offscreen tiene que correr sí o sí: si el armado del
+       documento lanza, quedaban hasta seis instancias vivas y el estado en "Generando…". */
+    try{ ['pdfEvol','pdfForest','pdfHFevi','pdfHMets','pdfHEe','pdfHPsap'].forEach(destroyChart); }catch(e){}
+    _pdfEnCurso=false;
+    const b=document.getElementById('genPdf'); if(b) b.disabled=false;
+  }
 }
+
+/* pTxt del panel de estadística vive dentro del IIFE; el PDF necesita el suyo. */
+function pTxtPDF(p){ return p==null?'—':(p<0.001?'<0.001':p.toFixed(3)); }
 
 /* ============================================================
    NAVEGACIÓN / EVENTOS
@@ -2072,8 +2307,18 @@ function renderCurrent(){
      los descriptivos quedan mirando el mismo subconjunto sin tocar ninguno de ellos.
      Siempre se pone y se saca con avConSubpoblacion(), que garantiza la restauración. */
   let _avRestrict = null;   // Set de claves de paciente, o null
+  /* Lista fija que REEMPLAZA a la población calculada. La usa el informe anual, que
+     filtra por año mientras el panel filtra por período: sin esto, la tabla de
+     asociaciones del PDF describiría una población distinta de la de su propia portada. */
+  let _estListaFija = null;
 
   function estBase(){
+    if(_estListaFija){
+      // La lista fija tiene precedencia; si además hubiera una subpoblación activa, ésta
+      // quedaría anulada en silencio y el panel diría "subpoblación X" sobre toda la base.
+      if(_avRestrict) console.warn('[estBase] lista fija activa: la restricción por subpoblación se ignora');
+      return _estListaFija;
+    }
     let list = (typeof filteredStudies==='function') ? filteredStudies() : [];
     if(_avRestrict) list = list.filter(s=>s._pid && _avRestrict.has(s._pid.key));
     const med = (document.getElementById('est-f-med')||{}).value || 'all';
@@ -3058,6 +3303,55 @@ function renderCurrent(){
     return [elegida.k, elegida.n, med, rg?rg.label:'', estBase().length].join('|');
   }
 
+  /* Corre `fn` sobre una lista de estudios dada y restaura SIEMPRE por snapshot: si se
+     restaurara recomputando, un error en cualquier asociación dejaría el panel —y el
+     payload que va a la API— mostrando la población del informe como si fuera la actual. */
+  window.estConLista=function(lista, fn){
+    /* Una lista nula caería silenciosamente en filteredStudies() y el informe calcularía
+       sobre el período del panel mientras la portada anuncia el año: justo el bug que
+       esta costura viene a evitar, disfrazado de funcionamiento normal. */
+    if(!Array.isArray(lista)) throw new Error('estConLista: se esperaba un array de estudios');
+    const prevL=_estListaFija, prevR=_avRestrict;
+    const snap={r:_results, ee:_ecoErgo, e2:_eeErgo, i:_intra};
+    _estListaFija=lista; _avRestrict=null;
+    try{
+      const out=fn();
+      /* Con una fn asíncrona el finally restauraría antes de que termine, y el cálculo
+         leería la población del panel sin que nada lo delate. */
+      if(out && typeof out.then==='function') throw new Error('estConLista no admite funciones asíncronas');
+      return out;
+    }
+    finally{ _estListaFija=prevL; _avRestrict=prevR;
+             _results=snap.r; _ecoErgo=snap.ee; _eeErgo=snap.e2; _intra=snap.i; }
+  };
+
+  /* Todo lo que el informe anual necesita del motor de estadística, calculado sobre la
+     lista que se le pasa. Devolver un objeto plano evita exponer _results y bhQ al
+     alcance global, donde cualquiera podría leerlos sin saber sobre qué población. */
+  window.estDatosPDF=function(lista, periodoLbl){
+    return estConLista(lista, ()=>{
+      const res=computeAll().map(r=>({...r}));
+      const conDato=res.filter(r=>r.p!=null);
+      bhQ(conDato);
+      const sig=conDato.filter(r=>r.q!=null && r.q<0.05)
+                       .sort((a,b)=>a.q-b.q || a.p-b.p)
+                       .map(r=>({ lbl:r.lbl, n:r.n, method:r.method, stat:r.stat,
+                                  p:r.p, q:r.q, ci:(r.ci&&r.ci!=='—')?r.ci:'—',
+                                  // El IC numérico viaja en plot.ci: reconstruirlo parseando
+                                  // el string de display se rompe en silencio si cambia el formato.
+                                  ciNum:(r.plot&&Array.isArray(r.plot.ci))?r.plot.ci:null,
+                                  coef:r.coef,
+                                  fuerza:(r.coef!=null)?fuerzaTxt(r.coef):'—' }));
+      // Forest: sólo las que tienen coeficiente e IC, que son las únicas dibujables.
+      const forest=sig.filter(r=>r.coef!=null && r.ciNum)
+        .map(r=>({lbl:r.lbl, lo:r.ciNum[0], hi:r.ciNum[1], coef:r.coef}))
+        .filter(r=>isFinite(r.lo)&&isFinite(r.hi));
+      return { significativas:sig, calculables:conDato.length, total:res.length,
+               forest, narrativa:estInformeTexto(periodoLbl, 'todos los estudios del período analizado'),
+               crossEcoErgo:_ecoErgo.length, crossEeErgo:_eeErgo.length };
+    });
+  };
+
   window.avSubPobRender=function(){
     const host=document.getElementById('av-sp-cont'); if(!host) return;
     const sel=document.getElementById('av-sp-sel');
@@ -3572,25 +3866,32 @@ function renderCurrent(){
     return 'La variable difiere significativamente entre los grupos comparados.';
   }
 
-  window.estInformeBasico=function(){
+  /* El texto se separa del render para poder reusarlo en el PDF del informe anual.
+     `periodoLbl` permite decir el período REAL de la población analizada: el informe
+     anual filtra por año, no por el rango del panel, y el encabezado tiene que decir
+     sobre qué se calculó y no sobre qué está seleccionado en pantalla. */
+  function estInformeTexto(periodoLbl, poblacionLbl){
     computeAll();
-    const R=resumenAsoc(), el=document.getElementById('est-informe-basico');
+    const R=resumenAsoc();
     bhQ(_results);
     const med=document.getElementById('est-f-med');
-    const medTxt=(med&&med.value!=='all') ? med.options[med.selectedIndex].text.replace(/\s*\(\d+\)$/,'') : null;
+    /* Con lista fija (informe anual) el filtro por médico NO se aplica, así que leer el
+       desplegable diría "estudios de Dr. X" sobre una población que no es la suya. */
+    const medTxt=poblacionLbl ? null
+      : ((med&&med.value!=='all') ? med.options[med.selectedIndex].text.replace(/\s*\(\d+\)$/,'') : null);
     const rg=(typeof currentRange==='function')?currentRange():null;
     /* Formateo LOCAL: currentRange arma fechas locales, y toISOString las pasa a UTC,
        así que en Uruguay (UTC-3) la medianoche del 'desde' se serializaba como el día
        anterior. El informe declaraba un período distinto del que realmente se filtró. */
     const fmt=d=>{ if(!d) return null; const z=n=>String(n).padStart(2,'0');
       return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); };
-    const per=!rg?null:(rg.from||rg.to
+    const per=periodoLbl || (!rg?null:(rg.from||rg.to
       ? (rg.label+' ('+(fmt(rg.from)||'inicio')+' a '+(fmt(rg.to)||'hoy')+')')
-      : rg.label);
+      : rg.label));
     const L=[];
 
     L.push('INFORME ESTADÍSTICO — CeiboAnalytics');
-    L.push('Población: '+(medTxt?('estudios de '+medTxt):'todo el servicio')+(per?(' · Período: '+per):''));
+    L.push('Población: '+(poblacionLbl || (medTxt?('estudios de '+medTxt):'todo el servicio'))+(per?(' · Período: '+per):''));
     L.push('');
 
     // ── Panorama
@@ -3663,7 +3964,13 @@ function renderCurrent(){
     if(medTxt) L.push('Al filtrar por médico, un par cruzado entra sólo si ambos estudios son suyos, de modo que el N cruzado puede caer respecto del total del servicio.');
     L.push('Todos los análisis son observacionales y transversales: describen asociación, no causalidad. Los hallazgos requieren confirmación en una muestra independiente antes de cambiar conducta clínica.');
 
-    el.textContent=L.join('\n');
+    return L.join('\n');
+  }
+
+  window.estInformeBasico=function(){
+    const el=document.getElementById('est-informe-basico');
+    if(!el){ console.error('[informe] falta #est-informe-basico'); toast('❌ No se pudo mostrar el informe'); return; }
+    el.textContent=estInformeTexto(null);
     toast('✅ Informe generado');
   };
   window.estInformeCopiar=function(id){ const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Nada para copiar');return;} navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ Copiado')).catch(()=>toast('No se pudo copiar')); };
