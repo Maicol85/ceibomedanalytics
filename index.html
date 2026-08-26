@@ -1933,8 +1933,13 @@ function renderCurrent(){
     Object.keys(APPS).forEach(a=>{ _intra[a] = base.filter(s=>s.app===a).map(s=>({[a]:s})); });
   }
 
+  const scopeOf = d => d.scope || (d.ee ? 'cross-ee-ergo' : 'cross-eco-ergo');
+  const SCOPE_LBL = { eco:'EcoSmart', ergo:'ErgoSmart', ecoestres:'EcoEstrés Smart',
+                      cardio:'CardioSalud', 'cross-eco-ergo':'EcoSmart + ErgoSmart',
+                      'cross-ee-ergo':'EcoEstrés Smart + ErgoSmart' };
+
   function dsFor(d){
-    const sc = d.scope || (d.ee ? 'cross-ee-ergo' : 'cross-eco-ergo');
+    const sc = scopeOf(d);
     if(sc==='cross-eco-ergo') return _ecoErgo;
     if(sc==='cross-ee-ergo')  return _eeErgo;
     return _intra[sc] || [];
@@ -1997,7 +2002,7 @@ function renderCurrent(){
   };
 
   function runOne(d){
-    const ds=dsFor(d), base={cat:d.cat,lbl:d.lbl};
+    const ds=dsFor(d), base={cat:d.cat,lbl:d.lbl,sc:scopeOf(d)};
     if(d.t==='pe'||d.t==='sp'){
       const pairs=[]; ds.forEach(pr=>{const x=d.x(pr),y=d.y(pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);});
       const r=d.t==='pe'?pearson(pairs):spearman(pairs);
@@ -2172,7 +2177,159 @@ function renderCurrent(){
   // ── Análisis IA ──
   window.estGuardarKey=function(){ const inp=document.getElementById('est-api-key'); const k=(inp.value||'').trim(); if(!k){toast('Ingresá una clave');return;} localStorage.setItem('ca_anthropic_key',k); inp.value=''; document.getElementById('est-key-status').textContent='Clave guardada: sk-ant-…'+k.slice(-4); toast('✅ Clave guardada (solo en este navegador)'); };
   function resumenAsoc(){ const sig=_results.filter(r=>r.p!=null&&r.p<0.05); const strong=_results.filter(r=>r.coef!=null&&Math.abs(r.coef)>0).sort((a,b)=>Math.abs(b.coef)-Math.abs(a.coef)); return {ecoErgo:_ecoErgo.length,eeErgo:_eeErgo.length,total:_results.length,significativas:sig.length,masFuerte:strong[0]||null,sig,todas:_results}; }
-  window.estInformeBasico=function(){ computeAll(); const R=resumenAsoc(); const el=document.getElementById('est-informe-basico'); let t=''; t+='Se analizaron '+R.ecoErgo+' pacientes con datos cruzados Eco+Ergo'+(R.eeErgo?(' y '+R.eeErgo+' con EcoEstrés+Ergo'):'')+'. '; t+='Sobre '+R.total+' asociaciones evaluadas, se encontraron '+R.significativas+' significativas (p<0.05).'; if(R.masFuerte&&R.masFuerte.coef!=null){ t+=' La asociación de mayor magnitud fue '+R.masFuerte.lbl+' ('+R.masFuerte.stat+', p='+pTxt(R.masFuerte.p)+', IC 95% '+R.masFuerte.ci+').'; } t+='\n\n'; if(R.sig.length){ t+='Asociaciones significativas:\n'; R.sig.forEach(r=>{ t+='• '+r.lbl+' — '+r.method+' '+r.stat+', p='+pTxt(r.p)+(r.ci!=='—'?(', IC95 '+r.ci):'')+' '+r.sig+'\n'; }); } else t+='No se hallaron asociaciones estadísticamente significativas con la muestra actual.\n'; t+='\nNota: N bajo (🟡) indica significancia con tamaño muestral por debajo del umbral recomendado — interpretar con cautela.'; el.textContent=t; };
+
+  /* ── Corrección por comparaciones múltiples (Benjamini-Hochberg) ──
+     El panel corre ~60 asociaciones a la vez. Con α=0.05 eso implica unos 3
+     "significativos" esperables sólo por azar, así que informar p<0.05 a secas
+     sobreestima los hallazgos. Se reporta además cuántos sobreviven a un control
+     de FDR al 5%, que es lo que se le va a pedir en una revista. */
+  function bhQ(rs){
+    const arr=rs.filter(r=>r.p!=null).slice().sort((a,b)=>a.p-b.p);
+    const m=arr.length, q=new Map(); let prev=1;
+    for(let i=m-1;i>=0;i--){ prev=Math.min(prev, arr[i].p*m/(i+1)); q.set(arr[i],prev); }
+    return q;
+  }
+
+  const fuerzaTxt = c => { const a=Math.abs(c);
+    return a<0.30?'débil':(a<0.50?'moderada':(a<0.70?'fuerte':'muy fuerte')); };
+
+  /* El semáforo 🟡 marca dos reservas distintas —N insuficiente y frecuencias esperadas
+     <5 en la tabla de contingencia— y en la tabla se distinguen por el "⚠fe<5" del
+     estadístico. En el informe hay que separarlas: con celdas ralas el problema no se
+     resuelve sumando pacientes sino con un test exacto, así que rotularlo "N bajo"
+     mandaría a buscar la solución equivocada. */
+  function reservaTxt(r){
+    if(r.sig!=='🟡') return null;
+    if(/fe<5/.test(r.stat||'')) return 'Reserva: alguna frecuencia esperada es menor a 5, condición en la que el Chi² pierde validez. Confirmar con test exacto de Fisher.';
+    return 'Reserva: significativa pero con N por debajo del umbral recomendado para este método.';
+  }
+
+  /* Interpretación clínica por plantillas condicionales (sin IA).
+     Cada entrada se aplica sólo si la asociación resultó significativa; `dir` distingue
+     el sentido del coeficiente para no afirmar lo contrario de lo hallado. */
+  const INTERP = [
+    {re:/FEVI ↔ METs/i,           pos:'La capacidad funcional acompaña a la función sistólica: mejor FEVI, más METs alcanzados.',
+                                  neg:'Relación inversa entre FEVI y METs, contraria a lo esperado: revisar homogeneidad de la muestra y presencia de betabloqueo o cronotropismo limitado.'},
+    {re:/E\/e' ↔ METs/i,          neg:'Mayor presión de llenado estimada se asocia a menor capacidad funcional, patrón característico de la insuficiencia cardíaca con FEVI preservada.'},
+    {re:/PSAP ↔ METs/i,           neg:'La presión pulmonar estimada se asocia inversamente a la capacidad de esfuerzo, hallazgo compatible con limitación de origen hemodinámico.'},
+    {re:/TAPSE ↔ METs/i,          pos:'La función sistólica del ventrículo derecho acompaña a la capacidad funcional.'},
+    {re:/Vol AI idx ↔ METs/i,     neg:'El remodelado auricular izquierdo se asocia a menor tolerancia al esfuerzo, coherente con cronicidad de presiones de llenado elevadas.'},
+    /* El orden importa: gana la primera regex que matchea, así que la variante más
+       específica va antes que la general ("FEVI reducida" antes que "FEVI"). */
+    {re:/Ergo positiva → FEVI reducida/i, any:'La positividad de la ergometría se concentra en los pacientes con FEVI reducida.'},
+    {re:/Ergo positiva → FEVI\b/i,any:'Los pacientes con ergometría positiva presentan FEVI significativamente distinta, lo que orienta a sustrato isquémico con repercusión sistólica.'},
+    {re:/Ergo positiva → (disfunción diastólica|Grado DD)/i, any:'La positividad de la ergometría se asocia al grado de disfunción diastólica.'},
+    {re:/METs → disfunción diastólica/i, any:'La capacidad funcional difiere según el grado de disfunción diastólica.'},
+    {re:/FEVI ↔ GLS/i,            any:'FEVI y strain longitudinal global se comportan de forma concordante en esta serie.'},
+    {re:/GLS/i,                   any:'El strain longitudinal global muestra asociación significativa, de interés por su capacidad de detectar disfunción subclínica con FEVI conservada.'},
+    {re:/Masa VI idx → HTA|Masa VI.*HTA/i, any:'La masa ventricular izquierda indexada se asocia al antecedente de hipertensión, consistente con remodelado hipertensivo.'},
+    {re:/Grado DD → HTA/i,        any:'El grado de disfunción diastólica se asocia al antecedente de hipertensión arterial.'},
+    {re:/Geometría VI → HTA/i,    any:'El patrón geométrico ventricular se asocia al antecedente de hipertensión.'},
+    {re:/→ edad/i,                any:'La asociación con la edad sugiere que conviene ajustar por edad antes de atribuir el hallazgo a la variable clínica.'},
+    {re:/→ sexo/i,                any:'Se observa diferencia por sexo: conviene analizarla estratificada antes de interpretarla como efecto clínico.'},
+    {re:/betabloqueantes/i,       any:'El uso de betabloqueantes se asocia al resultado, lo que puede reflejar tanto el efecto del fármaco como la indicación que lo motivó (confusión por indicación).'}
+  ];
+  function interpretar(r){
+    for(const it of INTERP){
+      if(!it.re.test(r.lbl)) continue;
+      if(it.any) return it.any;
+      if(r.coef!=null && r.coef>0 && it.pos) return it.pos;
+      if(r.coef!=null && r.coef<0 && it.neg) return it.neg;
+    }
+    if(r.coef!=null) return 'Correlación '+fuerzaTxt(r.coef)+' '+(r.coef>0?'directa':'inversa')+' entre ambas variables.';
+    return 'La variable difiere significativamente entre los grupos comparados.';
+  }
+
+  window.estInformeBasico=function(){
+    computeAll();
+    const R=resumenAsoc(), el=document.getElementById('est-informe-basico');
+    const q=bhQ(_results);
+    const med=document.getElementById('est-f-med');
+    const medTxt=(med&&med.value!=='all') ? med.options[med.selectedIndex].text.replace(/\s*\(\d+\)$/,'') : null;
+    const rg=(typeof currentRange==='function')?currentRange():null;
+    const fmt=d=>d?d.toISOString().slice(0,10):null;
+    const per=!rg?null:(rg.from||rg.to
+      ? (rg.label+' ('+(fmt(rg.from)||'inicio')+' a '+(fmt(rg.to)||'hoy')+')')
+      : rg.label);
+    const L=[];
+
+    L.push('INFORME ESTADÍSTICO — CeiboAnalytics');
+    L.push('Población: '+(medTxt?('estudios de '+medTxt):'todo el servicio')+(per?(' · Período: '+per):''));
+    L.push('');
+
+    // ── Panorama
+    const conDato=_results.filter(r=>r.p!=null);
+    const nBH=[..._results].filter(r=>q.get(r)!=null&&q.get(r)<0.05).length;
+    L.push('1. PANORAMA');
+    L.push('Se evaluaron '+R.total+' asociaciones, de las cuales '+conDato.length+' tuvieron datos suficientes para calcularse. '
+      +'Resultaron significativas '+R.significativas+' con p<0.05. '
+      +'Tras corregir por comparaciones múltiples (FDR de Benjamini-Hochberg al 5%), se mantienen '+nBH+'.');
+    if(R.significativas>0 && nBH<R.significativas)
+      L.push('La diferencia entre ambas cifras es esperable: al correr decenas de contrastes en paralelo, del orden de '
+        +Math.round(conDato.length*0.05)+' resultados "significativos" surgen por azar. Priorizar los que sobreviven a la corrección.');
+    L.push('');
+
+    // ── Hallazgos principales
+    /* "Las más fuertes" se ordena por tamaño de efecto, pero sólo las correlaciones
+       tienen coeficiente: las comparaciones de grupos no traen medida comparable. Se
+       llena primero con las correlaciones ordenadas por |coef| y, si no alcanzan tres,
+       se completa por p —dejando dicho que ahí el criterio ya no es la magnitud, para
+       no dar a entender que un p más chico significa un efecto más grande. */
+    const conCoef=R.sig.filter(r=>r.coef!=null).sort((a,b)=>Math.abs(b.coef)-Math.abs(a.coef));
+    const sinCoef=R.sig.filter(r=>r.coef==null).sort((a,b)=>a.p-b.p);
+    const topFinal=conCoef.concat(sinCoef).slice(0,3);
+    L.push('2. HALLAZGOS PRINCIPALES');
+    if(!conDato.length){
+      L.push('No hay datos suficientes para calcular ninguna asociación en la población seleccionada. Revisar el período, el filtro por médico y que estén importados los estudios de las apps.');
+    } else if(!topFinal.length){
+      L.push('Ninguna asociación alcanzó significación estadística con la muestra actual. Esto no equivale a ausencia de asociación: con N bajo, un efecto real puede no detectarse.');
+    } else {
+      topFinal.forEach((r,i)=>{
+        const qq=q.get(r);
+        L.push((i+1)+'. '+r.lbl+' ['+(SCOPE_LBL[r.sc]||r.sc)+']');
+        L.push('   '+r.method+' '+r.stat+' · N='+r.n+' · p='+pTxt(r.p)
+          +(r.ci&&r.ci!=='—'?(' · IC 95% '+r.ci):'')
+          +(qq!=null?(' · q='+pTxt(qq)+(qq<0.05?' (sobrevive a FDR)':' (no sobrevive a FDR)')):''));
+        L.push('   '+interpretar(r));
+        if(r.coef==null) L.push('   Ordenada por significación, no por magnitud: este método no arroja un tamaño de efecto comparable.');
+        const rv=reservaTxt(r); if(rv) L.push('   '+rv);
+      });
+    }
+    L.push('');
+
+    // ── Detalle por ámbito
+    L.push('3. DETALLE POR ÁMBITO');
+    const orden=['eco','ergo','ecoestres','cardio','cross-eco-ergo','cross-ee-ergo'];
+    const vistos=new Set();
+    orden.concat(_results.map(r=>r.sc)).forEach(sc=>{
+      if(!sc||vistos.has(sc))return; vistos.add(sc);
+      const rs=_results.filter(r=>r.sc===sc); if(!rs.length)return;
+      const conD=rs.filter(r=>r.p!=null), sg=rs.filter(r=>r.p!=null&&r.p<0.05);
+      const nMax=conD.length?Math.max(...conD.map(r=>r.n)):0;
+      L.push('');
+      L.push('▸ '+(SCOPE_LBL[sc]||sc)+' — '+sg.length+'/'+conD.length+' significativas (N máximo '+nMax+')');
+      if(!conD.length){ L.push('   Sin datos suficientes: no hay estudios de esta app en la población seleccionada.'); return; }
+      if(!sg.length){ L.push('   Ninguna asociación significativa en este ámbito.'); return; }
+      sg.sort((a,b)=>a.p-b.p).forEach(r=>{
+        L.push('   • '+r.lbl+' — '+r.method+' '+r.stat+', N='+r.n+', p='+pTxt(r.p)
+          +(r.ci&&r.ci!=='—'?(', IC95 '+r.ci):''));
+        L.push('     '+interpretar(r));
+        const rv=reservaTxt(r); if(rv) L.push('     '+rv);
+      });
+    });
+    L.push('');
+
+    // ── Cobertura y límites
+    L.push('4. COBERTURA Y LÍMITES');
+    L.push('Pacientes con estudio en EcoSmart y ErgoSmart: '+R.ecoErgo+'. Con EcoEstrés Smart y ErgoSmart: '+R.eeErgo+'.');
+    const sinDato=_results.filter(r=>r.p==null);
+    if(sinDato.length) L.push('No se pudieron calcular '+sinDato.length+' asociaciones por falta de datos o por no haber dos grupos para comparar.');
+    if(medTxt) L.push('Al filtrar por médico, un par cruzado entra sólo si ambos estudios son suyos, de modo que el N cruzado puede caer respecto del total del servicio.');
+    L.push('Todos los análisis son observacionales y transversales: describen asociación, no causalidad. Los hallazgos requieren confirmación en una muestra independiente antes de cambiar conducta clínica.');
+
+    el.textContent=L.join('\n');
+    toast('✅ Informe generado');
+  };
   window.estInformeCopiar=function(id){ const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Nada para copiar');return;} navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ Copiado')).catch(()=>toast('No se pudo copiar')); };
   window.estInformePDF=function(id,titulo){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Generá el informe primero');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'}); const mL=14,mR=196; let y=18; doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — '+titulo,mL,y);y+=8; doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30,30,30); const lines=doc.splitTextToSize(el.textContent,mR-mL); lines.forEach(l=>{ if(y>282){doc.addPage();y=18;} doc.text(l,mL,y); y+=5.2; }); doc.save('ceiboanalytics_'+id+'.pdf'); toast('✅ PDF exportado'); };
   window.estInformeAvanzado=async function(){ const key=localStorage.getItem('ca_anthropic_key'); const el=document.getElementById('est-informe-ia'); if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; toast('Falta la API key'); return; } computeAll(); const R=resumenAsoc(); const payload={ pacientes_eco_ergo:R.ecoErgo, pacientes_ecoestres_ergo:R.eeErgo, asociaciones:R.todas.map(r=>({asociacion:r.lbl,categoria:r.cat,metodo:r.method,estadistico:r.stat,p:r.p,ic95:r.ci,n:r.n,significativa:r.p!=null&&r.p<0.05})) }; const btn=document.getElementById('est-ia-btn'), sp=document.getElementById('est-ia-spinner'); btn.disabled=true; sp.style.display='inline'; el.textContent=''; try{ const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Sos un cardiólogo especialista en bioestadística clínica. Analizás resultados estadísticos de una población cardiovascular uruguaya y generás conclusiones clínicas, comparación con literatura internacional, hipótesis para investigación futura y recomendaciones para el servicio. Respondé en español, con formato clínico profesional.',messages:[{role:'user',content:'Resumen de asociaciones estadísticas encontradas (JSON):\n'+JSON.stringify(payload,null,2)}]})}); const data=await res.json(); if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); } else { const txt=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)'; el.textContent=txt; toast('✅ Informe generado'); } }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); } finally{ btn.disabled=false; sp.style.display='none'; } };
