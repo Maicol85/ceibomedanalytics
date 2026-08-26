@@ -639,6 +639,21 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div id="av-sg-box" style="margin-top:14px;"></div>
           </div>
 
+          <!-- ── Módulo D: análisis de subpoblaciones ── -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-hdr">🎯 Análisis de subpoblaciones
+              <span class="hint" style="font-weight:400;">— sólo combinaciones con 10 pacientes o más</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0;">
+              <div><label class="hint">Subpoblación</label><br>
+                <select id="av-sp-sel" onchange="avSubPobRender()"></select></div>
+              <button class="btn btn-ghost" style="font-size:12px;" onclick="avSubPobAsoc()">Ver asociaciones en esta subpoblación</button>
+              <button class="btn btn-ghost" style="font-size:12px;" onclick="avSubPobPDF()">📄 Exportar análisis (PDF)</button>
+            </div>
+            <div id="av-sp-cont"></div>
+            <div id="av-sp-asoc"></div>
+          </div>
+
           <!-- ── Módulo C: evolución del paciente ── -->
           <div class="card">
             <div class="card-hdr">📈 Evolución del paciente
@@ -2052,8 +2067,15 @@ function renderCurrent(){
     return k => alias.get(k) || k;
   }
 
+  /* Restricción temporal a una subpoblación (módulo D). Se aplica en estBase() porque es
+     la única fuente de población del panel: así el motor de asociaciones, el heatmap y
+     los descriptivos quedan mirando el mismo subconjunto sin tocar ninguno de ellos.
+     Siempre se pone y se saca con avConSubpoblacion(), que garantiza la restauración. */
+  let _avRestrict = null;   // Set de claves de paciente, o null
+
   function estBase(){
     let list = (typeof filteredStudies==='function') ? filteredStudies() : [];
+    if(_avRestrict) list = list.filter(s=>s._pid && _avRestrict.has(s._pid.key));
     const med = (document.getElementById('est-f-med')||{}).value || 'all';
     if(med && med!=='all' && typeof doctorIdentity==='function'){
       const canon = estAliasMed(list);
@@ -2892,6 +2914,353 @@ function renderCurrent(){
     });
   };
 
+  /* ══ Módulo D — análisis de subpoblaciones ══
+     Los criterios se matchean por regex y no por igualdad porque las etiquetas difieren
+     entre apps: EcoSmart guarda "FA / flutter", "Cardiopatía isquémica / IAM previo" e
+     "IC previa"; ErgoSmart guarda "IAM previo", "CRM / By-pass" y "ATC / Stent".
+     Verificado leyendo los data-val y los value de los checkbox de cada fuente. */
+  const RE_IC   = /\bicc?\b|insuf\w*\s*card/i;
+  const RE_CORO = /iam|infarto|isqu[eé]mic|by-?pass|\bcrm\b|stent|\batc\b|coronari|angioplast/i;
+
+  /* Valvulopatía significativa según lo pedido: IM, IAo o EAo moderada o mayor. NO
+     incluye la insuficiencia tricuspídea, a diferencia del accessor VALVSIG que usan las
+     asociaciones —son dos definiciones distintas y por eso no se reusa aquélla. */
+  function avValvSig(s){
+    const e=s&&s.eco; if(!e) return null;
+    const txts=[e.im_grado_txt,e.iao_grado_txt,e.eao_grado_txt].filter(Boolean);
+    const bins=[e.im_mod,e.im_sev,e.iao_mod,e.iao_sev,e.eao_mod,e.eao_sev];
+    const hayBin=bins.some(v=>v===1);
+    if(!txts.length && !hayBin) return null;         // no se evaluaron: no es "no tiene"
+    return (hayBin || txts.some(t=>/moder|sever/i.test(t))) ? true : false;
+  }
+
+  const AV_CRIT = [
+    {k:'fa',    lbl:'FA / flutter',              t:s=>{const v=ANT(s,RE_FA);   return v==null?null:v==='Sí';}},
+    {k:'ic',    lbl:'Insuficiencia cardíaca',    t:s=>{const v=ANT(s,RE_IC);   return v==null?null:v==='Sí';}},
+    {k:'valv',  lbl:'Valvulopatía significativa',t:avValvSig},
+    {k:'coro',  lbl:'Enfermedad coronaria',      t:s=>{const v=ANT(s,RE_CORO); return v==null?null:v==='Sí';}},
+    {k:'hta',   lbl:'HTA',                       t:s=>{const v=ANT(s,RE_HTA);  return v==null?null:v==='Sí';}},
+    {k:'dm',    lbl:'Diabetes',                  t:s=>{const v=ANT(s,RE_DM);   return v==null?null:v==='Sí';}}
+  ];
+
+  /* La subpoblación es un conjunto de PACIENTES, no de estudios: un paciente entra si
+     alguno de sus estudios registra el antecedente. Si se filtrara por estudio, la
+     ergometría del mismo paciente quedaría afuera y las asociaciones cruzadas —que son
+     la mitad del motor— se vaciarían. */
+  function avPacientesPorCriterio(){
+    /* Tres estados por criterio, no dos: positivo, negativo CONFIRMADO y sin dato. Los
+       accesores ya distinguen null ("no se evaluó") de false ("se evaluó y no tiene") y
+       lo documentan; colapsarlos mandaba los no evaluados al grupo control. Para
+       valvulopatía eso es grave: los ecos donde no se midieron los grados son
+       sistemáticamente los más incompletos, así que el control se llenaba justo con los
+       estudios peor caracterizados y el p salía sesgado sin que nada lo advirtiera. */
+    const mapa=new Map();   // clave -> {pos:Set, neg:Set}
+    estBase().forEach(s=>{
+      const id=s._pid; if(!id||!id.identifiable) return;
+      if(!mapa.has(id.key)) mapa.set(id.key,{pos:new Set(), neg:new Set()});
+      const e=mapa.get(id.key);
+      AV_CRIT.forEach(c=>{
+        let v=null;
+        try{ v=c.t(s); }
+        catch(err){ console.warn('[subpoblaciones] criterio',c.k,'lanzó:',err); return; }
+        if(v===true) e.pos.add(c.k);
+        else if(v===false) e.neg.add(c.k);
+      });
+    });
+    return mapa;
+  }
+
+  /* Todas las combinaciones con N≥10. Son 2⁶−1 = 63 subconjuntos: se enumeran enteros y
+     se descartan los que no llegan al umbral, en vez de adivinar cuáles valen la pena. */
+  function avSubpoblaciones(){
+    const mapa=avPacientesPorCriterio();
+    const out=[];
+    for(let m=1;m<(1<<AV_CRIT.length);m++){
+      const idx=[]; for(let i=0;i<AV_CRIT.length;i++) if(m&(1<<i)) idx.push(i);
+      const claves=new Set(), control=new Set();
+      mapa.forEach((e,k)=>{
+        if(idx.every(i=>e.pos.has(AV_CRIT[i].k))) claves.add(k);
+        // Control = confirmado FUERA del subgrupo: negativo confirmado en al menos uno de
+        // los criterios. Quien no tenga el dato no entra ni de un lado ni del otro.
+        else if(idx.some(i=>e.neg.has(AV_CRIT[i].k))) control.add(k);
+      });
+      if(claves.size<10) continue;
+      out.push({ k:'m'+m, n:claves.size, claves, control, nCrit:idx.length, mask:m,
+                 sinDato: mapa.size-claves.size-control.size,
+                 lbl: idx.map(i=>AV_CRIT[i].lbl).join(' + ') });
+    }
+    out.sort((a,b)=>a.nCrit-b.nCrit || b.n-a.n);
+    /* Si un criterio implica a otro (todos los de valvulopatía tienen IC, por ejemplo),
+       "IC" y "IC + Valvulopatía" describen EXACTAMENTE los mismos pacientes y devuelven
+       los mismos p. Listarlas como dos entradas hace que el médico lea el mismo hallazgo
+       cinco veces y lo interprete como replicación en subgrupos independientes. Se marca
+       la redundante en vez de ocultarla, para que se vea que existe pero no engañe. */
+    const vistos=[];
+    out.forEach(o=>{
+      const igual=vistos.find(v=>v.n===o.n && (v.mask & o.mask)===v.mask &&
+                                 [...v.claves].every(k=>o.claves.has(k)));
+      if(igual) o.redundanteDe=igual.lbl;
+      else vistos.push(o);
+    });
+    return out;
+  }
+
+  let _avUltimaAsoc=null;   // declarado antes de sus usos, no después
+
+  /* Corre `fn` con la población restringida y restaura SIEMPRE, incluso si fn lanza.
+     Sin el finally, una excepción dejaría el panel entero mostrando la subpoblación como
+     si fuera el servicio completo, y el payload que va a la IA también. */
+  function avConSubpoblacion(claves, fn){
+    /* Se restaura por SNAPSHOT y no recomputando: computeAll() no tiene try/catch por
+       asociación, así que si una lanza, la asignación a _results nunca ocurre y el panel
+       queda mostrando la subpoblación como si fuera el servicio completo —incluido el
+       payload que va a api.anthropic.com, etiquetado como "todo el servicio"—. Copiar
+       cuatro referencias no puede fallar, y de paso evita un computeAll() de más. */
+    const prev=_avRestrict;
+    const snap={r:_results, ee:_ecoErgo, e2:_eeErgo, i:_intra};
+    _avRestrict=claves;
+    try{ return fn(); }
+    finally{ _avRestrict=prev; _results=snap.r; _ecoErgo=snap.ee; _eeErgo=snap.e2; _intra=snap.i; }
+  }
+
+  /* Una sola fuente para la tabla comparativa: estaba duplicada literalmente en la
+     pantalla y en el PDF, así que cualquier corrección había que aplicarla dos veces o
+     los dos informes discrepaban. */
+  function avSubPobFilas(elegida){
+    const general=avEcosUnicos();
+    return AV_NUM.map(v=>{
+      const A=[],G=[],R=[];
+      general.forEach(s=>{
+        const x=v.g(_pEco(s)); if(x==null||isNaN(x)) return;
+        const k=s._pid&&s._pid.key;
+        G.push(+x);
+        if(k&&elegida.claves.has(k)) A.push(+x);
+        else if(k&&elegida.control.has(k)) R.push(+x);   // sólo controles confirmados
+      });
+      /* Con menos de 5 en algún brazo el p es humo (mannwhitney acepta n=1) y, sobre todo,
+         una fila de n=1 publica la medición literal de ese paciente: media=mediana=su
+         valor. Es la misma regla que ya se aplica al payload que sale a la API. */
+      const suficiente = A.length>=5 && R.length>=5;
+      const mw = suficiente ? mannwhitney(A,R) : null;
+      return {v, A, R, stA:paStats(A), stG:paStats(G), stR:paStats(R),
+              p:mw?mw.p:null, insuficiente:!suficiente};
+    });
+  }
+
+  /* La clave 'm<mask>' es estable frente a cambios de período y de médico —a propósito,
+     para que el desplegable conserve la selección—, así que NO alcanza para saber si las
+     asociaciones guardadas siguen correspondiendo a lo que está en pantalla. Sin esta
+     huella, cambiar el período entre "Ver asociaciones" y "Exportar" producía un PDF con
+     la comparativa recalculada y las asociaciones del corte anterior, en la misma hoja. */
+  function avHuellaPoblacion(elegida){
+    const rg=(typeof currentRange==='function')?currentRange():null;
+    const med=(document.getElementById('est-f-med')||{}).value||'all';
+    return [elegida.k, elegida.n, med, rg?rg.label:'', estBase().length].join('|');
+  }
+
+  window.avSubPobRender=function(){
+    const host=document.getElementById('av-sp-cont'); if(!host) return;
+    const sel=document.getElementById('av-sp-sel');
+    const lista=avSubpoblaciones();
+    if(!lista.length){
+      host.innerHTML='<div class="empty" style="padding:14px;">Ninguna combinación de antecedentes llega a 10 '+
+        'pacientes en la población seleccionada. Probá ampliando el período o quitando el filtro por médico.</div>';
+      const asoc=document.getElementById('av-sp-asoc'); if(asoc) asoc.innerHTML='';
+      return;
+    }
+    const elegida=lista.find(x=>x.k===(sel&&sel.value))||lista[0];
+
+    // Descriptivos: subpoblación vs población general, y el p contra EL RESTO.
+    const general=avEcosUnicos();
+    const enSub  = general.filter(s=>s._pid&&elegida.claves.has(s._pid.key));
+    const filas  = avSubPobFilas(elegida);
+    const resto  = { length: Math.max(...filas.map(f=>f.stR.n), 0) };
+    bhQ(filas.filter(f=>f.p!=null));   // la familia son sólo las comparables
+
+    const th='padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
+    const f1=x=>(x==null||isNaN(x))?'—':String(Math.round(x*10)/10);
+    /* n<5 no muestra dispersión ni mediana: con n=1 media, mediana y valor del paciente
+       son el mismo número, y con n=2 media±DS se invierte a los dos valores exactos. */
+    const celda=st=>{
+      if(!st.n) return '<td style="padding:6px 8px;text-align:right;color:var(--text-2);">—</td>';
+      if(st.n<5) return '<td style="padding:6px 8px;text-align:right;color:var(--text-2);">n='+st.n+
+        '<div style="font-size:10px;">muy pocos para describir</div></td>';
+      return '<td style="padding:6px 8px;text-align:right;">'+f1(st.mean)+' ± '+f1(st.sd)+
+        '<div style="font-size:10px;color:var(--text-2);white-space:nowrap;">mediana '+f1(st.med)+' · n='+st.n+'</div></td>';
+    };
+    let body='';
+    filas.forEach(f=>{
+      const dif = f.q!=null && f.q<0.05;
+      body+='<tr style="border-top:1px solid var(--border);'+(dif?'background:rgba(45,212,191,.10);':'')+'">'+
+        '<td style="padding:6px 8px;font-weight:600;white-space:nowrap;">'+(dif?'◆ ':'')+esc(f.v.lbl)+
+          (f.v.u?'<div style="font-size:10px;color:var(--text-2);font-weight:400;">'+esc(f.v.u)+'</div>':'')+'</td>'+
+        celda(f.stA)+celda(f.stG)+
+        '<td style="padding:6px 8px;text-align:right;">'+(f.insuficiente?'—':pTxt(f.p))+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;">'+(f.insuficiente?'—':pTxt(f.q))+'</td></tr>';
+    });
+    const nDif=filas.filter(f=>f.q!=null&&f.q<0.05).length;
+
+    host.innerHTML='<div style="font-size:13px;font-weight:600;margin-bottom:2px;">'+esc(elegida.lbl)+'</div>'+
+      '<div style="font-size:12px;color:var(--text-2);margin-bottom:10px;">'+elegida.n+' pacientes · '+
+        enSub.length+' ecocardiogramas · población general: '+general.length+
+        (elegida.sinDato>0?(' · '+elegida.sinDato+' paciente'+(elegida.sinDato===1?'':'s')+
+          ' sin el dato, fuera de ambos grupos'):'')+'</div>'+
+      (elegida.redundanteDe?'<div style="padding:8px 11px;background:rgba(234,179,8,.12);border-left:3px solid #eab308;'+
+        'border-radius:4px;font-size:11.5px;line-height:1.5;margin-bottom:10px;">Esta combinación agrupa '+
+        '<b>exactamente los mismos pacientes</b> que «'+esc(elegida.redundanteDe)+'»: no es un subgrupo distinto '+
+        'y sus resultados no son una replicación independiente.</div>':'')+
+      '<table class="est-tbl" style="width:100%;border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+th+'text-align:left;">Variable</th>'+
+      '<th style="'+th+'text-align:right;">Subpoblación</th>'+
+      '<th style="'+th+'text-align:right;">Población general</th>'+
+      '<th style="'+th+'text-align:right;">p</th>'+
+      '<th style="'+th+'text-align:right;">q (FDR)</th></tr></thead><tbody>'+body+'</tbody></table>'+
+      _notaHTML('Cada celda es media ± DS, con la mediana y el n debajo. '+
+        '<b>El p NO compara contra la columna de la derecha:</b> la población general '+
+        '<i>contiene</i> a la subpoblación, así que compararlas sería comparar un grupo consigo mismo '+
+        'y el test tiraría hacia el «no hay diferencia». El p es de Mann-Whitney entre la subpoblación y '+
+        '<b>el resto</b> de la población ('+resto.length+' estudios), que es la comparación que responde '+
+        '«¿este subgrupo se comporta distinto?». Sólo entran al control los pacientes con el antecedente '+
+        '<b>confirmado negativo</b>; los que no tienen el dato cargado quedan fuera de los dos grupos. '+
+        'La columna general está para tener la referencia a la vista. '+
+        'La q corrige por las '+filas.length+' comparaciones (Benjamini-Hochberg); '+
+        (nDif? ('las '+nDif+' variables marcadas con ◆ son las que difieren tras esa corrección.')
+             : 'ninguna variable difiere tras esa corrección.'));
+  };
+
+  window.avSubPobAsoc=function(){
+    try{ _avSubPobAsoc(); }
+    catch(e){
+      console.error('[subpoblaciones] asociaciones',e);
+      const h=document.getElementById('av-sp-asoc');
+      if(h) h.innerHTML='<div class="empty" style="padding:12px;">No se pudieron calcular las asociaciones de '+
+        'esta subpoblación (ver consola). El resto del panel no se vio afectado.</div>';
+      toast('❌ Error al calcular las asociaciones');
+    }
+  };
+  function _avSubPobAsoc(){
+    const host=document.getElementById('av-sp-asoc'); if(!host) return;
+    const lista=avSubpoblaciones();
+    if(!lista.length){ toast('⚠️ Ninguna combinación llega a 10 pacientes'); return; }
+    const sel=document.getElementById('av-sp-sel');
+    const elegida=lista.find(x=>x.k===(sel&&sel.value))||lista[0];
+    host.innerHTML='<div class="hint" style="padding:8px;">Calculando las 61 asociaciones sobre '+elegida.n+' pacientes…</div>';
+
+    const res = avConSubpoblacion(elegida.claves, ()=>computeAll().map(r=>({...r})));
+    const conDato=res.filter(r=>r.p!=null);
+    bhQ(conDato);
+    const sig=conDato.filter(r=>r.p<0.05).sort((a,b)=>(a.q==null?2:a.q)-(b.q==null?2:b.q) || a.p-b.p);
+    _avUltimaAsoc={sub:elegida, sig, total:conDato.length, huella:avHuellaPoblacion(elegida)};
+
+    const th='padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
+    let aviso='';
+    if(elegida.n<20) aviso='<div style="padding:9px 12px;background:rgba(234,179,8,.12);border-left:3px solid #eab308;'+
+      'border-radius:4px;font-size:12px;line-height:1.5;margin:10px 0;">⚠️ <b>Resultados orientativos:</b> la '+
+      'subpoblación tiene '+elegida.n+' pacientes (menos de 20). Con este N las asociaciones sirven para '+
+      'generar hipótesis, no para sostenerlas: los intervalos son muy anchos y un solo caso puede mover el '+
+      'resultado. Tomarlas como una señal de dónde mirar, no como un hallazgo.</div>';
+
+    if(!sig.length){
+      host.innerHTML='<div style="font-size:13px;font-weight:600;margin:12px 0 4px;">Asociaciones en «'+esc(elegida.lbl)+'»</div>'+
+        aviso+'<div class="empty" style="padding:12px;">Ninguna de las '+conDato.length+
+        ' asociaciones calculables alcanzó significación en esta subpoblación.</div>';
+      return;
+    }
+    host.innerHTML='<div style="font-size:13px;font-weight:600;margin:12px 0 4px;">Asociaciones en «'+esc(elegida.lbl)+'»</div>'+
+      aviso+
+      '<table class="est-tbl" style="width:100%;border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+th+'text-align:left;">Asociación</th>'+
+      '<th style="'+th+'text-align:center;">N</th><th style="'+th+'text-align:left;">Método</th>'+
+      '<th style="'+th+'text-align:left;">Estadístico</th><th style="'+th+'text-align:right;">p</th>'+
+      '<th style="'+th+'text-align:right;">q (FDR)</th></tr></thead><tbody>'+
+      sig.map(r=>'<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:6px 8px;font-weight:600;">'+esc(r.lbl)+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;">'+r.n+'</td>'+
+        '<td style="padding:6px 8px;">'+esc(r.method)+'</td>'+
+        '<td style="padding:6px 8px;">'+esc(r.stat)+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;">'+pTxt(r.p)+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;">'+pTxt(r.q)+'</td></tr>').join('')+
+      '</tbody></table>'+
+      _notaHTML('De las 61 asociaciones del motor, '+conDato.length+' se pudieron calcular sobre estos '+
+        elegida.n+' pacientes. <b>Las que quedaron afuera suelen ser las que usan el propio criterio del '+
+        'subgrupo</b> —si la subpoblación es «FA», dentro de ella todos tienen FA y no hay dos grupos que '+
+        'comparar— más las que dependen de estudios que este subgrupo no tiene. '+
+        'Que una asociación aparezca acá y no en el servicio completo puede significar que es propia del '+
+        'subgrupo, o simplemente que cambió el N: contrastar la q antes de darle peso (la tabla se ordena por q). '+
+        '<b>La corrección es dentro de esta subpoblación.</b> Recorrer varias subpoblaciones buscando cuál da '+
+        'significativo multiplica los falsos positivos y eso no está corregido en ningún lado: si mirás diez '+
+        'subgrupos, esperá encontrar algo "significativo" en varios por puro azar.');
+  };
+
+  window.avSubPobPDF=function(){
+    if(!window.jspdf||!window.jspdf.jsPDF){ toast('❌ PDF no disponible'); return; }
+    const lista=avSubpoblaciones(); if(!lista.length){ toast('⚠️ Sin subpoblaciones'); return; }
+    const sel=document.getElementById('av-sp-sel');
+    const elegida=lista.find(x=>x.k===(sel&&sel.value))||lista[0];
+    const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+    const mL=14, mR=196; let y=18;
+    const linea=(txt,size,bold,color)=>{
+      doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size);
+      doc.setTextColor.apply(doc,color||[30,30,30]);
+      doc.splitTextToSize(txt,mR-mL).forEach(l=>{ if(y>280){doc.addPage();y=18;} doc.text(l,mL,y); y+=size*0.5+1.4; });
+    };
+    linea('CeiboAnalytics — Análisis de subpoblación',14,true,[20,40,80]); y+=2;
+    linea(elegida.lbl,12,true); 
+    linea(elegida.n+' pacientes · población general: '+avEcosUnicos().length+' estudios',9,false,[90,90,90]);
+    const rg=(typeof currentRange==='function')?currentRange():null;
+    if(rg) linea('Período: '+rg.label,9,false,[90,90,90]);
+    y+=3;
+
+    // Comparativa
+    linea('Comparación con la población general',11,true,[20,40,80]); y+=1;
+    const f1=x=>(x==null||isNaN(x))?'—':String(Math.round(x*10)/10);
+    const filas=avSubPobFilas(elegida);
+    bhQ(filas.filter(f=>f.p!=null));
+    const cols=[['Variable',52],['Subpoblacion',44],['General',44],['p',22],['q (FDR)',22]];
+    const head=()=>{ doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);
+      let x=mL; cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];}); y+=1.5;
+      doc.setDrawColor(200); doc.line(mL,y,mR,y); y+=4; };
+    head(); doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    filas.forEach(f=>{
+      if(y>270){ doc.addPage(); y=18; head(); doc.setFont('helvetica','normal'); doc.setFontSize(8); }
+      const dif=f.q!=null&&f.q<0.05;
+      doc.setTextColor.apply(doc, dif?[13,110,100]:[30,30,30]);
+      doc.setFont('helvetica', dif?'bold':'normal');
+      const cel=st=>!st.n?'—':(st.n<5?('n='+st.n+' (pocos)'):(f1(st.mean)+' +/- '+f1(st.sd)+' (n='+st.n+')'));
+      const vals=[(dif?'* ':'')+f.v.lbl, cel(f.stA), cel(f.stG),
+        f.insuficiente?'—':pTxt(f.p), f.insuficiente?'—':pTxt(f.q)];
+      let x=mL; vals.forEach((v,i)=>{ doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.6)),x,y); x+=cols[i][1]; });
+      y+=5;
+    });
+    y+=3; doc.setTextColor(90,90,90); doc.setFont('helvetica','normal');
+    linea('El p compara la subpoblacion contra el RESTO de la poblacion, no contra la columna general '+
+          '(que la contiene). Las filas marcadas con * difieren tras corregir por FDR. Medias +/- DS.',8,false,[90,90,90]);
+
+    // Asociaciones, si se calcularon
+    const huellaHoy=avHuellaPoblacion(elegida);
+    const asocVigente = _avUltimaAsoc && _avUltimaAsoc.huella===huellaHoy && _avUltimaAsoc.sig.length;
+    if(_avUltimaAsoc && _avUltimaAsoc.huella!==huellaHoy){
+      y+=4; linea('(Las asociaciones calculadas corresponden a otro periodo o filtro y no se incluyen: '+
+                  'volver a calcularlas antes de exportar.)',8,true,[150,90,10]);
+    }
+    if(asocVigente){
+      y+=4; if(y>250){doc.addPage();y=18;}
+      linea('Asociaciones significativas en esta subpoblacion',11,true,[20,40,80]); y+=1;
+      if(elegida.n<20) linea('Resultados orientativos: menos de 20 pacientes.',8,true,[150,90,10]);
+      _avUltimaAsoc.sig.forEach(r=>{
+        if(y>272){ doc.addPage(); y=18; }
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(30,30,30);
+        const txt=r.lbl+'  —  '+r.method+' '+String(r.stat).replace(/[χ²ρ→↔⚠]/g,m=>({'χ':'X','²':'2','ρ':'r','→':'->','↔':'-','⚠':'!'}[m]||m))+
+          ', N='+r.n+', p='+pTxt(r.p)+', q='+pTxt(r.q);
+        doc.splitTextToSize(txt,mR-mL).forEach(l=>{ doc.text(l,mL,y); y+=4.4; });
+      });
+    } else {
+      y+=4; linea('(Sin asociaciones calculadas: usar "Ver asociaciones en esta subpoblacion" antes de exportar.)',8,false,[120,120,120]);
+    }
+    doc.save('ceiboanalytics_subpoblacion.pdf');
+    toast('✅ PDF exportado');
+  };
+
   /* ══ Módulo C — evolución longitudinal del paciente ══
      Agrupa por la identidad de paciente que ya arma la app (PATIENTS, que cruza por CI y
      cae a nombre+fecha de nacimiento si no hay documento), no por CI a mano: así un
@@ -3037,6 +3406,16 @@ function renderCurrent(){
     if(o && !o.options.length) o.innerHTML=AV_OUTCOMES.map(x=>'<option value="'+esc(x.k)+'">'+esc(x.lbl)+'</option>').join('');
     const c=document.getElementById('av-sg-corte');
     if(c && !c.options.length) c.innerHTML=AV_CORTES.map(x=>'<option value="'+esc(x.k)+'">'+esc(x.lbl)+'</option>').join('');
+    /* El de subpoblaciones se rearma siempre: los N por combinación dependen del período
+       y del médico, así que una lista cacheada mostraría conteos de otro corte. */
+    const sp=document.getElementById('av-sp-sel');
+    if(sp){
+      const prev=sp.value;
+      const lista=avSubpoblaciones();
+      sp.innerHTML=lista.map(x=>'<option value="'+esc(x.k)+'">'+esc(x.lbl)+' (N='+x.n+')</option>').join('')
+        || '<option value="">— ninguna combinación llega a 10 pacientes —</option>';
+      if([...sp.options].some(o=>o.value===prev)) sp.value=prev;
+    }
     // El de pacientes se rearma siempre: depende de la población filtrada, no es estático.
     const pe=document.getElementById('av-ev-pac');
     if(pe){
@@ -3058,6 +3437,7 @@ function renderCurrent(){
   window.avRenderTodo=function(){
     try{ avLogRender(); }catch(e){ console.error('[avanzado] regresión logística',e); }
     try{ avSubRender(); }catch(e){ console.error('[avanzado] subgrupos',e); }
+    try{ avSubPobRender(); }catch(e){ console.error('[avanzado] subpoblaciones',e); }
     try{ avEvolRender(); }catch(e){ console.error('[avanzado] evolución',e); }
   };
 
