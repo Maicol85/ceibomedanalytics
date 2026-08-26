@@ -764,7 +764,7 @@ function normalizeStudy(raw, app){
   // estudios entraban sin fecha y quedaban fuera de la ventana de 365 días, así
   // que el dashboard los mostraba en 0.
   const _v = raw.vals || null;
-  const campos = raw.campos || raw.datos || (_v ? {
+  let campos = raw.campos || raw.datos || (_v ? {
     nombre:        _v['p-nombre'],
     ci:            _v['p-hc'],
     fecha_estudio: _v['p-fecha'],
@@ -773,6 +773,25 @@ function normalizeStudy(raw, app){
     centro:        _v['p-centro'],
     'med-nombre':  _v['p-medico']
   } : raw) || {};
+  // ErgoSmart guarda el snapshot del formulario en raw.form indexado por id del DOM
+  // (capturarForm/FORM_FIELDS). La EDAD, el SEXO y el IMC viven sólo ahí —ped, psex,
+  // pimc— así que con campos = raw no eran alcanzables: los estudios de ergometría
+  // entraban sin edad ni sexo y quedaban fuera del perfil epidemiológico y de toda
+  // asociación por edad o sexo. mets, fcmax, dpmax y duke SÍ están en primer nivel
+  // (verificado en la función guardar() de ErgoSmart), por eso esos ya funcionaban.
+  if((app==='ergo'||app==='ergosmart') && raw.form && typeof raw.form==='object'){
+    const F = raw.form;
+    campos = Object.assign({}, F, campos, {
+      edad:      (campos.edad      != null && campos.edad      !== '') ? campos.edad      : F.ped,
+      sexo:      (campos.sexo      != null && campos.sexo      !== '') ? campos.sexo      : F.psex,
+      imc:       (campos.imc       != null && campos.imc       !== '') ? campos.imc       : F.pimc,
+      peso:      (campos.peso      != null && campos.peso      !== '') ? campos.peso      : F.pp,
+      talla:     (campos.talla     != null && campos.talla     !== '') ? campos.talla     : F.pt,
+      fc_reposo: (campos.fc_reposo != null && campos.fc_reposo !== '') ? campos.fc_reposo : F.fcrep,
+      fc_max:    (campos.fcmax     != null && campos.fcmax     !== '') ? campos.fcmax     : F.fcmax,
+      mets:      (campos.mets      != null && campos.mets      !== '') ? campos.mets      : F.metat
+    });
+  }
   const fecha = parseDate(raw.fecha_estudio || raw.fecha || campos.fecha_estudio || raw.fecha_guardado || raw.fechaGuardado
                           || (raw.ts ? new Date(raw.ts) : null));
   const nombre = raw.nombre || campos.nombre || pick(campos,['paciente','nombre_paciente']) || '';
