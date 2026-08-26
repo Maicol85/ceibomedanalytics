@@ -502,7 +502,21 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         <div id="est-crossinfo" class="card" style="margin-bottom:14px;"></div>
         <div style="display:flex;gap:8px;margin-bottom:16px;">
           <button class="est-subtab active" data-est="asoc" onclick="estSubtab('asoc',this)">Asociaciones</button>
+          <button class="est-subtab" data-est="porapp" onclick="estSubtab('porapp',this)">Por app</button>
           <button class="est-subtab" data-est="ia" onclick="estSubtab('ia',this)">Análisis IA</button>
+        </div>
+
+        <!-- PANEL POR APP — descriptivos + histogramas, una sección por app -->
+        <div id="est-panel-porapp" style="display:none;">
+          <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+            <div class="field"><label>App</label><select id="pa-f-app" onchange="paRender()"><option value="all">Todas</option></select></div>
+            <div class="field"><label>N mínimo</label><select id="pa-f-n" onchange="paRender()"><option value="1">≥1</option><option value="5">≥5</option><option value="10">≥10</option></select></div>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end;">
+              <button class="btn" onclick="paExportXLSX()">📊 Exportar → Excel</button>
+              <button class="btn" onclick="paExportPDF()">📄 Exportar → PDF</button>
+            </div>
+          </div>
+          <div id="pa-host"></div>
         </div>
 
         <!-- PANEL ASOCIACIONES -->
@@ -1921,7 +1935,21 @@ function renderCurrent(){
     estAsocRender(); renderHeatmap();
   };
 
-  window.estSubtab=function(id,el){ document.querySelectorAll('#view-estadistica .est-subtab').forEach(b=>b.classList.remove('active')); el.classList.add('active'); document.getElementById('est-panel-asoc').style.display=id==='asoc'?'block':'none'; document.getElementById('est-panel-ia').style.display=id==='ia'?'block':'none'; if(id==='asoc'){ estAsocRender(); renderHeatmap(); } };
+  // Los paneles se recorren por lista: sumar una subtab nueva no exige tocar esta
+  // función, que antes tenía los dos ids escritos a mano.
+  window.estSubtab=function(id,el){
+    document.querySelectorAll('#view-estadistica .est-subtab').forEach(b=>b.classList.remove('active'));
+    if(el) el.classList.add('active');
+    ['asoc','porapp','ia'].forEach(p=>{ const n=document.getElementById('est-panel-'+p); if(n) n.style.display=(p===id?'block':'none'); });
+    if(id==='asoc'){ estAsocRender(); renderHeatmap(); }
+    if(id==='porapp' && typeof paRender==='function'){ paFillAppSelect(); paRender(); }
+  };
+  // El selector de app se arma desde APPS, así que una 5.ª app aparece sola.
+  window.paFillAppSelect=function(){
+    const sel=document.getElementById('pa-f-app'); if(!sel||sel.dataset.listo==='1') return;
+    Object.keys(PA_VARS).forEach(a=>{ const o=document.createElement('option'); o.value=a; o.textContent=(APPS[a]||{}).label||a; sel.appendChild(o); });
+    sel.dataset.listo='1';
+  };
 
   // ── exportar ──
   window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const H=['Categoría','Asociación','N','Método','Estadístico','p','IC 95%','Significativo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.ci,r.sig==='🟢'?'Sí':(r.sig==='🟡'?'Sí (N bajo)':'No')])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
@@ -1935,6 +1963,193 @@ function renderCurrent(){
   window.estInformePDF=function(id,titulo){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Generá el informe primero');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'}); const mL=14,mR=196; let y=18; doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — '+titulo,mL,y);y+=8; doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30,30,30); const lines=doc.splitTextToSize(el.textContent,mR-mL); lines.forEach(l=>{ if(y>282){doc.addPage();y=18;} doc.text(l,mL,y); y+=5.2; }); doc.save('ceiboanalytics_'+id+'.pdf'); toast('✅ PDF exportado'); };
   window.estInformeAvanzado=async function(){ const key=localStorage.getItem('ca_anthropic_key'); const el=document.getElementById('est-informe-ia'); if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; toast('Falta la API key'); return; } computeAll(); const R=resumenAsoc(); const payload={ pacientes_eco_ergo:R.ecoErgo, pacientes_ecoestres_ergo:R.eeErgo, asociaciones:R.todas.map(r=>({asociacion:r.lbl,categoria:r.cat,metodo:r.method,estadistico:r.stat,p:r.p,ic95:r.ci,n:r.n,significativa:r.p!=null&&r.p<0.05})) }; const btn=document.getElementById('est-ia-btn'), sp=document.getElementById('est-ia-spinner'); btn.disabled=true; sp.style.display='inline'; el.textContent=''; try{ const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Sos un cardiólogo especialista en bioestadística clínica. Analizás resultados estadísticos de una población cardiovascular uruguaya y generás conclusiones clínicas, comparación con literatura internacional, hipótesis para investigación futura y recomendaciones para el servicio. Respondé en español, con formato clínico profesional.',messages:[{role:'user',content:'Resumen de asociaciones estadísticas encontradas (JSON):\n'+JSON.stringify(payload,null,2)}]})}); const data=await res.json(); if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); } else { const txt=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)'; el.textContent=txt; toast('✅ Informe generado'); } }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); } finally{ btn.disabled=false; sp.style.display='none'; } };
 })();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ESTADÍSTICA POR APP — descriptivos + histograma por variable
+   Equivalente al módulo Laboratorio de cada app, pero con las 4 juntas.
+   Los accesores usan SÓLO nombres de campo verificados contra el fuente de cada
+   app (ver normalizeStudy): eco → s.eco, ergo → s.campos (fusionado con raw.form),
+   ecoestres → s.ee, cardio → s.raw.fevi extraído del texto libre del ETT.
+   ══════════════════════════════════════════════════════════════════════════ */
+const PA_VARS = {
+  eco: [
+    {k:'fevi',  lbl:'FEVI',            u:'%',     g:s=>s.eco.fevi_simpson},
+    {k:'gls',   lbl:'GLS',             u:'%',     g:s=>s.eco.gls_global},
+    {k:'tapse', lbl:'TAPSE',           u:'mm',    g:s=>s.eco.tapse},
+    {k:'ee',    lbl:"E/e' promedio",   u:'',      g:s=>s.eco.ee_prom},
+    {k:'lavi',  lbl:'Volumen AI idx',  u:'ml/m²', g:s=>s.eco.lavi},
+    {k:'psap',  lbl:'PSAP',            u:'mmHg',  g:s=>s.eco.psap},
+    {k:'masa',  lbl:'Masa VI idx',     u:'g/m²',  g:s=>s.eco.masa_vi},
+    {k:'rwt',   lbl:'RWT',             u:'',      g:s=>s.eco.rwt, d:2},
+    {k:'ea',    lbl:'Relación E/A',    u:'',      g:s=>s.eco.ea_ratio, d:2},
+    {k:'siv',   lbl:'Septum (SIV)',    u:'mm',    g:s=>s.eco.siv},
+    {k:'pp',    lbl:'Pared posterior', u:'mm',    g:s=>s.eco.pp},
+    {k:'ddvi',  lbl:'DDVI',            u:'mm',    g:s=>s.eco.ddvi},
+    {k:'edad',  lbl:'Edad',            u:'años',  g:s=>s.edad}
+  ],
+  ergo: [
+    {k:'mets',  lbl:'METs alcanzados', u:'METs',  g:s=>studyMets(s)},
+    {k:'fcmax', lbl:'FC máxima',       u:'lpm',   g:s=>num(pick(s.campos,['fc_max','fcmax']))},
+    {k:'fcpct', lbl:'% FC máx teórica',u:'%',     g:s=>paFcPct(s)},
+    {k:'dp',    lbl:'Doble producto máx', u:'',   g:s=>num(s.ergo.dpmax)},
+    {k:'edad',  lbl:'Edad',            u:'años',  g:s=>s.edad},
+    {k:'imc',   lbl:'IMC',             u:'kg/m²', g:s=>num(pick(s.campos,['imc'])), d:1}
+  ],
+  ecoestres: [
+    {k:'fbas', lbl:'FEVI basal',          u:'%', g:s=>s.ee.fevi_basal},
+    {k:'fpic', lbl:'FEVI pico',           u:'%', g:s=>s.ee.fevi_pico},
+    {k:'res',  lbl:'Reserva contráctil',  u:'%', g:s=>s.ee.reserva_contractil, d:1},
+    {k:'pbas', lbl:'PSAP basal',          u:'mmHg', g:s=>s.ee.psap_basal},
+    {k:'ppic', lbl:'PSAP pico',           u:'mmHg', g:s=>s.ee.psap_pico},
+    {k:'dpsap',lbl:'Δ PSAP (pico−basal)', u:'mmHg', g:s=>s.ee.delta_psap, d:1},
+    {k:'mets', lbl:'METs',                u:'METs', g:s=>studyMets(s)},
+    {k:'edad', lbl:'Edad',                u:'años', g:s=>s.edad}
+  ],
+  cardio: [
+    {k:'fevi', lbl:'FEVI (del ETT)', u:'%',    g:s=>num(s.raw && s.raw.fevi)},
+    {k:'edad', lbl:'Edad',           u:'años', g:s=>s.edad}
+  ]
+};
+
+// % de la FC máxima teórica (220 − edad). Se calcula si no vino guardado.
+function paFcPct(s){
+  const pre=num(pick(s.campos,['fcmaxpct','fc_max_pct','nrv-fcmaxpct']));
+  if(pre!=null) return pre;
+  const fc=num(pick(s.campos,['fc_max','fcmax'])), ed=s.edad;
+  if(fc==null||ed==null||ed<=0) return null;
+  const teor=220-ed; if(teor<=0) return null;
+  return +(100*fc/teor).toFixed(1);
+}
+
+/* Descriptivos de un arreglo numérico. Percentiles por interpolación lineal
+   (método R-7, el de Excel), para que coincidan con lo que el médico ve si
+   exporta y verifica en planilla. DS muestral (n−1). */
+function paStats(arr){
+  const a=arr.filter(v=>v!=null&&!isNaN(v)).sort((x,y)=>x-y);
+  const n=a.length;
+  if(!n) return {n:0};
+  const mean=a.reduce((s,v)=>s+v,0)/n;
+  const q=p=>{ if(n===1) return a[0]; const h=(n-1)*p, lo=Math.floor(h), hi=Math.ceil(h);
+               return lo===hi ? a[lo] : a[lo]+(h-lo)*(a[hi]-a[lo]); };
+  const sd=n>1 ? Math.sqrt(a.reduce((s,v)=>s+(v-mean)**2,0)/(n-1)) : 0;
+  return {n, mean, sd, med:q(0.5), p25:q(0.25), p75:q(0.75), min:a[0], max:a[n-1], vals:a};
+}
+
+/* Histograma: regla de Sturges acotada, que con N chico no fabrica bins vacíos. */
+function paHist(vals){
+  if(!vals || vals.length<2) return null;
+  const min=vals[0], max=vals[vals.length-1];
+  if(min===max) return {labels:[fmt(min,1)], counts:[vals.length]};
+  const k=Math.max(4, Math.min(12, Math.ceil(Math.log2(vals.length)+1)));
+  const w=(max-min)/k, counts=new Array(k).fill(0), labels=[];
+  vals.forEach(v=>{ let i=Math.floor((v-min)/w); if(i>=k)i=k-1; if(i<0)i=0; counts[i]++; });
+  for(let i=0;i<k;i++) labels.push(fmt(min+i*w,1)+'–'+fmt(min+(i+1)*w,1));
+  return {labels,counts};
+}
+
+let _paCharts={};
+function paDestroyCharts(){ Object.keys(_paCharts).forEach(id=>{ try{_paCharts[id].destroy();}catch(e){} }); _paCharts={}; }
+
+function paRender(){
+  const host=document.getElementById('pa-host'); if(!host) return;
+  paDestroyCharts();
+  const sel=document.getElementById('pa-f-app'), nMin=+((document.getElementById('pa-f-n')||{}).value||1);
+  const appFiltro=sel?sel.value:'all';
+  const lista=(typeof paStudies==='function')?paStudies():filteredStudies();
+  const porApp=byApp(lista);
+  const apps=Object.keys(PA_VARS).filter(a=>appFiltro==='all'||appFiltro===a);
+  let html='';
+  const pend=[];
+  apps.forEach(app=>{
+    const estudios=(porApp[app]||[]);
+    const meta=APPS[app]||{label:app};
+    if(!estudios.length){
+      html+='<div class="card" style="margin-bottom:16px;"><h3 class="section" style="font-size:15px;">'+esc(meta.label)+'</h3>'
+          + '<div style="color:var(--text-2);font-size:13px;">Sin estudios en el período seleccionado.</div></div>';
+      return;
+    }
+    const filas=PA_VARS[app].map(v=>{
+      const st=paStats(estudios.map(s=>{ try{ return num(v.g(s)); }catch(e){ return null; } }));
+      return {v,st};
+    }).filter(x=>x.st.n>=nMin);
+    html+='<div class="card" style="margin-bottom:16px;">'
+       +  '<h3 class="section" style="font-size:15px;">'+esc(meta.label)+' <span style="font-weight:400;color:var(--text-2);font-size:12px;">— '+estudios.length+' estudio'+(estudios.length===1?'':'s')+'</span></h3>';
+    if(!filas.length){
+      html+='<div style="color:var(--text-2);font-size:13px;">Ninguna variable alcanza el N mínimo seleccionado.</div></div>';
+      return;
+    }
+    html+='<div style="overflow-x:auto;"><table class="tbl" style="width:100%;font-size:13px;"><thead><tr>'
+       +  '<th style="text-align:left;">Variable</th><th>N</th><th>Media</th><th>DS</th><th>Mediana</th><th>P25</th><th>P75</th><th>Mín</th><th>Máx</th></tr></thead><tbody>';
+    filas.forEach(({v,st})=>{
+      const d=v.d==null?1:v.d;
+      html+='<tr><td style="text-align:left;">'+esc(v.lbl)+(v.u?' <span style="color:var(--text-2);">('+esc(v.u)+')</span>':'')+'</td>'
+         +  '<td>'+st.n+'</td><td>'+fmt(st.mean,d)+'</td><td>'+fmt(st.sd,d)+'</td><td>'+fmt(st.med,d)+'</td>'
+         +  '<td>'+fmt(st.p25,d)+'</td><td>'+fmt(st.p75,d)+'</td><td>'+fmt(st.min,d)+'</td><td>'+fmt(st.max,d)+'</td></tr>';
+    });
+    html+='</tbody></table></div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px;">';
+    filas.forEach(({v,st})=>{
+      const h=paHist(st.vals); if(!h) return;
+      const id='pa-ch-'+app+'-'+v.k;
+      html+='<div><div style="font-size:12px;font-weight:600;margin-bottom:4px;">'+esc(v.lbl)+'</div>'
+         +  '<div style="position:relative;height:170px;"><canvas id="'+id+'"></canvas></div></div>';
+      pend.push({id,h,lbl:v.lbl});
+    });
+    html+='</div></div>';
+  });
+  host.innerHTML=html||'<div class="card" style="color:var(--text-2);">Sin datos.</div>';
+  if(!HAS_CHART) return;
+  const col=seriesColors()[0]||'#4f8ef7';
+  pend.forEach(p=>{
+    const el=document.getElementById(p.id); if(!el) return;
+    try{
+      _paCharts[p.id]=new Chart(el.getContext('2d'),{type:'bar',
+        data:{labels:p.h.labels,datasets:[{label:p.lbl,data:p.h.counts,backgroundColor:col,borderWidth:0}]},
+        options:baseOpts({plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0},title:{display:true,text:'n'}},x:{ticks:{maxRotation:60,minRotation:0,font:{size:9}}}}})});
+    }catch(e){ console.warn('histograma',p.id,e); }
+  });
+}
+
+// Filas planas para exportar — mismo cálculo que la tabla, sin recalcular aparte.
+function paFilas(){
+  const lista=(typeof paStudies==='function')?paStudies():filteredStudies();
+  const porApp=byApp(lista), out=[];
+  Object.keys(PA_VARS).forEach(app=>{
+    const estudios=porApp[app]||[]; if(!estudios.length) return;
+    PA_VARS[app].forEach(v=>{
+      const st=paStats(estudios.map(s=>{ try{ return num(v.g(s)); }catch(e){ return null; } }));
+      if(!st.n) return;
+      const d=v.d==null?1:v.d;
+      out.push([(APPS[app]||{}).label||app, v.lbl+(v.u?(' ('+v.u+')'):''), st.n,
+                +st.mean.toFixed(d), +st.sd.toFixed(d), +st.med.toFixed(d),
+                +st.p25.toFixed(d), +st.p75.toFixed(d), +st.min.toFixed(d), +st.max.toFixed(d)]);
+    });
+  });
+  return out;
+}
+window.paRender=paRender;
+window.paExportXLSX=function(){
+  if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;}
+  const filas=paFilas(); if(!filas.length){toast('⚠️ Sin datos');return;}
+  const H=['App','Variable','N','Media','DS','Mediana','P25','P75','Mín','Máx'];
+  const ws=XLSX.utils.aoa_to_sheet([H,...filas]); ws['!cols']=H.map(h=>({wch:Math.max(10,h.length+4)}));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Por app');
+  XLSX.writeFile(wb,'ceiboanalytics_por_app.xlsx'); toast('✅ Excel exportado');
+};
+window.paExportPDF=function(){
+  if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;}
+  const filas=paFilas(); if(!filas.length){toast('⚠️ Sin datos');return;}
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const mL=10; let y=16;
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);
+  doc.text('CeiboAnalytics — Estadistica descriptiva por app',mL,y); y+=7;
+  const cols=[['App',34],['Variable',60],['N',12],['Media',20],['DS',18],['Mediana',20],['P25',18],['P75',18],['Min',18],['Max',18]];
+  const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;};
+  head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30);
+  filas.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);}
+    let x=mL; r.forEach((v,i)=>{ doc.text(String(v).replace(/[²³áéíóúñÁÉÍÓÚÑ]/g,m=>({'²':'2','³':'3','á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n'}[m]||m)).substring(0,Math.floor(cols[i][1]/1.7)),x,y); x+=cols[i][1]; }); y+=5; });
+  doc.save('ceiboanalytics_por_app.pdf'); toast('✅ PDF exportado');
+};
 
 function setupMobileNav(){
   $('#mobileNav').innerHTML=$$('.sidebar .navbtn').map(b=>`<button class="navbtn ${b.classList.contains('active')?'active':''}" data-view="${b.dataset.view}">${b.textContent}</button>`).join('');
