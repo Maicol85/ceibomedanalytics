@@ -961,6 +961,22 @@ function doctorIdentity(s){
    crd_insts -> [{id,label,...}] ; crd_d_<id> -> {patients, nextPid, nextCid}
    patient = {id, name, ci, age, matricula, consultations:[{id, date, diagnosis, ...}]}
    Devuelve una consulta por estudio, con nombre/ci del paciente para identificación cruzada. */
+/* CardioSalud no tiene campo numérico de FEVI: el ecocardiograma se carga como texto
+   libre en la consulta (`ett`). Se extrae el porcentaje para que la app pueda sumarla a
+   las estadísticas. Conservador a propósito: sólo acepta un número pegado a la palabra
+   FEVI/FE y dentro de un rango fisiológico, así que "FEVI 55%" y "FE del 40 %" entran,
+   pero "ETT 2026" o "FEVI no valorable" no inventan un dato. */
+function crdFeviDeTexto(txt){
+  if(txt==null) return null;
+  const t=String(txt);
+  if(!t.trim()) return null;
+  const m=t.match(/\bfe(?:vi|y|v\.?i\.?)?\b[^0-9%]{0,12}(\d{1,3})(?:[.,](\d))?\s*%?/i);
+  if(!m) return null;
+  const v=parseFloat(m[1]+(m[2]?('.'+m[2]):''));
+  if(isNaN(v) || v<5 || v>90) return null;   // fuera de rango: no es una FEVI
+  return v;
+}
+
 function readCardioSalud(){
   const out=[];
   let insts=[];
@@ -974,15 +990,23 @@ function readCardioSalud(){
       const cons=(p && Array.isArray(p.consultations))?p.consultations:[];
       for(const c of cons){
         const cc=c||{};
+        // La edad sólo vale como años si ageUnit lo dice: CardioSalud admite meses y días
+        // para pediátricos, y contarlos como años deformaba el perfil etario.
+        const _au=String(p.ageUnit==null?'a':p.ageUnit).toLowerCase();
+        const _edad=(p.age!=null && (_au===''||_au==='a'||_au[0]==='a'))?p.age:null;
         out.push({
           id:'crd_'+inst.id+'_'+(p.id!=null?p.id:'')+'_'+(cc.id!=null?cc.id:Math.random().toString(36).slice(2)),
           nombre:(p.name!=null?p.name:'')||'',        // CardioSalud usa "name"
           ci:(p.ci!=null?p.ci:'')||'',
           doc_tipo:'CI',
-          edad:(p.age!=null?p.age:null),
+          edad:_edad,
+          sexo:(p.sex!=null?p.sex:'')||'',            // el paciente guarda "sex"; no se emitía y el sexo se perdía
           matricula:(p.matricula!=null?p.matricula:'')||'',  // médico tratante (identidad por matrícula)
           fecha:(cc.date||cc.fecha||''),
           inst:(inst.label||inst.id),
+          // La FEVI de CardioSalud vive dentro del texto libre del ETT, no como número:
+          // se extrae acá para que entre a las estadísticas como el resto de las apps.
+          fevi:crdFeviDeTexto(cc.ett),
           campos:cc                                    // campos de la consulta (diagnosis, treatment, etc.)
         });
       }
