@@ -882,6 +882,33 @@ function normalizeStudy(raw, app){
       ensuma: rc(['ensuma']) || null
     };
   }
+  // Campos de EcoEstrés Smart (app interna 'ecoestres'). Guarda `vals` indexado por id
+  // del DOM del formulario, no por nombre canónico, así que sus datos clínicos no son
+  // alcanzables con los nombres que usa el resto de la app: `campos` sólo traduce las 7
+  // claves de identificación de arriba y NO cae al fallback `|| raw` (porque _v existe).
+  // Por eso las asociaciones de EcoEstrés venían devolviendo N=0 en silencio.
+  // Ids verificados leyendo ~/Desktop/APLICACIONES/ecoestres/index.html, no asumidos.
+  let ee = {};
+  if(app==='ecoestres'){
+    const V = id => (_v ? _v[id] : (campos ? campos[id] : null));
+    const fBas = num(V('c-fevi-bas')), fPic = num(V('c-fevi-pic'));
+    const pBas = num(V('p-psap-bas')), pPic = num(V('p-psap-pic'));
+    ee = {
+      fevi_basal: fBas,
+      fevi_pico: fPic,
+      fevi_recuperacion: num(V('c-fevi-rec')),
+      // La reserva contráctil se RECALCULA en vez de leer 'c-dfevi': ese campo se guarda
+      // formateado para mostrar ("+5%"), no como número. Es el mismo criterio que aplica
+      // EcoEstrés internamente cuando 'c-dfevi' viene vacío.
+      reserva_contractil: (fBas!=null && fPic!=null) ? +(fPic-fBas).toFixed(1) : num(V('c-dfevi')),
+      psap_basal: pBas,
+      psap_pico: pPic,
+      delta_psap: (pBas!=null && pPic!=null) ? +(pPic-pBas).toFixed(1) : null,
+      mets: num(V('b-mets')),
+      wmsi_basal: num(V('c-wmsi-bas')),
+      wmsi_pico: num(V('c-wmsi-pic'))
+    };
+  }
   return {
     app, id: raw.id||null, raw, campos,
     nombre, ci:String(ci).trim(), doc_tipo:String(doc_tipo).trim(),
@@ -890,7 +917,7 @@ function normalizeStudy(raw, app){
     nacimiento,
     medMat:String(medMat).trim(), medNom:String(medNom).trim(),
     sexo, edad,
-    eco, ergo
+    eco, ergo, ee
   };
 }
 
@@ -1021,7 +1048,14 @@ function studyPositive(s){
   }
   return null;
 }
-function studyMets(s){ return num(pick(s.campos,['mets','mets_alcanzados','mets_max','mets_pico'])); }
+// ErgoSmart guarda `mets` en primer nivel y normalizeStudy hace campos = raw, así que
+// pick(campos,...) lo encuentra. EcoEstrés lo guarda en vals['b-mets'] y se lee del
+// bloque `ee`, que es donde quedó traducido.
+function studyMets(s){
+  const m = num(pick(s.campos,['mets','mets_alcanzados','mets_max','mets_pico']));
+  if(m!=null) return m;
+  return (s && s.ee && s.ee.mets!=null) ? s.ee.mets : null;
+}
 function feviOf(s){ return num(pick(s.campos,['fevi_simpson','fevi','fevi_basal','fevi_reposo'])); }
 function psapOf(s){ return num(pick(s.campos,['psap_calc','psap'])); }
 function laviOf(s){ return num(pick(s.campos,['ai_vol_index','lavi','lavi_calc'])); }
@@ -1673,10 +1707,14 @@ function renderCurrent(){
   const HTP =pr=>{ const p=PSAP(pr); return p==null?null:(p>35?'HTP':'No HTP'); };
   const YN  =v=>v==null?null:(v?'Sí':'No');
   // ecoestres
-  const FEVIrep=pr=>_num(_pick(pr.ecoestres.campos,['fevi_basal','fevi_reposo']));
-  const FEVIstr=pr=>_num(_pick(pr.ecoestres.campos,['fevi_pico','fevi_estres','fevi_max']));
-  const RESERVA=pr=>{ const a=FEVIrep(pr), b=FEVIstr(pr); return (a!=null&&b!=null)?b-a:null; };
-  const PSAPstr=pr=>{ const b=_num(_pick(pr.ecoestres.campos,['psap_pico','psap_estres','psap_max'])); const a=_num(_pick(pr.ecoestres.campos,['psap_basal','psap_reposo','psap'])); return (b!=null&&a!=null)?b-a:b; };
+  // Se leen del bloque `ee` que arma normalizeStudy. Antes buscaban nombres canónicos
+  // ('fevi_basal', 'psap_pico') dentro de pr.ecoestres.campos, que para EcoEstrés sólo
+  // tiene las 7 claves de identificación: las tres asociaciones devolvían N=0 siempre.
+  const eeF=(s,k,cands)=>{ if(!s)return null; if(s.ee&&s.ee[k]!=null)return s.ee[k]; return _num(_pick(s.campos,cands||[k])); };
+  const FEVIrep=pr=>eeF(pr.ecoestres,'fevi_basal',['fevi_basal','fevi_reposo']);
+  const FEVIstr=pr=>eeF(pr.ecoestres,'fevi_pico',['fevi_pico','fevi_estres','fevi_max']);
+  const RESERVA=pr=>{ const r=eeF(pr.ecoestres,'reserva_contractil'); if(r!=null)return r; const a=FEVIrep(pr), b=FEVIstr(pr); return (a!=null&&b!=null)?b-a:null; };
+  const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d; const b=eeF(pr.ecoestres,'psap_pico',['psap_pico','psap_estres','psap_max']); const a=eeF(pr.ecoestres,'psap_basal',['psap_basal','psap_reposo','psap']); return (b!=null&&a!=null)?b-a:b; };
   const METSee=pr=>metsOf(pr.ergo);
 
   // ── distribuciones ──
