@@ -1796,6 +1796,16 @@ function renderCurrent(){
   const fisherCI=(r,n)=>{if(n<4||Math.abs(r)>=1)return null;const z=Math.atanh(r),se=1/Math.sqrt(n-3);return [Math.tanh(z-1.96*se),Math.tanh(z+1.96*se)];};
 
   function pearson(pairs){const n=pairs.length;if(n<3)return null;const mx=avg(pairs.map(p=>p[0])),my=avg(pairs.map(p=>p[1]));let sxy=0,sxx=0,syy=0;pairs.forEach(([x,y])=>{sxy+=(x-mx)*(y-my);sxx+=(x-mx)**2;syy+=(y-my)**2;});if(sxx===0||syy===0)return{r:0,p:1,n,ci:null,slope:0,intercept:my};const r=sxy/Math.sqrt(sxx*syy);const rc=Math.max(-0.999999,Math.min(0.999999,r));const z=Math.atanh(rc)*Math.sqrt(n-3);const p=2*(1-normCdf(Math.abs(z)));return{r,p:Math.max(0,Math.min(1,p)),n,ci:fisherCI(r,n),slope:sxy/sxx,intercept:my-(sxy/sxx)*mx};}
+  /* Ajuste por mínimos cuadrados sobre los valores crudos. spearman() trabaja con rangos
+     y no devuelve pendiente, así que sin esto la recta se calculaba con undefined: daba
+     NaN y no se dibujaba nada, mientras la leyenda seguía anunciando "Regresión". */
+  function olsFit(pairs){
+    const n=pairs.length; if(n<2) return {slope:null,intercept:null};
+    const mx=avg(pairs.map(p=>p[0])), my=avg(pairs.map(p=>p[1]));
+    let sxy=0,sxx=0; pairs.forEach(([x,y])=>{ sxy+=(x-mx)*(y-my); sxx+=(x-mx)**2; });
+    if(sxx===0) return {slope:null,intercept:null};
+    const slope=sxy/sxx; return {slope, intercept:my-slope*mx};
+  }
   function spearman(pairs){const n=pairs.length;if(n<3)return null;const rx=ranks(pairs.map(p=>p[0])),ry=ranks(pairs.map(p=>p[1]));const mx=avg(rx),my=avg(ry);let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(rx[i]-mx)*(ry[i]-my);sxx+=(rx[i]-mx)**2;syy+=(ry[i]-my)**2;}if(sxx===0||syy===0)return{rho:0,p:1,n,ci:null};const rho=sxy/Math.sqrt(sxx*syy);const z=Math.abs(rho)*Math.sqrt(n-1);return{rho,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n,ci:fisherCI(rho,n)};}
   function mannwhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2;if(n1<1||n2<1)return null;const all=g1.map(v=>[v,0]).concat(g2.map(v=>[v,1]));const r=ranks(all.map(a=>a[0]));let R1=0;for(let i=0;i<N;i++)if(all[i][1]===0)R1+=r[i];const U1=R1-n1*(n1+1)/2,U2=n1*n2-U1,U=Math.min(U1,U2),mU=n1*n2/2;const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const sU=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1)||1)));if(sU===0)return{U,p:1,n1,n2};const z=(Math.abs(U-mU)-0.5)/sU;return{U,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n1,n2};}
   function chi2test(tbl){const R=tbl.length,C=tbl[0].length;const rt=tbl.map(r=>r.reduce((a,b)=>a+b,0)),ct=[];for(let c=0;c<C;c++){let s=0;for(let r=0;r<R;r++)s+=tbl[r][c];ct.push(s);}const N=rt.reduce((a,b)=>a+b,0);if(N===0)return null;let chi2=0,minE=Infinity;for(let r=0;r<R;r++)for(let c=0;c<C;c++){const e=rt[r]*ct[c]/N;if(e>0){minE=Math.min(minE,e);chi2+=(tbl[r][c]-e)**2/e;}}const df=(R-1)*(C-1);if(df<1)return null;return{chi2,p:chi2p(chi2,df),df,N,minE};}
@@ -1812,12 +1822,12 @@ function renderCurrent(){
     {cat:'Eco+Ergo', lbl:'PSAP ↔ METs', t:'sp', x:PSAP, y:METS},
     {cat:'Eco+Ergo', lbl:'TAPSE ↔ METs', t:'sp', x:TAPSE, y:METS},
     {cat:'Eco+Ergo', lbl:'Vol AI idx ↔ METs', t:'sp', x:LAVI, y:METS},
-    {cat:'Eco+Ergo', lbl:'METs → disfunción diastólica', t:'mw', val:METS, grp:pr=>{const d=DIAST(pr);return d==null?null:(d==='Disfunción'?1:0);}},
-    {cat:'Eco+Ergo', lbl:'METs → geometría VI', t:'kw', val:METS, catg:GEOM},
-    {cat:'Eco+Ergo', lbl:'METs → HTP (PSAP>35)', t:'mw', val:METS, grp:pr=>{const h=HTP(pr);return h==null?null:(h==='HTP'?1:0);}},
-    {cat:'Eco+Ergo', lbl:'Ergo positiva → FEVI', t:'mw', val:FEVI, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
-    {cat:'Eco+Ergo', lbl:"Ergo positiva → E/e'", t:'mw', val:EE, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
-    {cat:'Eco+Ergo', lbl:'Ergo positiva → TAPSE', t:'mw', val:TAPSE, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
+    {cat:'Eco+Ergo', lbl:'METs → disfunción diastólica', t:'mw', val:METS, grp:pr=>{const d=DIAST(pr);return d==null?null:(d==='Disfunción'?1:0);}, vl:'METs', gl:'disfunción diastólica'},
+    {cat:'Eco+Ergo', lbl:'METs → geometría VI', t:'kw', val:METS, catg:GEOM, vl:'METs'},
+    {cat:'Eco+Ergo', lbl:'METs → HTP (PSAP>35)', t:'mw', val:METS, grp:pr=>{const h=HTP(pr);return h==null?null:(h==='HTP'?1:0);}, vl:'METs', gl:'HTP (PSAP>35)'},
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → FEVI', t:'mw', val:FEVI, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}, vl:'FEVI', gpos:'Ergo positiva', gneg:'Ergo negativa'},
+    {cat:'Eco+Ergo', lbl:"Ergo positiva → E/e'", t:'mw', val:EE, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}, vl:'E/e\'', gpos:'Ergo positiva', gneg:'Ergo negativa'},
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → TAPSE', t:'mw', val:TAPSE, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}, vl:'TAPSE', gpos:'Ergo positiva', gneg:'Ergo negativa'},
     {cat:'Eco+Ergo', lbl:'Ergo positiva → disfunción diastólica', t:'chi', ca:pr=>YN(POS(pr)), cb:DIAST},
     {cat:'Eco+Ergo', lbl:'Ergo positiva → geometría VI', t:'chi', ca:pr=>YN(POS(pr)), cb:GEOM},
     {cat:'EcoEstrés+Ergo', lbl:'FEVI reposo ↔ FEVI estrés', t:'pe', ee:1, x:FEVIrep, y:FEVIstr},
@@ -1831,49 +1841,49 @@ function renderCurrent(){
     {cat:'EcoSmart', scope:'eco', lbl:"FEVI ↔ PSAP",  t:'sp', x:FEVI, y:PSAP},
     {cat:'EcoSmart', scope:'eco', lbl:"FEVI ↔ E/e'",  t:'sp', x:FEVI, y:EE},
     {cat:'EcoSmart', scope:'eco', lbl:'FEVI ↔ edad',  t:'sp', x:FEVI, y:pr=>pr.eco.edad},
-    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → DM',    t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → HTA',   t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → FA',    t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → valvulopatía significativa', t:'mw', val:FEVI, grp:pr=>{const v=VALVSIG(pr.eco);return v==null?null:(v==='Significativa'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → DM',    t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}, vl:'FEVI', gl:'DM'},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → HTA',   t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'FEVI', gl:'HTA'},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → FA',    t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}, vl:'FEVI', gl:'FA / flutter'},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → valvulopatía significativa', t:'mw', val:FEVI, grp:pr=>{const v=VALVSIG(pr.eco);return v==null?null:(v==='Significativa'?1:0);}, vl:'FEVI', gl:'valvulopatía significativa'},
     {cat:'EcoSmart', scope:'eco', lbl:"E/e' ↔ edad",  t:'sp', x:EE, y:pr=>pr.eco.edad},
     {cat:'EcoSmart', scope:'eco', lbl:"E/e' ↔ Vol AI idx", t:'sp', x:EE, y:LAVI},
     {cat:'EcoSmart', scope:'eco', lbl:"E/e' ↔ PSAP",  t:'sp', x:EE, y:PSAP},
-    {cat:'EcoSmart', scope:'eco', lbl:"E/e' → HTA",   t:'mw', val:EE, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:"E/e' → DM",    t:'mw', val:EE, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' → HTA",   t:'mw', val:EE, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'E/e\'', gl:'HTA'},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' → DM",    t:'mw', val:EE, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}, vl:'E/e\'', gl:'DM'},
     {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → HTA', t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>ANT(pr.eco,RE_HTA)},
     {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → DM',  t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>ANT(pr.eco,RE_DM)},
     {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → FA',  t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>ANT(pr.eco,RE_FA)},
     {cat:'EcoSmart', scope:'eco', lbl:'PSAP ↔ TAPSE', t:'sp', x:PSAP, y:TAPSE},
     {cat:'EcoSmart', scope:'eco', lbl:'PSAP ↔ Vol AI idx', t:'sp', x:PSAP, y:LAVI},
-    {cat:'EcoSmart', scope:'eco', lbl:'PSAP → FA',    t:'mw', val:PSAP, grp:pr=>{const v=ANT(pr.eco,RE_FA);return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:'TAPSE → FEVI reducida', t:'mw', val:TAPSE, grp:pr=>{const v=FEVIRED(pr.eco);return v==null?null:(v==='FEVI reducida'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'PSAP → FA',    t:'mw', val:PSAP, grp:pr=>{const v=ANT(pr.eco,RE_FA);return v==null?null:(v==='Sí'?1:0);}, vl:'PSAP', gl:'FA / flutter'},
+    {cat:'EcoSmart', scope:'eco', lbl:'TAPSE → FEVI reducida', t:'mw', val:TAPSE, grp:pr=>{const v=FEVIRED(pr.eco);return v==null?null:(v==='FEVI reducida'?1:0);}, vl:'TAPSE', gl:'FEVI reducida'},
     {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → HTA',  t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>ANT(pr.eco,RE_HTA)},
     {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → DM',   t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>ANT(pr.eco,RE_DM)},
     {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → sexo', t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>SEXO(pr.eco)},
     {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx ↔ edad',  t:'sp', x:pr=>pr.eco.eco.masa_vi, y:pr=>pr.eco.edad},
-    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx → HTA',   t:'mw', val:pr=>pr.eco.eco.masa_vi, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx → HTA',   t:'mw', val:pr=>pr.eco.eco.masa_vi, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'Masa VI idx', gl:'HTA'},
     {cat:'EcoSmart', scope:'eco', lbl:"Vol AI idx ↔ E/e'",   t:'sp', x:LAVI, y:EE},
     {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx ↔ edad',   t:'sp', x:LAVI, y:pr=>pr.eco.edad},
-    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → FA',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → HTA',    t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → DM',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → FA',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}, vl:'Vol AI idx', gl:'FA / flutter'},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → HTA',    t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'Vol AI idx', gl:'HTA'},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → DM',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}, vl:'Vol AI idx', gl:'DM'},
 
     /* ── ErgoSmart intra-app (scope:'ergo') ── */
     {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ edad', t:'sp', x:METS, y:pr=>pr.ergo.edad},
     {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ IMC',  t:'sp', x:METS, y:pr=>_num(_pick(pr.ergo.campos,['imc']))},
     {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ FC máxima', t:'sp', x:METS, y:pr=>_num(_pick(pr.ergo.campos,['fc_max','fcmax']))},
     {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ % FC máx teórica', t:'sp', x:METS, y:pr=>(typeof paFcPct==='function'?paFcPct(pr.ergo):null)},
-    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → sexo', t:'mw', val:METS, grp:pr=>{const v=SEXO(pr.ergo);return v==null?null:(v==='Masculino'?1:0);}},
-    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → HTA',  t:'mw', val:METS, grp:pr=>{const v=ANT(pr.ergo,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → DM',   t:'mw', val:METS, grp:pr=>{const v=ANT(pr.ergo,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
-    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → betabloqueantes', t:'mw', val:METS, grp:pr=>{const v=BB(pr.ergo);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → sexo', t:'mw', val:METS, grp:pr=>{const v=SEXO(pr.ergo);return v==null?null:(v==='Masculino'?1:0);}, vl:'METs', gpos:'Masculino', gneg:'Femenino'},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → HTA',  t:'mw', val:METS, grp:pr=>{const v=ANT(pr.ergo,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'METs', gl:'HTA'},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → DM',   t:'mw', val:METS, grp:pr=>{const v=ANT(pr.ergo,RE_DM); return v==null?null:(v==='Sí'?1:0);}, vl:'METs', gl:'DM'},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → betabloqueantes', t:'mw', val:METS, grp:pr=>{const v=BB(pr.ergo);return v==null?null:(v==='Sí'?1:0);}, vl:'METs', gl:'betabloqueantes'},
     {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → HTA',        t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_HTA)},
     {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → DM',         t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_DM)},
     {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → sexo',       t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>SEXO(pr.ergo)},
     {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → tabaquismo', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_TAB)},
     {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → dislipemia', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_DLP)},
     {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → antecedente CV', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_CV)},
-    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → edad', t:'mw', val:pr=>pr.ergo.edad, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → edad', t:'mw', val:pr=>pr.ergo.edad, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}, vl:'Edad', gpos:'Ergo positiva', gneg:'Ergo negativa'},
 
     /* Cruce que faltaba de la lista pedida: la ergometría positiva contra la FEVI
        dicotomizada, además del contraste continuo que ya existía arriba. */
@@ -2024,36 +2034,59 @@ function renderCurrent(){
     return e.bb_toma===false && v==='' ? null : (e.bb_toma?'Sí':null);
   };
 
+  /* Para las correlaciones los nombres de los ejes SÍ se sacan del label ("X ↔ Y"),
+     porque ahí x es siempre el operando izquierdo. Para mw/kw no: la variable medida
+     está a veces a la derecha de la flecha ("Ergo positiva → FEVI" mide FEVI y agrupa
+     por el resultado de la ergometría), así que deducirla del label daba "Con FEVI /
+     Sin FEVI" sobre medianas de FEVI — el rótulo empujaba justo a la lectura contraria.
+     Por eso mw/kw llevan `vl` (variable medida) y `gl` o `gpos`/`gneg` explícitos en la
+     definición, y esto queda sólo para los ejes de scatter. */
+  function lblPartes(lbl){
+    const m=String(lbl||'').split(/\s*(?:→|↔)\s*/);
+    return m.length>=2 ? {izq:m[0].trim(), der:m.slice(1).join(' ').trim()} : {izq:String(lbl||''), der:''};
+  }
+  /* Orden de lectura de las categóricas: un Set preserva el orden de primera aparición,
+     así que la tabla salía según qué paciente entró primero y la columna "Sí" caía a
+     veces primera y a veces segunda. El p no cambia (Chi² es invariante a permutación),
+     pero dos tablas contiguas dejan de leerse igual. */
+  const ORD_CAT = ['Sí','No','Positiva','Negativa','Femenino','Masculino',
+                   'FEVI conservada','FEVI reducida','sin','Sin disfunción','I','II','III',
+                   'Normal','Remodelado concéntrico','Hipertrofia excéntrica','Hipertrofia concéntrica',
+                   'No significativa','Significativa'];
+  const ordCat = (x,y) => { const a=ORD_CAT.indexOf(x), b=ORD_CAT.indexOf(y);
+    return (a<0?999:a)-(b<0?999:b) || String(x).localeCompare(String(y)); };
+
   function runOne(d){
     const ds=dsFor(d), base={cat:d.cat,lbl:d.lbl,sc:scopeOf(d)};
+    const P=lblPartes(d.lbl);
     if(d.t==='pe'||d.t==='sp'){
       const pairs=[]; ds.forEach(pr=>{const x=d.x(pr),y=d.y(pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);});
       const r=d.t==='pe'?pearson(pairs):spearman(pairs);
       if(!r)return {...base,n:pairs.length,method:d.t==='pe'?'Pearson':'Spearman',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
       const coef=d.t==='pe'?r.r:r.rho, ok=r.n>=15;
-      return {...base,n:r.n,method:d.t==='pe'?'Pearson':'Spearman',stat:(d.t==='pe'?'r=':'ρ=')+coef.toFixed(2),p:r.p,ci:ciTxt(r.ci),sig:sigLight(r.p,ok),coef,plot:{type:'scatter',pairs,slope:r.slope,intercept:r.intercept,ci:r.ci}};
+      return {...base,n:r.n,method:d.t==='pe'?'Pearson':'Spearman',stat:(d.t==='pe'?'r=':'ρ=')+coef.toFixed(2),p:r.p,ci:ciTxt(r.ci),sig:sigLight(r.p,ok),coef,plot:{type:'scatter',pairs,...(r.slope!=null?{slope:r.slope,intercept:r.intercept}:olsFit(pairs)),ci:r.ci,xl:P.izq,yl:P.der,coef}};
     }
     if(d.t==='mw'){
-      const g1=[],g2=[],raw={g1:[],g2:[]}; ds.forEach(pr=>{const v=d.val(pr),gr=d.grp(pr);if(v!=null&&!isNaN(v)&&gr!=null){(gr?g1:g2).push(v);}});
+      const g1=[],g2=[]; ds.forEach(pr=>{const v=d.val(pr),gr=d.grp(pr);if(v!=null&&!isNaN(v)&&gr!=null){(gr?g1:g2).push(v);}});
       const r=mannwhitney(g1,g2);
       if(!r)return {...base,n:g1.length+g2.length,method:'Mann-Whitney U',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
-      return {...base,n:r.n1+r.n2,method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:sigLight(r.p,r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:'Grupo +',vals:g1},{lbl:'Grupo −',vals:g2}]}};
+      return {...base,n:r.n1+r.n2,method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:sigLight(r.p,r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:d.gpos||(d.gl?('Con '+d.gl):'Grupo +'),vals:g1},{lbl:d.gneg||(d.gl?('Sin '+d.gl):'Grupo −'),vals:g2}],vl:d.vl||P.izq}};
     }
     if(d.t==='kw'){
-      const map={}; ds.forEach(pr=>{const v=d.val(pr),c=d.catg(pr);if(v!=null&&!isNaN(v)&&c!=null){(map[c]=map[c]||[]).push(v);}});
+      const map=Object.create(null); ds.forEach(pr=>{const v=d.val(pr),c=d.catg(pr);if(v!=null&&!isNaN(v)&&c!=null){(map[c]=map[c]||[]).push(v);}});
       const cats=Object.keys(map), gs=cats.map(c=>map[c]);
       const r=kruskal(gs);
       if(!r)return {...base,n:gs.reduce((a,g)=>a+g.length,0),method:'Kruskal-Wallis',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
-      return {...base,n:r.N,method:'Kruskal-Wallis',stat:'H='+r.H.toFixed(2)+' (k='+r.k+')',p:r.p,ci:'—',sig:sigLight(r.p,r.N>=15),coef:null,plot:{type:'strip',groups:cats.map((c,i)=>({lbl:c,vals:gs[i]}))}};
+      return {...base,n:r.N,method:'Kruskal-Wallis',stat:'H='+r.H.toFixed(2)+' (k='+r.k+')',p:r.p,ci:'—',sig:sigLight(r.p,r.N>=15),coef:null,plot:{type:'strip',groups:cats.map((c,i)=>({lbl:c,vals:gs[i]})),vl:d.vl||P.izq}};
     }
     // chi
     const data=[]; ds.forEach(pr=>{const a=d.ca(pr),b=d.cb(pr);if(a!=null&&b!=null)data.push([String(a),String(b)]);});
     if(!data.length)return {...base,n:0,method:'Chi²',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
-    const aV=[...new Set(data.map(x=>x[0]))],bV=[...new Set(data.map(x=>x[1]))];
+    const aV=[...new Set(data.map(x=>x[0]))].sort(ordCat),bV=[...new Set(data.map(x=>x[1]))].sort(ordCat);
     const tbl=aV.map(a=>bV.map(b=>data.filter(x=>x[0]===a&&x[1]===b).length));
     const r=chi2test(tbl);
     if(!r)return {...base,n:data.length,method:'Chi²',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
-    return {...base,n:r.N,method:'Chi²',stat:'χ²='+r.chi2.toFixed(2)+(r.minE<5?' ⚠fe<5':''),p:r.p,ci:'—',sig:sigLight(r.p,r.N>=20&&r.minE>=5),coef:null,plot:{type:'bar',aV,bV,tbl}};
+    return {...base,n:r.N,method:'Chi²',stat:'χ²='+r.chi2.toFixed(2)+(r.minE<5?' ⚠fe<5':''),p:r.p,ci:'—',sig:sigLight(r.p,r.N>=20&&r.minE>=5),coef:null,plot:{type:'bar',aV,bV,tbl,al:P.izq,bl:P.der,minE:r.minE}};
   }
 
   let _results=[];
@@ -2087,11 +2120,13 @@ function renderCurrent(){
     if(r.plot.type==='scatter'){
       const pts=r.plot.pairs.map(p=>({x:p[0],y:p[1]}));
       const xs=r.plot.pairs.map(p=>p[0]); const xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs);
-      const line=[{x:xmin,y:r.plot.intercept+r.plot.slope*xmin},{x:xmax,y:r.plot.intercept+r.plot.slope*xmax}];
-      _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:[
-        {label:'Pacientes',data:pts,backgroundColor:'rgba(45,212,191,0.7)',pointRadius:4},
-        {label:'Regresión',type:'line',data:line,borderColor:'#f59e0b',borderWidth:2,pointRadius:0,fill:false}
-      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}}}});
+      const dss=[{label:'Pacientes',data:pts,backgroundColor:'rgba(45,212,191,0.7)',pointRadius:4}];
+      if(rectaVisible(r.plot, r.p!=null && r.p<0.05)){
+        dss.push({label:'Tendencia (mínimos cuadrados)',type:'line',
+          data:[{x:xmin,y:r.plot.intercept+r.plot.slope*xmin},{x:xmax,y:r.plot.intercept+r.plot.slope*xmax}],
+          borderColor:'#f59e0b',borderWidth:2,pointRadius:0,fill:false});
+      }
+      _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:dss},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}}}});
     } else if(r.plot.type==='strip'){
       const ds=r.plot.groups.map((g,i)=>({label:g.lbl+' (n='+g.vals.length+')',data:g.vals.map(v=>({x:i+1+(Math.round(v*7)%10-5)/60,y:v})),backgroundColor:['rgba(45,212,191,.7)','rgba(244,63,94,.7)','rgba(59,130,246,.7)','rgba(234,179,8,.7)'][i%4],pointRadius:4}));
       _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,scales:{x:{min:0.5,max:r.plot.groups.length+0.5,ticks:{stepSize:1,callback:(v)=>r.plot.groups[v-1]?r.plot.groups[v-1].lbl:''}}}}});
@@ -2100,6 +2135,168 @@ function renderCurrent(){
       _chScatter=new Chart(ctx,{type:'bar',data:{labels:r.plot.aV.map(String),datasets},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}}}});
     }
     document.getElementById('est-scatter-wrap').scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  /* ── Detalle por asociación (acordeón) ──
+     Muestra la población real detrás de cada resultado. Los datos vienen en `r.plot`,
+     armado por runOne con la MISMA muestra que se le pasó al test: recontar acá por
+     separado es la forma más fácil de terminar con una tabla y un p que describen
+     poblaciones distintas.
+     Las etiquetas de categoría hoy salen de conjuntos calculados, pero varias derivan de
+     campos de otras apps (grado_diastolico, geometria_vi vienen como texto), así que se
+     escapan siempre. */
+  /* Regla única para la recta, compartida por el acordeón y el gráfico grande: sólo si
+     el resultado es significativo Y el signo del ajuste coincide con el del coeficiente.
+     Si el panel la oculta y el gráfico de al lado la muestra, uno de los dos miente. */
+  function rectaVisible(pl, sig){
+    if(!sig || pl.slope==null || pl.intercept==null || pl.slope===0) return false;
+    return pl.coef==null || Math.sign(pl.slope)===Math.sign(pl.coef);
+  }
+  const _f1 = v => (v==null||isNaN(v)) ? '—' : String(Math.round(v*10)/10);
+  const _pctFila = (x,tot) => tot>0 ? (Math.round(1000*x/tot)/10).toFixed(1)+'%' : '—';
+  const _notaHTML = html => '<div style="margin-top:8px;padding:8px 10px;background:var(--bg-1);'+
+    'border-left:3px solid var(--accent);border-radius:4px;font-size:11px;line-height:1.5;'+
+    'color:var(--text-2);">'+html+'</div>';
+  const _th = 'padding:4px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
+
+  function detChi(pl){
+    const R=pl.aV.length, C=pl.bV.length;
+    const rt=pl.tbl.map(r=>r.reduce((a,b)=>a+b,0));
+    const ct=[]; for(let c=0;c<C;c++){ let t=0; for(let r=0;r<R;r++)t+=pl.tbl[r][c]; ct.push(t); }
+    const N=rt.reduce((a,b)=>a+b,0);
+    const al=pl.al||'Categoría', bl=pl.bl||'Grupo';
+    let h='<table style="border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+_th+'text-align:left;">'+esc(al)+'</th>'+
+      pl.bV.map(b=>'<th style="'+_th+'text-align:center;">'+esc(bl)+': '+esc(b)+'</th>').join('')+
+      '<th style="'+_th+'text-align:center;">Total</th></tr></thead><tbody>';
+    pl.aV.forEach((a,ri)=>{
+      h+='<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:5px 8px;font-weight:600;white-space:nowrap;">'+esc(a)+'</td>'+
+        pl.tbl[ri].map(v=>'<td style="padding:5px 8px;text-align:center;">'+v+
+          '<div style="font-size:10px;color:var(--text-2);">'+_pctFila(v,rt[ri])+'</div></td>').join('')+
+        '<td style="padding:5px 8px;text-align:center;font-weight:600;">'+rt[ri]+'</td></tr>';
+    });
+    h+='<tr style="border-top:2px solid var(--border);font-weight:600;">'+
+      '<td style="padding:5px 8px;">Total</td>'+
+      ct.map(v=>'<td style="padding:5px 8px;text-align:center;">'+v+'</td>').join('')+
+      '<td style="padding:5px 8px;text-align:center;">'+N+'</td></tr></tbody></table>';
+    let nota='Cada celda muestra cuántos pacientes de tu base tienen esa combinación de '+
+      'características. El porcentaje es <b>sobre la fila</b>: de los que están en esa categoría '+
+      'de '+esc(al)+', qué proporción cae en cada valor de '+esc(bl)+'. Total analizado: N='+N+'.';
+    if(pl.minE!=null && pl.minE<5) nota+=' <b>Ojo:</b> alguna frecuencia esperada es menor a 5, '+
+      'condición en la que el Chi² pierde validez — confirmar con test exacto de Fisher.';
+    return h+_notaHTML(nota);
+  }
+
+  function detGrupos(pl){
+    const vl=pl.vl||'Variable';
+    let h='<table style="border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+_th+'text-align:left;">Grupo</th>'+
+      '<th style="'+_th+'text-align:right;">Mediana de '+esc(vl)+'</th><th style="'+_th+'text-align:right;">P25–P75</th>'+
+      '<th style="'+_th+'text-align:center;">N</th></tr></thead><tbody>';
+    pl.groups.forEach(g=>{
+      const st=paStats(g.vals);
+      h+='<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:5px 8px;font-weight:600;white-space:nowrap;">'+esc(g.lbl)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;">'+(st.n?_f1(st.med):'—')+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;white-space:nowrap;">'+(st.n?(_f1(st.p25)+'–'+_f1(st.p75)):'—')+'</td>'+
+        '<td style="padding:5px 8px;text-align:center;">'+st.n+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    return h+_notaHTML('Compara el valor típico de '+esc(vl)+' entre los grupos. Se usa la '+
+      '<b>mediana</b> y no la media porque la prueba compara rangos, no promedios. El P25–P75 es '+
+      'el rango donde cae la mitad central de cada grupo: si los rangos se superponen mucho, la '+
+      'diferencia es chica aunque el p sea significativo.');
+  }
+
+  function detScatter(pl, sig){
+    const xs=pl.pairs.map(q=>q[0]), ys=pl.pairs.map(q=>q[1]);
+    const A=paStats(xs), B=paStats(ys);
+    const fila=(nom,x)=>'<tr style="border-top:1px solid var(--border);">'+
+      '<td style="padding:5px 8px;font-weight:600;white-space:nowrap;">'+esc(nom)+'</td>'+
+      '<td style="padding:5px 8px;text-align:right;">'+(x.n?_f1(x.mean):'—')+'</td>'+
+      '<td style="padding:5px 8px;text-align:right;">'+(x.n?_f1(x.sd):'—')+'</td>'+
+      '<td style="padding:5px 8px;text-align:right;">'+(x.n?_f1(x.med):'—')+'</td>'+
+      '<td style="padding:5px 8px;text-align:right;white-space:nowrap;">'+(x.n?(_f1(x.p25)+'–'+_f1(x.p75)):'—')+'</td></tr>';
+    return '<table style="border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+_th+'text-align:left;">Variable</th>'+
+      '<th style="'+_th+'text-align:right;">Media</th><th style="'+_th+'text-align:right;">DS</th>'+
+      '<th style="'+_th+'text-align:right;">Mediana</th><th style="'+_th+'text-align:right;">P25–P75</th>'+
+      '</tr></thead><tbody>'+fila(pl.xl||'X',A)+fila(pl.yl||'Y',B)+'</tbody></table>'+
+      '<div style="height:230px;margin-top:10px;" data-sc="1"><canvas></canvas></div>'+
+      _notaHTML('Cada punto es un paciente con las dos medidas disponibles (N='+pl.pairs.length+'). '+
+        'Si ves una nube sin forma, no hay relación; si los puntos siguen una pendiente, la hay.'+
+        (rectaVisible(pl,sig) ? '' : (sig
+          ? ' No se dibuja la recta porque el ajuste lineal apunta al sentido contrario que el coeficiente, señal de que algún valor extremo la está torciendo.'
+          : ' No se dibuja la recta porque la relación no alcanza significación estadística.')));
+  }
+
+  /* La recta viene de una regresión lineal sobre los valores crudos, pero Spearman
+     contrasta rangos. Con un outlier de mucho leverage el signo puede salir al revés que
+     el coeficiente que muestra la fila, y entonces el gráfico desmentiría al número que
+     este panel existe para respaldar. Sólo se dibuja si los signos coinciden. */
+  function detScatterChart(cont, pl, sig){
+    const box=cont.querySelector('[data-sc]'); if(!box) return;
+    const el=box.querySelector('canvas'); if(!el) return;
+    if(!HAS_CHART){
+      box.innerHTML='<div style="height:100%;display:flex;align-items:center;justify-content:center;'+
+        'color:var(--text-2);font-size:11px;text-align:center;">Gráfico no disponible (no cargó Chart.js).'+
+        '<br>Las medidas de la tabla de arriba son correctas igual.</div>';
+      return;
+    }
+    const pts=pl.pairs.map(q=>({x:q[0],y:q[1]}));
+    const ds=[{label:'Pacientes',data:pts,backgroundColor:'rgba(45,212,191,0.7)',pointRadius:3.5}];
+    const conRecta=rectaVisible(pl, sig);
+    if(conRecta){
+      const xs=pts.map(q=>q.x), x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+      ds.push({label:'Tendencia (mínimos cuadrados)',type:'line',
+        data:[{x:x0,y:pl.intercept+pl.slope*x0},{x:x1,y:pl.intercept+pl.slope*x1}],
+        borderColor:'#f59e0b',borderWidth:2,pointRadius:0,fill:false});
+    }
+    new Chart(el,{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:conRecta,labels:{boxWidth:12,font:{size:10}}}},
+      scales:{x:{title:{display:true,text:pl.xl||'',font:{size:10}},ticks:{font:{size:10}}},
+              y:{title:{display:true,text:pl.yl||'',font:{size:10}},ticks:{font:{size:10}}}}}});
+  }
+
+  /* La regla de la tabla pone cursor:pointer y hover a todo tbody tr, incluida la fila
+     de detalle, que no es clickeable. */
+  (function(){ const st=document.createElement('style');
+    st.textContent='#est-asoc-tabla tr.asoc-det{cursor:default;background:var(--bg-1)!important;}';
+    document.head.appendChild(st); })();
+
+  function detalleHTML(r){
+    if(!r.plot) return '<div style="color:var(--text-2);font-size:12px;">Sin datos suficientes para mostrar el detalle de esta asociación.</div>';
+    if(r.plot.type==='bar')   return detChi(r.plot);
+    if(r.plot.type==='strip') return detGrupos(r.plot);
+    return detScatter(r.plot, r.p!=null && r.p<0.05);
+  }
+
+  let _asocRows=[];
+
+  function asocToggle(tr, idx){
+    const sig=tr.nextElementSibling;
+    if(sig && sig.classList.contains('asoc-det')){
+      const cv=sig.querySelector('canvas');
+      if(cv && HAS_CHART){ const c=Chart.getChart(cv); if(c)c.destroy(); }
+      sig.remove(); tr.setAttribute('aria-expanded','false');
+      const ch=tr.querySelector('.asoc-chev'); if(ch)ch.textContent='▸';
+      return;
+    }
+    const r=_asocRows[idx]; if(!r) return;
+    const det=document.createElement('tr');
+    det.className='asoc-det';
+    // "Ver en grande" mantiene accesible el gráfico compartido de abajo, que antes se
+    // abría con el click de la fila.
+    const ampliar = r.plot ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:11px;" '+
+      'data-ampliar>Ver el gráfico en grande ↗</button></div>' : '';
+    det.innerHTML='<td colspan="7" style="padding:12px 16px;background:var(--bg-1);">'+detalleHTML(r)+ampliar+'</td>';
+    tr.parentNode.insertBefore(det, tr.nextSibling);
+    tr.setAttribute('aria-expanded','true');
+    const ch=tr.querySelector('.asoc-chev'); if(ch)ch.textContent='▾';
+    if(r.plot && r.plot.type==='scatter') detScatterChart(det, r.plot, r.p!=null && r.p<0.05);
+    const bt=det.querySelector('[data-ampliar]');
+    if(bt) bt.addEventListener('click', e=>{ e.stopPropagation(); openPlot(r); });
   }
 
   function renderForest(){
@@ -2125,11 +2322,25 @@ function renderCurrent(){
   window.estAsocRender=function(){
     const host=document.getElementById('est-asoc-tabla'); if(!host)return;
     const rows=filtered();
+    /* Destruir los scatter abiertos ANTES de pisar el innerHTML: al sacar el canvas del
+       DOM, Chart.js conserva la instancia en su registro con sus datos y listeners, así
+       que cada cambio de filtro dejaba un chart huérfano acumulándose. */
+    host.querySelectorAll('tr.asoc-det canvas').forEach(cv=>{
+      if(HAS_CHART){ const c=Chart.getChart(cv); if(c)c.destroy(); }
+    });
+    // Se asigna antes del early return: si no, quedaba con las filas del render anterior
+    // y el índice de data-ri apuntaba a otra asociación.
+    _asocRows = rows;
     if(!rows.length){ host.innerHTML='<div style="padding:16px;color:var(--text-2);text-align:center;">Sin asociaciones que cumplan los filtros (o pocos pacientes con datos cruzados).</div>'; renderForest(); return; }
     let body='';
-    rows.forEach((r,idx)=>{ body+='<tr data-ri="'+idx+'"><td>'+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td>'+r.ci+'</td><td style="text-align:center;font-size:15px;">'+r.sig+'</td></tr>'; });
+    rows.forEach((r,idx)=>{ body+='<tr class="asoc-fila" data-ri="'+idx+'" tabindex="0" aria-expanded="false" style="cursor:pointer;">'+
+      '<td><span class="asoc-chev" style="display:inline-block;width:12px;color:var(--text-2);">▸</span> '+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td>'+r.ci+'</td><td style="text-align:center;font-size:15px;">'+r.sig+'</td></tr>'; });
     host.innerHTML='<table class="est-tbl"><thead><tr><th>Asociación</th><th>N</th><th>Método</th><th>Estadístico</th><th>p</th><th>IC 95%</th><th>Sig.</th></tr></thead><tbody>'+body+'</tbody></table>';
-    host.querySelectorAll('tbody tr').forEach(tr=>tr.addEventListener('click',()=>openPlot(rows[parseInt(tr.dataset.ri)])));
+    host.querySelectorAll('tbody tr.asoc-fila').forEach(tr=>{
+      const idx=parseInt(tr.dataset.ri,10);
+      tr.addEventListener('click',()=>asocToggle(tr,idx));
+      tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); asocToggle(tr,idx); } });
+    });
     renderForest();
   };
 
