@@ -504,6 +504,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           <button class="est-subtab active" data-est="asoc" onclick="estSubtab('asoc',this)">Asociaciones</button>
           <button class="est-subtab" data-est="porapp" onclick="estSubtab('porapp',this)">Por app</button>
           <button class="est-subtab" data-est="ia" onclick="estSubtab('ia',this)">Análisis IA</button>
+          <!-- Fuera de los paneles a propósito: el filtro por médico rige las tres
+               subtabs, así que no puede vivir dentro de la barra de una sola. -->
+          <div class="field" style="margin-left:auto;min-width:210px;">
+            <label>Médico</label>
+            <select id="est-f-med" onchange="estMedCambio()"><option value="all">Todos (servicio)</option></select>
+          </div>
         </div>
 
         <!-- PANEL POR APP — descriptivos + histogramas, una sección por app -->
@@ -1812,13 +1818,186 @@ function renderCurrent(){
     {cat:'EcoEstrés+Ergo', lbl:'FEVI reposo ↔ FEVI estrés', t:'pe', ee:1, x:FEVIrep, y:FEVIstr},
     {cat:'EcoEstrés+Ergo', lbl:'Reserva contráctil ↔ METs', t:'sp', ee:1, x:RESERVA, y:METSee},
     {cat:'EcoEstrés+Ergo', lbl:'Respuesta PSAP estrés ↔ METs', t:'sp', ee:1, x:PSAPstr, y:METSee},
+
+    /* ── EcoSmart intra-app (scope:'eco') ──
+       Corren sobre TODOS los estudios de EcoSmart, no sólo los de pacientes que además
+       tienen ergometría: ésa era la población equivocada y con N mucho menor.
+       El pseudo-par {eco:s} deja reusar los accessors de arriba tal cual. */
+    {cat:'EcoSmart', scope:'eco', lbl:"FEVI ↔ PSAP",  t:'sp', x:FEVI, y:PSAP},
+    {cat:'EcoSmart', scope:'eco', lbl:"FEVI ↔ E/e'",  t:'sp', x:FEVI, y:EE},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI ↔ edad',  t:'sp', x:FEVI, y:pr=>pr.eco.edad},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → DM',    t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → HTA',   t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → FA',    t:'mw', val:FEVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI → valvulopatía significativa', t:'mw', val:FEVI, grp:pr=>{const v=VALVSIG(pr.eco);return v==null?null:(v==='Significativa'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' ↔ edad",  t:'sp', x:EE, y:pr=>pr.eco.edad},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' ↔ Vol AI idx", t:'sp', x:EE, y:LAVI},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' ↔ PSAP",  t:'sp', x:EE, y:PSAP},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' → HTA",   t:'mw', val:EE, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:"E/e' → DM",    t:'mw', val:EE, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → HTA', t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>ANT(pr.eco,RE_HTA)},
+    {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → DM',  t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>ANT(pr.eco,RE_DM)},
+    {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → FA',  t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>ANT(pr.eco,RE_FA)},
+    {cat:'EcoSmart', scope:'eco', lbl:'PSAP ↔ TAPSE', t:'sp', x:PSAP, y:TAPSE},
+    {cat:'EcoSmart', scope:'eco', lbl:'PSAP ↔ Vol AI idx', t:'sp', x:PSAP, y:LAVI},
+    {cat:'EcoSmart', scope:'eco', lbl:'PSAP → FA',    t:'mw', val:PSAP, grp:pr=>{const v=ANT(pr.eco,RE_FA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'TAPSE → FEVI reducida', t:'mw', val:TAPSE, grp:pr=>{const v=FEVIRED(pr.eco);return v==null?null:(v==='FEVI reducida'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → HTA',  t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>ANT(pr.eco,RE_HTA)},
+    {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → DM',   t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>ANT(pr.eco,RE_DM)},
+    {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → sexo', t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>SEXO(pr.eco)},
+    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx ↔ edad',  t:'sp', x:pr=>pr.eco.eco.masa_vi, y:pr=>pr.eco.edad},
+    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx → HTA',   t:'mw', val:pr=>pr.eco.eco.masa_vi, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:"Vol AI idx ↔ E/e'",   t:'sp', x:LAVI, y:EE},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx ↔ edad',   t:'sp', x:LAVI, y:pr=>pr.eco.edad},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → FA',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → HTA',    t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → DM',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
+
+    /* ── ErgoSmart intra-app (scope:'ergo') ── */
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ edad', t:'sp', x:METS, y:pr=>pr.ergo.edad},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ IMC',  t:'sp', x:METS, y:pr=>_num(_pick(pr.ergo.campos,['imc']))},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ FC máxima', t:'sp', x:METS, y:pr=>_num(_pick(pr.ergo.campos,['fc_max','fcmax']))},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ % FC máx teórica', t:'sp', x:METS, y:pr=>(typeof paFcPct==='function'?paFcPct(pr.ergo):null)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → sexo', t:'mw', val:METS, grp:pr=>{const v=SEXO(pr.ergo);return v==null?null:(v==='Masculino'?1:0);}},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → HTA',  t:'mw', val:METS, grp:pr=>{const v=ANT(pr.ergo,RE_HTA);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → DM',   t:'mw', val:METS, grp:pr=>{const v=ANT(pr.ergo,RE_DM); return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'METs → betabloqueantes', t:'mw', val:METS, grp:pr=>{const v=BB(pr.ergo);return v==null?null:(v==='Sí'?1:0);}},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → HTA',        t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_HTA)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → DM',         t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_DM)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → sexo',       t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>SEXO(pr.ergo)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → tabaquismo', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_TAB)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → dislipemia', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_DLP)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → antecedente CV', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>ANT(pr.ergo,RE_CV)},
+    {cat:'ErgoSmart', scope:'ergo', lbl:'Ergo positiva → edad', t:'mw', val:pr=>pr.ergo.edad, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}},
+
+    /* Cruce que faltaba de la lista pedida: la ergometría positiva contra la FEVI
+       dicotomizada, además del contraste continuo que ya existía arriba. */
+    {cat:'Eco+Ergo', lbl:'Ergo positiva → FEVI reducida', t:'chi', ca:pr=>YN(POS(pr)), cb:pr=>FEVIRED(pr.eco)},
   ];
 
-  let _ecoErgo=[], _eeErgo=[];
-  function rebuildCross(){ _ecoErgo=cross('eco','ergo'); _eeErgo=cross('ecoestres','ergo'); }
+  let _ecoErgo=[], _eeErgo=[], _intra={};
+
+  /* Base de estudios sobre la que corre TODO el módulo: rango de fechas vigente y,
+     si hay médico seleccionado, sólo los suyos. Un único lugar para que la tabla, el
+     heatmap, los descriptivos y los informes no puedan mirar poblaciones distintas. */
+  /* Un mismo médico se parte en dos identidades cuando una app le guarda la matrícula
+     y otra no (doctorIdentity clavea por matrícula, y si no hay, por nombre). En el
+     selector eso salía como dos opciones con la MISMA etiqueta y distinto N: se elija
+     la que se elija, las estadísticas salían sobre una fracción de sus estudios y sin
+     ningún aviso. Acá se unifica la identidad sin-matrícula con la con-matrícula cuando
+     el nombre normalizado apunta a una sola: si apunta a varias es ambiguo (dos colegas
+     homónimos) y se dejan separadas a propósito.
+     No se toca doctorIdentity porque la comparte la vista Médicos. */
+  function estAliasMed(list){
+    const porNombre = new Map();   // nombre normalizado -> Set de claves con matrícula
+    list.forEach(s=>{
+      const d=doctorIdentity(s);
+      if(!d.byMat || !s.medNom) return;
+      const n=normTxt(s.medNom);
+      if(!porNombre.has(n)) porNombre.set(n, new Set());
+      porNombre.get(n).add(d.key);
+    });
+    const alias = new Map();
+    list.forEach(s=>{
+      const d=doctorIdentity(s);
+      if(d.byMat || !s.medNom) return;
+      const cand = porNombre.get(normTxt(s.medNom));
+      if(cand && cand.size===1) alias.set(d.key, [...cand][0]);
+    });
+    return k => alias.get(k) || k;
+  }
+
+  function estBase(){
+    let list = (typeof filteredStudies==='function') ? filteredStudies() : [];
+    const med = (document.getElementById('est-f-med')||{}).value || 'all';
+    if(med && med!=='all' && typeof doctorIdentity==='function'){
+      const canon = estAliasMed(list);
+      list = list.filter(s=>canon(doctorIdentity(s).key)===med);
+    }
+    return list;
+  }
+
+  /* Scopes. Los intra-app envuelven cada estudio como pseudo-par ({eco:s} / {ergo:s})
+     a propósito: así los accessors ya escritos —que esperan pr.eco / pr.ergo— sirven
+     sin tocarlos, y runOne no necesita saber si está mirando un estudio o un par. */
+  function rebuildCross(){
+    const base = estBase();
+    /* Con filtro por médico, un par cruzado entra sólo si AMBOS estudios son suyos:
+       "las asociaciones sobre sus estudios", no sobre sus pacientes. Si el eco lo hizo
+       él y la ergometría un colega, el par queda afuera —por eso el N cruzado puede
+       caer bastante al filtrar, y no es un error. */
+    const enBase = pr => Object.keys(pr).every(k=>base.indexOf(pr[k])>=0);
+    _ecoErgo = cross('eco','ergo').filter(enBase);
+    _eeErgo  = cross('ecoestres','ergo').filter(enBase);
+    _intra   = {};
+    Object.keys(APPS).forEach(a=>{ _intra[a] = base.filter(s=>s.app===a).map(s=>({[a]:s})); });
+  }
+
+  function dsFor(d){
+    const sc = d.scope || (d.ee ? 'cross-ee-ergo' : 'cross-eco-ergo');
+    if(sc==='cross-eco-ergo') return _ecoErgo;
+    if(sc==='cross-ee-ergo')  return _eeErgo;
+    return _intra[sc] || [];
+  }
+
+  /* ── Accessors de antecedentes ──
+     EcoSmart los guarda en campos.antecedentes_sel y ErgoSmart en antec_cv_sel, en
+     ambos casos como array de etiquetas de checkbox. Las etiquetas NO coinciden entre
+     apps ("FA / flutter" vs "FA / Flutter", "Valvulopatía conocida" vs "Valvulopatía"),
+     por eso se matchea con regex y no por igualdad. Valores verificados leyendo los
+     data-val de cada app, no asumidos.
+     Array vacío = el médico vio la lista y no marcó nada → 'No'.
+     Campo ausente = estudio viejo sin checklist → null (no evaluado), para no contar
+     como negativo lo que en realidad no se preguntó. */
+  const _antArr = s => {
+    if(!s) return null;
+    let a = (s.eco && s.eco.antecedentes != null) ? s.eco.antecedentes
+          : (s.ergo && s.ergo.antec_cv_sel != null ? s.ergo.antec_cv_sel : null);
+    /* Ojo: array VACÍO no es "sin dato" — el checklist de ErgoSmart siempre se muestra,
+       así que [] significa "no marcó ningún antecedente" (igual que el "[]" de EcoSmart).
+       Descartarlo sacaba de toda asociación justamente a los pacientes sin factores de
+       riesgo, o sea al grupo de comparación. */
+    if(a==null) a = _pick(s.campos,['antecedentes_sel','antecedentes','antec_cv_sel']);
+    if(a==null) return null;
+    if(typeof a === 'string'){
+      const t=a.trim(); if(!t) return [];
+      try{ const p=JSON.parse(t); a = Array.isArray(p)?p:[t]; }catch(e){ a = t.split(/[;,\n]/); }
+    }
+    return Array.isArray(a) ? a.map(x=>String(x).trim()).filter(Boolean) : null;
+  };
+  const ANT = (s,re) => { const a=_antArr(s); if(a==null) return null; return a.some(x=>re.test(x))?'Sí':'No'; };
+  const RE_HTA=/\bhta\b|hipertensi/i, RE_DM=/\bdm\b|diabet/i, RE_FA=/\bfa\b|flutter|fibrilaci/i,
+        RE_TAB=/tabaqu|fumador/i, RE_DLP=/dislipem|dislipid/i,
+        RE_CV=/iam|isqu[eé]mic|by-?pass|crm|stent|atc|ic previa|acv|ait|mch|valvulopat/i;
+
+  // EcoSmart: derivadas clínicas
+  const SEXO = s => { const x=String((s&&s.sexo)||'').toLowerCase(); return x.startsWith('m')?'Masculino':(x.startsWith('f')?'Femenino':null); };
+  const FEVIRED = s => { const f=(s&&s.eco)?s.eco.fevi_simpson:null; return f==null?null:(f<50?'FEVI reducida':'FEVI conservada'); };
+  const DDGRADO = s => { const g=(s&&s.eco)?s.eco.grado_diastolico:null; return g?String(g):null; };
+  const GEOMS = s => { const g=(s&&s.eco)?s.eco.geometria_vi:null; return g?String(g):null; };
+  /* Valvulopatía significativa = alguna moderada o severa. Se mira el texto del grado y
+     las binarias que exporta EcoSmart; si no hay ni una ni otra, devuelve null en vez de
+     'No', para no contar como "sin valvulopatía" un estudio donde no se evaluaron. */
+  const VALVSIG = s => {
+    const e = s && s.eco; if(!e) return null;
+    const txts=[e.im_grado_txt,e.iao_grado_txt,e.it_grado_txt,e.eao_grado_txt].filter(Boolean);
+    const bins=[e.im_mod,e.im_sev,e.iao_mod,e.iao_sev,e.it_mod,e.it_sev,e.eao_mod,e.eao_sev];
+    const hayBin = bins.some(v=>v===1);
+    if(!txts.length && !hayBin && (s.eco.fevi_simpson==null)) return null;
+    return (hayBin || txts.some(t=>/moder|sever/i.test(t))) ? 'Significativa' : 'No significativa';
+  };
+  // ErgoSmart: betabloqueantes al momento del estudio
+  const BB = s => {
+    const e = s && s.ergo; if(!e) return null;
+    if(e.bb_toma===true) return 'Sí';
+    const v=String(e.bbs==null?'':e.bbs).toLowerCase().trim();
+    if(v==='si'||v==='sí') return 'Sí';
+    if(v==='no') return 'No';
+    return e.bb_toma===false && v==='' ? null : (e.bb_toma?'Sí':null);
+  };
 
   function runOne(d){
-    const ds=d.ee?_eeErgo:_ecoErgo, base={cat:d.cat,lbl:d.lbl};
+    const ds=dsFor(d), base={cat:d.cat,lbl:d.lbl};
     if(d.t==='pe'||d.t==='sp'){
       const pairs=[]; ds.forEach(pr=>{const x=d.x(pr),y=d.y(pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);});
       const r=d.t==='pe'?pearson(pairs):spearman(pairs);
@@ -1941,9 +2120,44 @@ function renderCurrent(){
     document.querySelectorAll('#view-estadistica .est-subtab').forEach(b=>b.classList.remove('active'));
     if(el) el.classList.add('active');
     ['asoc','porapp','ia'].forEach(p=>{ const n=document.getElementById('est-panel-'+p); if(n) n.style.display=(p===id?'block':'none'); });
+    if(typeof estFillMedSelect==='function') estFillMedSelect();
     if(id==='asoc'){ estAsocRender(); renderHeatmap(); }
     if(id==='porapp' && typeof paRender==='function'){ paFillAppSelect(); paRender(); }
   };
+  /* Fase 4 — filtro por médico. estBase() es la única fuente de la población, así que
+     con recomputar todo alcanza: asociaciones, heatmap, forest y descriptivos quedan
+     mirando exactamente los mismos estudios. */
+  window.estBaseStudies = estBase;
+  window.estFillMedSelect = function(){
+    const sel=document.getElementById('est-f-med'); if(!sel) return;
+    const prev=sel.value;
+    const list=(typeof filteredStudies==='function') ? filteredStudies() : [];
+    const canon=estAliasMed(list);
+    /* Se agrupa por clave canónica (ver estAliasMed): las identidades sin matrícula
+       que corresponden a un médico ya identificado se suman a la suya, para que el N
+       de la opción sea el total real de sus estudios. */
+    const g=new Map();
+    list.forEach(s=>{
+      const d=doctorIdentity(s); if(d.key==='__sinmed') return;
+      const k=canon(d.key);
+      if(!g.has(k)) g.set(k,{key:k,label:d.label,n:0});
+      const e=g.get(k); e.n++;
+      if(d.byMat) e.label=d.label;   // la etiqueta con matrícula manda
+    });
+    sel.innerHTML='<option value="all">Todos (servicio)</option>'
+      + [...g.values()].sort((a,b)=>b.n-a.n)
+          .map(d=>'<option value="'+esc(d.key)+'">'+d.label+' ('+d.n+')</option>').join('');
+    if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
+  };
+  window.estMedCambio = function(){
+    computeAll(); estAsocRender(); renderHeatmap();
+    const pa=document.getElementById('est-panel-porapp');
+    if(pa && pa.style.display!=='none' && typeof paRender==='function') paRender();
+    // Los informes ya generados quedan de la población anterior: se limpian para que
+    // nadie lea un texto que no corresponde al médico que ahora está seleccionado.
+    ['est-informe-basico','est-informe-ia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=''; });
+  };
+
   // El selector de app se arma desde APPS, así que una 5.ª app aparece sola.
   window.paFillAppSelect=function(){
     const sel=document.getElementById('pa-f-app'); if(!sel||sel.dataset.listo==='1') return;
@@ -2055,7 +2269,10 @@ function paRender(){
   paDestroyCharts();
   const sel=document.getElementById('pa-f-app'), nMin=+((document.getElementById('pa-f-n')||{}).value||1);
   const appFiltro=sel?sel.value:'all';
-  const lista=(typeof paStudies==='function')?paStudies():filteredStudies();
+  // Misma población que las asociaciones (rango + filtro por médico). paStudies es una
+  // costura para inyectar datos en las pruebas sin tocar el estado global.
+  const lista=(typeof paStudies==='function')?paStudies()
+             :((typeof estBaseStudies==='function')?estBaseStudies():filteredStudies());
   const porApp=byApp(lista);
   const apps=Object.keys(PA_VARS).filter(a=>appFiltro==='all'||appFiltro===a);
   let html='';
@@ -2112,7 +2329,10 @@ function paRender(){
 
 // Filas planas para exportar — mismo cálculo que la tabla, sin recalcular aparte.
 function paFilas(){
-  const lista=(typeof paStudies==='function')?paStudies():filteredStudies();
+  // Misma población que las asociaciones (rango + filtro por médico). paStudies es una
+  // costura para inyectar datos en las pruebas sin tocar el estado global.
+  const lista=(typeof paStudies==='function')?paStudies()
+             :((typeof estBaseStudies==='function')?estBaseStudies():filteredStudies());
   const porApp=byApp(lista), out=[];
   Object.keys(PA_VARS).forEach(app=>{
     const estudios=porApp[app]||[]; if(!estudios.length) return;
