@@ -895,7 +895,12 @@ function normalizeStudy(raw, app){
       // Indicación
       indicacion_sel: _arr(rc(['indicacion_sel'])),
       // Antecedentes CV
-      antec_cv_sel: _arr(rc(['antec_cv_sel'])),
+      /* null (campo ausente = estudio viejo, sin checklist) se conserva como null y NO
+         se colapsa a []: son cosas distintas. [] es "se preguntó y no marcó ninguno"
+         → cuenta como sin factores de riesgo; null es "no se preguntó" → no se evalúa.
+         Aplanarlos metía a los estudios viejos en el grupo control como si fueran
+         sanos, contaminándolo con pacientes de riesgo desconocido. */
+      antec_cv_sel: (rc(['antec_cv_sel'])==null ? null : _arr(rc(['antec_cv_sel']))),
       // Medicación activa
       med_activa_sel: _arr(rc(['med_activa_sel'])),
       // Betabloqueante
@@ -1930,7 +1935,21 @@ function renderCurrent(){
     _ecoErgo = cross('eco','ergo').filter(enBase);
     _eeErgo  = cross('ecoestres','ergo').filter(enBase);
     _intra   = {};
-    Object.keys(APPS).forEach(a=>{ _intra[a] = base.filter(s=>s.app===a).map(s=>({[a]:s})); });
+    /* Una fila por PACIENTE, no por estudio. Si alguien tiene tres ecos en el período,
+       tomarlos como tres observaciones viola el supuesto de independencia de Pearson,
+       Spearman, Mann-Whitney y Chi², y el p sale anticonservador (más chico de lo que
+       corresponde). Se conserva el estudio más reciente, igual que hace cross().
+       Los no identificables no se pueden agrupar: entran de a uno. */
+    Object.keys(APPS).forEach(a=>{
+      const porPac=new Map(), sueltos=[];
+      base.filter(s=>s.app===a).forEach(s=>{
+        const id=s._pid;
+        if(!id || !id.identifiable){ sueltos.push(s); return; }
+        const prev=porPac.get(id.key);
+        if(!prev || (s.fecha && (!prev.fecha || s.fecha>prev.fecha))) porPac.set(id.key,s);
+      });
+      _intra[a] = [...porPac.values()].concat(sueltos).map(s=>({[a]:s}));
+    });
   }
 
   const scopeOf = d => d.scope || (d.ee ? 'cross-ee-ergo' : 'cross-eco-ergo');
@@ -1976,7 +1995,11 @@ function renderCurrent(){
         RE_CV=/iam|isqu[eé]mic|by-?pass|crm|stent|atc|ic previa|acv|ait|mch|valvulopat/i;
 
   // EcoSmart: derivadas clínicas
-  const SEXO = s => { const x=String((s&&s.sexo)||'').toLowerCase(); return x.startsWith('m')?'Masculino':(x.startsWith('f')?'Femenino':null); };
+  /* Mismo criterio que el gráfico de Panorama: "mujer" empieza con m, así que un
+     startsWith('m') la clasificaba como Masculino —no perdía el dato, lo invertía— y
+     además descartaba "hombre". Femenino se evalúa primero por esa razón. */
+  const SEXO = s => { const x=String((s&&s.sexo)||'').toLowerCase().trim();
+    return /^f|muj/.test(x)?'Femenino':(/^m|hom|masc/.test(x)?'Masculino':null); };
   const FEVIRED = s => { const f=(s&&s.eco)?s.eco.fevi_simpson:null; return f==null?null:(f<50?'FEVI reducida':'FEVI conservada'); };
   const DDGRADO = s => { const g=(s&&s.eco)?s.eco.grado_diastolico:null; return g?String(g):null; };
   const GEOMS = s => { const g=(s&&s.eco)?s.eco.geometria_vi:null; return g?String(g):null; };
@@ -2111,6 +2134,16 @@ function renderCurrent(){
   };
 
   window.estRender=function(){
+    /* Rearmar el selector ANTES de calcular: al cambiar el período cambian los N por
+       médico, y si el seleccionado ya no tiene estudios en el rango, estFillMedSelect
+       lo deja en "Todos" en silencio. Como ese cambio es programático no dispara
+       onchange, así que los informes ya generados hay que limpiarlos acá: si no, queda
+       en pantalla un texto que dice "Población: estudios de Dr. X" mientras el filtro
+       vigente ya es todo el servicio. */
+    const sel=document.getElementById('est-f-med');
+    const antes=sel?sel.value:'all';
+    if(typeof estFillMedSelect==='function') estFillMedSelect();
+    if(sel && sel.value!==antes) estInformesLimpiar();
     computeAll();
     const ci=document.getElementById('est-crossinfo');
     if(ci)ci.innerHTML='<div style="font-size:13px;"><b>Datos cruzados por CI:</b> '+_ecoErgo.length+' pacientes con <b>Eco+Ergo</b> · '+_eeErgo.length+' con <b>EcoEstrés+Ergo</b>. Total estudios: '+((typeof STUDIES!=='undefined')?STUDIES.length:'—')+'.</div>';
@@ -2154,13 +2187,16 @@ function renderCurrent(){
           .map(d=>'<option value="'+esc(d.key)+'">'+d.label+' ('+d.n+')</option>').join('');
     if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
   };
+  function estInformesLimpiar(){
+    ['est-informe-basico','est-informe-ia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=''; });
+  }
   window.estMedCambio = function(){
     computeAll(); estAsocRender(); renderHeatmap();
     const pa=document.getElementById('est-panel-porapp');
     if(pa && pa.style.display!=='none' && typeof paRender==='function') paRender();
     // Los informes ya generados quedan de la población anterior: se limpian para que
     // nadie lea un texto que no corresponde al médico que ahora está seleccionado.
-    ['est-informe-basico','est-informe-ia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=''; });
+    estInformesLimpiar();
   };
 
   // El selector de app se arma desde APPS, así que una 5.ª app aparece sola.
@@ -2183,12 +2219,19 @@ function renderCurrent(){
      "significativos" esperables sólo por azar, así que informar p<0.05 a secas
      sobreestima los hallazgos. Se reporta además cuántos sobreviven a un control
      de FDR al 5%, que es lo que se le va a pedir en una revista. */
+  /* Anota `q` en el propio resultado en vez de devolver un Map indexado por referencia:
+     con un Map, recomputar entre el cálculo y la lectura dejaba todas las claves
+     huérfanas y q.get() devolvía undefined en silencio — el informe habría dicho
+     "sobreviven 0 al FDR" y el prompt de IA habría concluido que ningún hallazgo es
+     sólido, sin ningún error visible. */
   function bhQ(rs){
+    rs.forEach(r=>{ r.q=null; });
     const arr=rs.filter(r=>r.p!=null).slice().sort((a,b)=>a.p-b.p);
-    const m=arr.length, q=new Map(); let prev=1;
-    for(let i=m-1;i>=0;i--){ prev=Math.min(prev, arr[i].p*m/(i+1)); q.set(arr[i],prev); }
-    return q;
+    const m=arr.length; let prev=1;
+    for(let i=m-1;i>=0;i--){ prev=Math.min(prev, arr[i].p*m/(i+1)); arr[i].q=prev; }
+    return rs;
   }
+  const sobreviveFDR = r => r.q!=null && r.q<0.05;
 
   const fuerzaTxt = c => { const a=Math.abs(c);
     return a<0.30?'débil':(a<0.50?'moderada':(a<0.70?'fuerte':'muy fuerte')); };
@@ -2243,11 +2286,15 @@ function renderCurrent(){
   window.estInformeBasico=function(){
     computeAll();
     const R=resumenAsoc(), el=document.getElementById('est-informe-basico');
-    const q=bhQ(_results);
+    bhQ(_results);
     const med=document.getElementById('est-f-med');
     const medTxt=(med&&med.value!=='all') ? med.options[med.selectedIndex].text.replace(/\s*\(\d+\)$/,'') : null;
     const rg=(typeof currentRange==='function')?currentRange():null;
-    const fmt=d=>d?d.toISOString().slice(0,10):null;
+    /* Formateo LOCAL: currentRange arma fechas locales, y toISOString las pasa a UTC,
+       así que en Uruguay (UTC-3) la medianoche del 'desde' se serializaba como el día
+       anterior. El informe declaraba un período distinto del que realmente se filtró. */
+    const fmt=d=>{ if(!d) return null; const z=n=>String(n).padStart(2,'0');
+      return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); };
     const per=!rg?null:(rg.from||rg.to
       ? (rg.label+' ('+(fmt(rg.from)||'inicio')+' a '+(fmt(rg.to)||'hoy')+')')
       : rg.label);
@@ -2259,7 +2306,7 @@ function renderCurrent(){
 
     // ── Panorama
     const conDato=_results.filter(r=>r.p!=null);
-    const nBH=[..._results].filter(r=>q.get(r)!=null&&q.get(r)<0.05).length;
+    const nBH=_results.filter(sobreviveFDR).length;
     L.push('1. PANORAMA');
     L.push('Se evaluaron '+R.total+' asociaciones, de las cuales '+conDato.length+' tuvieron datos suficientes para calcularse. '
       +'Resultaron significativas '+R.significativas+' con p<0.05. '
@@ -2285,7 +2332,7 @@ function renderCurrent(){
       L.push('Ninguna asociación alcanzó significación estadística con la muestra actual. Esto no equivale a ausencia de asociación: con N bajo, un efecto real puede no detectarse.');
     } else {
       topFinal.forEach((r,i)=>{
-        const qq=q.get(r);
+        const qq=r.q;
         L.push((i+1)+'. '+r.lbl+' ['+(SCOPE_LBL[r.sc]||r.sc)+']');
         L.push('   '+r.method+' '+r.stat+' · N='+r.n+' · p='+pTxt(r.p)
           +(r.ci&&r.ci!=='—'?(' · IC 95% '+r.ci):'')
@@ -2332,7 +2379,105 @@ function renderCurrent(){
   };
   window.estInformeCopiar=function(id){ const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Nada para copiar');return;} navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ Copiado')).catch(()=>toast('No se pudo copiar')); };
   window.estInformePDF=function(id,titulo){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Generá el informe primero');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'}); const mL=14,mR=196; let y=18; doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — '+titulo,mL,y);y+=8; doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30,30,30); const lines=doc.splitTextToSize(el.textContent,mR-mL); lines.forEach(l=>{ if(y>282){doc.addPage();y=18;} doc.text(l,mL,y); y+=5.2; }); doc.save('ceiboanalytics_'+id+'.pdf'); toast('✅ PDF exportado'); };
-  window.estInformeAvanzado=async function(){ const key=localStorage.getItem('ca_anthropic_key'); const el=document.getElementById('est-informe-ia'); if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; toast('Falta la API key'); return; } computeAll(); const R=resumenAsoc(); const payload={ pacientes_eco_ergo:R.ecoErgo, pacientes_ecoestres_ergo:R.eeErgo, asociaciones:R.todas.map(r=>({asociacion:r.lbl,categoria:r.cat,metodo:r.method,estadistico:r.stat,p:r.p,ic95:r.ci,n:r.n,significativa:r.p!=null&&r.p<0.05})) }; const btn=document.getElementById('est-ia-btn'), sp=document.getElementById('est-ia-spinner'); btn.disabled=true; sp.style.display='inline'; el.textContent=''; try{ const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1500,system:'Sos un cardiólogo especialista en bioestadística clínica. Analizás resultados estadísticos de una población cardiovascular uruguaya y generás conclusiones clínicas, comparación con literatura internacional, hipótesis para investigación futura y recomendaciones para el servicio. Respondé en español, con formato clínico profesional.',messages:[{role:'user',content:'Resumen de asociaciones estadísticas encontradas (JSON):\n'+JSON.stringify(payload,null,2)}]})}); const data=await res.json(); if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); } else { const txt=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)'; el.textContent=txt; toast('✅ Informe generado'); } }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); } finally{ btn.disabled=false; sp.style.display='none'; } };
+  /* ── Contexto que se le manda al modelo ──
+     RESGUARDO: se arma sólo con agregados —N, medias, dispersión y resultados de los
+     contrastes—. No sale ningún identificador: ni nombre, ni documento, ni fecha de
+     nacimiento. Si alguna vez se agregan campos acá, tienen que seguir siendo
+     estadísticos de grupo: es lo que hace aceptable mandar esto a una API externa.
+
+     Salvedad: mínimo y máximo SON la medición literal de un paciente concreto, y con N
+     chico la fila entera puede describir a una sola persona (con n=1, media=mediana=
+     min=max=su valor). Por eso las filas con n<5 van sin min/max, y con n=1 no van. */
+  function estContextoIA(){
+    const R=resumenAsoc(); bhQ(_results);
+    const med=document.getElementById('est-f-med');
+    const medTxt=(med&&med.value!=='all') ? med.options[med.selectedIndex].text.replace(/\s*\(\d+\)$/,'') : null;
+    const rg=(typeof currentRange==='function')?currentRange():null;
+    /* Formateo LOCAL: currentRange arma fechas locales, y toISOString las pasa a UTC,
+       así que en Uruguay (UTC-3) la medianoche del 'desde' se serializaba como el día
+       anterior. El informe declaraba un período distinto del que realmente se filtró. */
+    const fmt=d=>{ if(!d) return null; const z=n=>String(n).padStart(2,'0');
+      return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); };
+    const base=(typeof estBaseStudies==='function')?estBaseStudies():[];
+    const nApp={}; base.forEach(s=>{ const a=(APPS[s.app]||{}).label||s.app; nApp[a]=(nApp[a]||0)+1; });
+    const desc=(typeof paFilas==='function')?paFilas()
+      .filter(f=>f[2]>=2)
+      .map(f=>{ const d={app:f[0], variable:f[1], n:f[2], media:f[3], ds:f[4], mediana:f[5]};
+        if(f[2]>=5){ d.p25=f[6]; d.p75=f[7]; d.min=f[8]; d.max=f[9]; }
+        return d; }):[];
+    return {
+      contexto:{
+        /* Se dice QUE está filtrado por un profesional, pero no quién: el nombre no
+           aporta nada al análisis y no hay razón para mandarlo a una API externa. */
+        poblacion: medTxt ? 'estudios de un solo profesional del servicio' : 'todo el servicio',
+        periodo: rg ? (rg.label+(rg.from||rg.to ? (' ('+(fmt(rg.from)||'inicio')+' a '+(fmt(rg.to)||'hoy')+')') : '')) : null,
+        estudios_por_app: nApp,
+        total_estudios: base.length,
+        pacientes_cruzados_eco_ergo: R.ecoErgo,
+        pacientes_cruzados_ecoestres_ergo: R.eeErgo,
+        nota_filtro_medico: medTxt ? 'Con filtro por profesional, un par cruzado entra sólo si ambos estudios son suyos; por eso el N cruzado es menor que el del servicio.' : null
+      },
+      descriptivas: desc,
+      asociaciones: _results.map(r=>({
+        ambito: SCOPE_LBL[r.sc]||r.sc,
+        asociacion: r.lbl, categoria: r.cat, metodo: r.method,
+        estadistico: r.stat, n: r.n, p: r.p,
+        q_fdr: r.q!=null ? +r.q.toFixed(4) : null,
+        ic95: (r.ci&&r.ci!=='—') ? r.ci : null,
+        significativa: r.p!=null && r.p<0.05,
+        sobrevive_fdr: sobreviveFDR(r),
+        reserva: reservaTxt(r),
+        calculable: r.p!=null
+      }))
+    };
+  }
+
+  const SYS_IA = [
+    'Sos cardiólogo con formación en bioestadística clínica y trabajás con un servicio de cardiología del interior de Uruguay.',
+    'Recibís los resultados estadísticos agregados de su propia base de estudios (ecocardiograma, ergometría, eco-estrés) y producís un informe profesional en español rioplatense.',
+    '',
+    'Estructurá la respuesta en estas cinco secciones, con esos títulos:',
+    '1. INTERPRETACIÓN CLÍNICA — qué significan los hallazgos en la práctica, priorizando los que sobreviven a la corrección por FDR (campo sobrevive_fdr).',
+    '2. COMPARACIÓN CON LA LITERATURA — contrastá con guías y series internacionales (ESC, AHA/ACC, ASE/EACVI y estudios de referencia), diciendo explícitamente si el hallazgo concuerda, discrepa o no tiene comparador claro. Nombrá guía y año cuando lo sepas; si no estás seguro de una cita, decilo en vez de inventarla.',
+    '3. HIPÓTESIS DE INVESTIGACIÓN — dos a cuatro hipótesis contrastables que esta base podría responder, con el diseño y las variables que harían falta.',
+    '4. RECOMENDACIONES PARA EL SERVICIO — accionables y concretas: qué campos conviene completar mejor, qué sesgos corregir, qué subgrupos ampliar.',
+    '5. BORRADOR DE RESUMEN (IMRAD) — introducción, métodos, resultados y conclusión, en un resumen de 250 a 300 palabras listo para enviar a un congreso.',
+    '',
+    'Reglas que no podés romper:',
+    '- No inventes datos ni cifras que no estén en el JSON. Si algo falta, decí que falta.',
+    '- Respetá los N: si una asociación se apoya en pocos casos, decilo al interpretarla, no después.',
+    '- Distinguí asociación de causalidad. Los datos son observacionales y transversales.',
+    '- Tené en cuenta el campo reserva: un Chi² con frecuencias esperadas menores a 5 no se arregla con más pacientes sino con test exacto.',
+    '- Son datos de un solo servicio: no generalices a la población uruguaya.'
+  ].join('\n');
+
+  window.estInformeAvanzado=async function(){
+    const key=localStorage.getItem('ca_anthropic_key');
+    const el=document.getElementById('est-informe-ia');
+    if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; toast('Falta la API key'); return; }
+    computeAll();
+    const payload=estContextoIA();
+    if(!payload.asociaciones.some(a=>a.calculable)){
+      el.textContent='No hay datos suficientes para analizar en la población seleccionada. Revisá el período, el filtro por médico y que estén importados los estudios.';
+      toast('Sin datos para analizar'); return;
+    }
+    const btn=document.getElementById('est-ia-btn'), sp=document.getElementById('est-ia-spinner');
+    btn.disabled=true; sp.style.display='inline'; el.textContent='';
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6', max_tokens:4000, system:SYS_IA,
+          messages:[{role:'user',content:'Contexto estadístico del servicio (agregados, sin datos de pacientes):\n'+JSON.stringify(payload,null,2)}]
+        })
+      });
+      const data=await res.json();
+      if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); }
+      else { el.textContent=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)'; toast('✅ Informe generado'); }
+    }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); }
+    finally{ btn.disabled=false; sp.style.display='none'; }
+  };
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
