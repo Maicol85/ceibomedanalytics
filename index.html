@@ -4,10 +4,62 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CeiboAnalytics · Inteligencia clínica integrada</title>
-<!-- Dependencias externas SOLO por CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Content Security Policy
+
+     El objetivo principal acá es `connect-src`: la clave de la API de Anthropic vive
+     en localStorage y la app maneja datos de pacientes de cuatro apps. `connect-src`
+     cierra los canales de exfiltración silenciosos —fetch, XHR, sendBeacon, WebSocket—
+     y `img-src` cierra la baliza de imagen, que es el truco más simple. Sube mucho el
+     costo de un XSS, pero NO lo anula: la exfiltración por navegación
+     (`location = 'https://otro/#'+clave`) no la bloquea ninguna directiva de CSP;
+     `navigate-to` nunca se implementó y se sacó de CSP3. Si la clave es lo que más
+     preocupa, la pieza que falta es no dejarla en localStorage de forma permanente.
+
+     Encuadre para quien mantenga esto: acá `script-src` es un control de cadena de
+     suministro (quién puede CARGAR scripts), no un control de XSS. El control de XSS
+     es esc() en el origen más connect-src.
+
+     `script-src` y `style-src` llevan 'unsafe-inline' porque la app es un único
+     archivo sin build: tiene 26 handlers inline (onclick=...), 141 atributos
+     style="..." y sus dos bloques <script> en el propio HTML, y además genera HTML
+     con estilos inline en tiempo de ejecución. Con 'self' a secas la app queda en
+     blanco. Hashear los <script> no sirve: son el programa entero, así que cada
+     edición del archivo obligaría a recalcular el hash, y si alguien se olvida la app
+     deja de arrancar. Es una limitación real y está anotada como tal: 'unsafe-inline'
+     no frena la ejecución de script inyectado, sólo la carga de scripts de terceros.
+     Cerrarla de verdad exige convertir los 26 handlers a addEventListener.
+
+     `frame-ancestors` NO se pone: en <meta> el navegador la ignora (sólo vale como
+     cabecera HTTP) y GitHub Pages no deja mandar cabeceras. Anotarla acá daría una
+     falsa sensación de protección contra clickjacking.
+     ══════════════════════════════════════════════════════════════════════════ -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com/ajax/libs/;
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:;
+  font-src 'self';
+  connect-src 'self' https://api.anthropic.com;
+  object-src 'none';
+  base-uri 'self';
+  form-action 'none'">
+
+<!-- Dependencias externas SOLO por CDN.
+     Los hashes son los que publica la API de cdnjs y se verificaron bajando cada
+     archivo y calculando el SHA-512 por separado. Son SHA-512 y no SHA-384 porque es
+     lo que cdnjs publica para estos archivos; el algoritmo más fuerte no se degrada a
+     propósito. Si el CDN se ve comprometido, el navegador descarta el script en vez
+     de ejecutarlo (la app degrada: ya contempla que Chart.js no esté). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+        integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+        integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+        integrity="sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 /* ============================================================
    CeiboAnalytics · estilos (todo inline, sin archivos externos)
@@ -1602,6 +1654,31 @@ function loadLogo(file){
   reader.readAsDataURL(file);
 }
 /* Genera una gráfica offscreen y devuelve dataURL (promise) */
+/* Si un <script> del CDN no carga —porque el CDN está caído o porque alguien subió la
+   versión sin regenerar el hash SRI— el navegador lo descarta EN SILENCIO: la app
+   arranca completa y la falta recién aparece al apretar "Exportar", con un mensaje que
+   parece un problema de conexión. Un despliegue roto se ve igual que uno sano. Y no hay
+   red de contención posible: report-uri se ignora en <meta> y GitHub Pages no deja mandar
+   cabeceras. Por eso el aviso se hace acá, al arranque. */
+function avisarLibreriasFaltantes(){
+  const faltan=[
+    (typeof Chart==='undefined') && 'Chart.js (gráficas)',
+    (!window.jspdf) && 'jsPDF (informes PDF)',
+    (typeof XLSX==='undefined') && 'XLSX (exportar a Excel)'
+  ].filter(Boolean);
+  if(!faltan.length) return;
+  const b=document.createElement('div');
+  b.setAttribute('role','alert');
+  b.style.cssText='position:sticky;top:0;z-index:9999;padding:10px 14px;background:#7f1d1d;'+
+    'color:#fff;font-size:13px;line-height:1.45;border-bottom:1px solid #b91c1c;';
+  b.textContent='No cargaron: '+faltan.join(', ')+'. Puede ser falta de conexión al CDN o un '+
+    'hash SRI desactualizado tras un cambio de versión. Las cifras en pantalla son correctas, '+
+    'pero las gráficas y las exportaciones afectadas no van a funcionar.';
+  document.body.insertBefore(b, document.body.firstChild);
+  console.error('[CeiboAnalytics] librerías no disponibles:', faltan);
+}
+window.addEventListener('load', avisarLibreriasFaltantes);
+
 function offscreenChart(canvasId,cfg){
   return new Promise(resolve=>{
     destroyChart(canvasId);
@@ -1624,6 +1701,10 @@ function offscreenChart(canvasId,cfg){
 }
 async function generatePDF(){
   if(!window.jspdf){toast('jsPDF no cargó (revisá conexión al CDN)');return;}
+  /* Sin Chart.js el informe se generaba igual, sin sus tres gráficas y con el estado
+     diciendo que todo salió bien: es un entregable que se firma, así que el médico tiene
+     que saber qué está firmando. */
+  if(!HAS_CHART) toast('⚠️ Chart.js no cargó: el PDF va a salir sin gráficas');
   const status=$('#pdfStatus'); status.textContent='Generando…';
   const yr=+$('#rptYear').value;
   const inst=$('#rptInst').value.trim(); const chief=$('#rptChief').value.trim();
@@ -1646,7 +1727,8 @@ async function generatePDF(){
     if(months.length) imgEvol=await offscreenChart('pdfEvol',evolCfg);
     if(feviV.length)   imgFevi=await offscreenChart('pdfFevi',feviCfg);
     if(months.length&&g.ergo.length) imgPos=await offscreenChart('pdfPos',posCfg);
-  }catch(e){console.warn(e);}
+  }catch(e){console.warn('[CeiboAnalytics] no se pudieron generar las gráficas del PDF',e);}
+  const sinGraficas = !HAS_CHART || (months.length && !imgEvol) || (feviV.length && !imgFevi);
 
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({unit:'pt',format:'a4'});
@@ -1721,7 +1803,9 @@ async function generatePDF(){
   for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(8);doc.setTextColor(150);doc.text('CeiboAnalytics · generado localmente · '+new Date().toLocaleDateString('es-UY')+' · pág. '+i+'/'+pages,M,H-20);}
 
   doc.save('Informe_CeiboAnalytics_'+yr+'.pdf');
-  status.textContent='PDF generado ✓';
+  status.textContent = sinGraficas
+    ? 'PDF generado, PERO SIN GRÁFICAS (Chart.js no cargó) ⚠️'
+    : 'PDF generado ✓';
   // limpiar charts offscreen
   destroyChart('pdfEvol');destroyChart('pdfFevi');destroyChart('pdfPos');
 }
