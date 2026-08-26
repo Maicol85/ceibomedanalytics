@@ -555,6 +555,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         <div style="display:flex;gap:8px;margin-bottom:16px;">
           <button class="est-subtab active" data-est="asoc" onclick="estSubtab('asoc',this)">Asociaciones</button>
           <button class="est-subtab" data-est="porapp" onclick="estSubtab('porapp',this)">Por app</button>
+          <button class="est-subtab" data-est="avanzado" onclick="estSubtab('avanzado',this)">Avanzado</button>
           <button class="est-subtab" data-est="ia" onclick="estSubtab('ia',this)">Análisis IA</button>
           <!-- Fuera de los paneles a propósito: el filtro por médico rige las tres
                subtabs, así que no puede vivir dentro de la barra de una sola. -->
@@ -607,6 +608,51 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         </div>
 
         <!-- PANEL ANÁLISIS IA -->
+        <div id="est-panel-avanzado" style="display:none;">
+
+          <!-- ── Módulo A: regresión logística univariada ── -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-hdr">📐 Regresión logística univariada
+              <span class="hint" style="font-weight:400;">— cada predictor por separado contra un desenlace binario</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0;">
+              <div><label class="hint">Desenlace</label><br>
+                <select id="av-lg-out" onchange="avLogRender()"></select></div>
+              <div><label class="hint">Mostrar</label><br>
+                <select id="av-lg-filtro" onchange="avLogRender()">
+                  <option value="all">Todos los predictores</option>
+                  <option value="sig">Sólo significativos (p&lt;0.05)</option>
+                </select></div>
+            </div>
+            <div id="av-lg-aviso"></div>
+            <div id="av-lg-tabla"></div>
+          </div>
+
+          <!-- ── Módulo B: comparación entre subgrupos ── -->
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-hdr">👥 Comparación entre subgrupos</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0;">
+              <div><label class="hint">Variable de corte</label><br>
+                <select id="av-sg-corte" onchange="avSubRender()"></select></div>
+            </div>
+            <div id="av-sg-tabla"></div>
+            <div id="av-sg-box" style="margin-top:14px;"></div>
+          </div>
+
+          <!-- ── Módulo C: evolución del paciente ── -->
+          <div class="card">
+            <div class="card-hdr">📈 Evolución del paciente
+              <span class="hint" style="font-weight:400;">— requiere al menos 2 ecocardiogramas del mismo paciente</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0;">
+              <div><label class="hint">Paciente</label><br>
+                <select id="av-ev-pac" onchange="avEvolRender()"></select></div>
+            </div>
+            <div id="av-ev-cont"></div>
+          </div>
+
+        </div>
+
         <div id="est-panel-ia" style="display:none;">
           <div class="card" style="margin-bottom:16px;">
             <h3 class="section" style="font-size:15px;">Configuración — API key de Anthropic</h3>
@@ -2445,17 +2491,584 @@ function renderCurrent(){
     const k=localStorage.getItem('ca_anthropic_key')||'';
     const st=document.getElementById('est-key-status'); if(st)st.textContent=k?('Clave guardada: sk-ant-…'+k.slice(-4)):'Sin clave configurada.';
     estAsocRender(); renderHeatmap();
+    if(typeof avRefrescarSiVisible==='function') avRefrescarSiVisible();
   };
 
   // Los paneles se recorren por lista: sumar una subtab nueva no exige tocar esta
   // función, que antes tenía los dos ids escritos a mano.
+  /* ══════════════════════════════════════════════════════════════════════
+     ESTADÍSTICA AVANZADA — regresión logística, subgrupos y evolución
+     Comparte población con el resto del panel: estBase() ya aplica el filtro de
+     período y el de médico, así que los tres módulos miran los mismos estudios que
+     las asociaciones.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  // Un estudio suelto se envuelve como pseudo-par para poder reusar los accesores
+  // (FEVI, EE, PSAP...) sin duplicarlos.
+  const _pEco = s => ({eco:s});
+
+  /* Una fila por PACIENTE, no por estudio. Un paciente con tres ecos en el período
+     entraría tres veces, y los que repiten eco son justamente los enfermos (IC, HTP,
+     valvulopatía en seguimiento): se duplicaría la cola patológica y, sobre todo, el N
+     inflado hace que Mann-Whitney y el Wald del logit devuelvan p más chicos de lo que
+     corresponde. Es el mismo criterio que rebuildCross() aplica a las asociaciones.
+     El módulo C NO usa esto: es longitudinal, necesita todos los estudios. */
+  function avEcosUnicos(){
+    const porPac=new Map(), sueltos=[];
+    estBase().filter(s=>s.app==='eco').forEach(s=>{
+      const id=s._pid;
+      if(!id || !id.identifiable){ sueltos.push(s); return; }
+      const prev=porPac.get(id.key);
+      if(!prev || (s.fecha && (!prev.fecha || s.fecha>prev.fecha))) porPac.set(id.key,s);
+    });
+    return [...porPac.values()].concat(sueltos);
+  }
+  const avEcos  = avEcosUnicos;
+  const avEcosTodos = () => estBase().filter(s=>s.app==='eco');   // sólo para el módulo C
+  const avPares = () => _ecoErgo;   // eco+ergo cruzados, para los desenlaces de ergometría
+
+  /* ── Regresión logística univariada por Newton-Raphson (IRLS) ──
+     Modelo: logit(p) = b0 + b1·x, con matriz de diseño [1, x]. En cada iteración
+     β ← β + (XᵀWX)⁻¹ Xᵀ(y − p), que con dos parámetros es una inversa 2×2 explícita.
+
+     Las tres guardas no son decorativas: sin ellas la separación perfecta —muy fácil
+     de producir acá, p. ej. "PSAP alta" prediciendo "HTP"— hace que β diverja y la
+     función devolvería un OR de varios millones con IC gigante y p≈1, que parece un
+     resultado y no lo es. */
+  function logitFit(xs, ys){
+    const n=xs.length;
+    const ev=ys.reduce((a,b)=>a+b,0);
+    if(ev===0 || ev===n) return {err:'El desenlace no varía en esta muestra'};
+    /* El piso tiene que ser sobre el grupo más chico, no sobre el total: con 3 eventos y
+       200 no-eventos el modelo "corre" y emite un OR que no significa nada. */
+    if(Math.min(ev,n-ev)<5) return {err:'Menos de 5 casos en el grupo más chico'};
+    if(n<10) return {err:'N insuficiente'};
+    // Predictor binario con una celda vacía de la 2×2: separación garantizada.
+    const bin = xs.every(v=>v===0||v===1);
+    if(bin){
+      let a=0,b=0,c=0,d=0;
+      for(let i=0;i<n;i++){ if(xs[i]===1){ ys[i]?a++:b++; } else { ys[i]?c++:d++; } }
+      if(a===0||b===0||c===0||d===0) return {err:'Alguna celda de la tabla 2×2 está vacía: no estimable'};
+    }
+    let b0=0,b1=0;
+    let iter=0, conv=false;
+    for(; iter<50; iter++){
+      let s00=0,s01=0,s11=0,g0=0,g1=0;
+      for(let i=0;i<n;i++){
+        const eta=b0+b1*xs[i];
+        const pi=1/(1+Math.exp(-Math.max(-500,Math.min(500,eta))));
+        const w=pi*(1-pi);
+        s00+=w; s01+=w*xs[i]; s11+=w*xs[i]*xs[i];
+        const r=ys[i]-pi; g0+=r; g1+=r*xs[i];
+      }
+      const det=s00*s11-s01*s01;
+      // XᵀWX singular: el predictor no aporta información separable (o todos los pesos
+      // colapsaron a 0 porque las probabilidades ajustadas son 0/1 → separación).
+      if(!isFinite(det) || Math.abs(det)<1e-12) return {err:'No estimable (matriz singular o separación)'};
+      const d0=( s11*g0 - s01*g1)/det;
+      const d1=(-s01*g0 + s00*g1)/det;
+      b0+=d0; b1+=d1;
+      if(!isFinite(b0)||!isFinite(b1)) return {err:'No converge (separación)'};
+      if(Math.max(Math.abs(d0),Math.abs(d1))<1e-8){ conv=true; iter++; break; }
+    }
+    if(!conv) return {err:'No converge en 50 iteraciones'};
+    // |β| enorme = separación cuasi-completa. El ajuste "converge" pero el OR no
+    // significa nada: se informa como tal en vez de imprimir un número absurdo.
+    if(Math.abs(b1)>15) return {err:'Separación (o casi): el OR no es interpretable'};
+    // Errores estándar de la diagonal de (XᵀWX)⁻¹, recalculada en el óptimo.
+    let s00=0,s01=0,s11=0;
+    for(let i=0;i<n;i++){
+      const pi=1/(1+Math.exp(-Math.max(-500,Math.min(500,b0+b1*xs[i]))));
+      const w=pi*(1-pi); s00+=w; s01+=w*xs[i]; s11+=w*xs[i]*xs[i];
+    }
+    const det=s00*s11-s01*s01;
+    if(!isFinite(det)||Math.abs(det)<1e-12) return {err:'No estimable'};
+    const se1=Math.sqrt(s00/det);
+    if(!isFinite(se1)||se1<=0) return {err:'No estimable'};
+    const z=b1/se1;
+    const or=Math.exp(b1), lo=Math.exp(b1-1.96*se1), hi=Math.exp(b1+1.96*se1);
+    /* |β|>15 no atrapa la cuasi-separación: con β=10 —una sola observación cruzada, muy
+       fácil con N chico— salía OR 22.026 con IC [100 – 4.800.000], que al no cruzar el 1
+       se pintaba como significativo. Lo que distingue un OR interpretable no es |β| sino
+       el ancho del intervalo. Además, con cuasi-separación el error estándar de Wald
+       crece más rápido que β, así que z→0 y p→1 (efecto Hauck-Donner): los efectos más
+       grandes serían justo los que el filtro "sólo significativos" descarta. */
+    if(!isFinite(hi) || lo<=0 || hi/lo>1000) return {err:'Intervalo no interpretable (separación cuasi-completa)'};
+    return { b1, se1, iter, n, eventos:ev, noEventos:n-ev, or, lo, hi,
+             p:Math.max(0,Math.min(1,2*(1-normCdf(Math.abs(z))))) };
+  }
+
+  /* Desenlaces binarios. `req` dice qué dataset hace falta: 'eco' alcanza con el
+     ecocardiograma; 'par' exige eco + ergometría del mismo paciente.
+     `excluye` lista los predictores que NO pueden entrar porque definen el desenlace:
+     regresar PSAP contra "HTP (PSAP>35)" es circular y da separación perfecta —un OR
+     astronómico que parece el hallazgo del año y sólo dice que 36 es mayor que 35. */
+  const AV_OUTCOMES = [
+    {k:'ergo_pos', lbl:'Ergometría positiva', req:'par',
+     y:pr=>{ const v=POS(pr); return v==null?null:(v?1:0); }, excluye:[]},
+    /* Ojo: acá el corte es ≤40 (lo pedido para este módulo), mientras FEVIRED —el que
+       usan las asociaciones de la subtab de al lado— corta en <50. Son dos definiciones
+       distintas del mismo nombre, por eso la etiqueta lleva el umbral explícito. */
+    {k:'fevi_red', lbl:'FEVI reducida (≤40%)', req:'eco',
+     y:pr=>{ const v=FEVI(pr); return v==null?null:(v<=40?1:0); }, excluye:['fevi']},
+    {k:'htp',      lbl:'HTP presente (PSAP>35)', req:'eco',
+     y:pr=>{ const v=PSAP(pr); return v==null?null:(v>35?1:0); }, excluye:['psap']},
+    /* E/e', volumen AI y PSAP (derivada de la velocidad de IT) son los criterios con los
+       que se gradúa la disfunción diastólica (ASE/EACVI 2016): regresarlos contra el
+       propio grado es circular, y es MÁS peligroso que la circularidad PSAP↔HTP porque
+       el resultado parece un hallazgo fisiopatológico plausible y publicable. */
+    {k:'dd2',      lbl:'Disfunción diastólica grado 2+', req:'eco',
+     y:pr=>{ const g=(pr.eco&&pr.eco.eco)?pr.eco.eco.grado_diastolico:null;
+             if(g==null||String(g).trim()==='') return null;
+             const t=String(g).toLowerCase();
+             if(/iii|\bii\b/.test(t)) return 1;
+             return 0; }, excluye:['ee','lavi','psap']}
+  ];
+
+  /* Predictores. Los continuos informan OR por cada +1 de su unidad; los binarios,
+     OR de "sí" contra "no". */
+  const AV_PREDS = [
+    {k:'edad',  lbl:'Edad',              u:'año',    tipo:'c', req:'eco', g:pr=>_num(pr.eco.edad)},
+    {k:'fevi',  lbl:'FEVI',              u:'%',      tipo:'c', req:'eco', g:FEVI},
+    {k:'ee',    lbl:"E/e' promedio",     u:'',       tipo:'c', req:'eco', g:EE},
+    {k:'psap',  lbl:'PSAP',              u:'mmHg',   tipo:'c', req:'eco', g:PSAP},
+    {k:'tapse', lbl:'TAPSE',             u:'mm',     tipo:'c', req:'eco', g:TAPSE},
+    {k:'lavi',  lbl:'Volumen AI idx',    u:'ml/m²',  tipo:'c', req:'eco', g:LAVI},
+    {k:'masa',  lbl:'Masa VI idx',       u:'g/m²',   tipo:'c', req:'eco', g:pr=>_num(pr.eco.eco&&pr.eco.eco.masa_vi)},
+    {k:'mets',  lbl:'METs alcanzados',   u:'MET',    tipo:'c', req:'par', g:METS},
+    {k:'hta',   lbl:'HTA',               u:'',       tipo:'b', req:'eco', g:pr=>{const v=ANT(pr.eco,RE_HTA); return v==null?null:(v==='Sí'?1:0);}},
+    {k:'dm',    lbl:'Diabetes',          u:'',       tipo:'b', req:'eco', g:pr=>{const v=ANT(pr.eco,RE_DM);  return v==null?null:(v==='Sí'?1:0);}},
+    {k:'fa',    lbl:'FA / flutter',      u:'',       tipo:'b', req:'eco', g:pr=>{const v=ANT(pr.eco,RE_FA);  return v==null?null:(v==='Sí'?1:0);}},
+    {k:'dlp',   lbl:'Dislipemia',        u:'',       tipo:'b', req:'eco', g:pr=>{const v=ANT(pr.eco,RE_DLP); return v==null?null:(v==='Sí'?1:0);}},
+    {k:'tab',   lbl:'Tabaquismo',        u:'',       tipo:'b', req:'eco', g:pr=>{const v=ANT(pr.eco,RE_TAB); return v==null?null:(v==='Sí'?1:0);}},
+    {k:'sexoM', lbl:'Sexo masculino',    u:'',       tipo:'b', req:'eco', g:pr=>{const v=SEXO(pr.eco); return v==null?null:(v==='Masculino'?1:0);}}
+  ];
+
+  function avLogCalcular(outKey){
+    const out=AV_OUTCOMES.find(o=>o.k===outKey)||AV_OUTCOMES[0];
+    const ds = out.req==='par' ? avPares() : avEcos().map(_pEco);
+    const filas=[];
+    AV_PREDS.forEach(pd=>{
+      if(out.excluye.indexOf(pd.k)>=0) return;                 // predictor circular
+      if(pd.req==='par' && out.req!=='par') return;            // sin ergometría en este dataset
+      const xs=[], ys=[];
+      ds.forEach(pr=>{
+        let y,x;
+        try{ y=out.y(pr); x=pd.g(pr); }catch(e){ return; }
+        if(y==null||x==null||isNaN(x)) return;
+        xs.push(+x); ys.push(y);
+      });
+      const r=logitFit(xs,ys);
+      filas.push({pred:pd, n:xs.length,
+        eventos: ys.reduce((a,b)=>a+b,0), noEventos: ys.length-ys.reduce((a,b)=>a+b,0),
+        r});
+    });
+    return {out, filas, ds:ds.length};
+  }
+
+  window.avLogRender=function(){
+    const host=document.getElementById('av-lg-tabla'); if(!host) return;
+    const avisoEl=document.getElementById('av-lg-aviso');
+    const outKey=(document.getElementById('av-lg-out')||{}).value||'ergo_pos';
+    const soloSig=((document.getElementById('av-lg-filtro')||{}).value)==='sig';
+    const {out, filas}=avLogCalcular(outKey);
+
+    // El umbral que importa es el del grupo MÁS CHICO: 40 eventos con 3 no-eventos es
+    // tan poco estimable como al revés, y con 1 predictor la regla habitual son 10
+    // eventos por variable. Se avisa por debajo de 30, que es lo pedido, pero mirando
+    // el mínimo de los dos grupos.
+    const conDato=filas.filter(f=>f.r && !f.r.err);
+    const minGrupo=conDato.length?Math.min(...conDato.map(f=>Math.min(f.eventos,f.noEventos))):0;
+    let aviso='';
+    if(!conDato.length){
+      aviso='<div class="empty" style="padding:10px;">No hay datos suficientes para ajustar ningún modelo con este desenlace.</div>';
+    } else if(minGrupo<30){
+      aviso='<div style="padding:9px 12px;background:rgba(234,179,8,.12);border-left:3px solid #eab308;'+
+        'border-radius:4px;font-size:12px;line-height:1.5;margin-bottom:10px;">⚠️ <b>Muestra chica:</b> el grupo '+
+        'menos numeroso tiene '+minGrupo+' caso'+(minGrupo===1?'':'s')+' (se recomiendan ≥30). Con este N los '+
+        'intervalos de confianza son muy anchos y los OR quedan sesgados hacia afuera: tomar los resultados como '+
+        'exploratorios, para generar hipótesis y no para sostener conclusiones.</div>';
+    }
+    if(avisoEl) avisoEl.innerHTML=aviso;
+
+    let vis=filas, ocultos=0;
+    if(soloSig){
+      const antes=filas.length;
+      vis=filas.filter(f=>f.r && !f.r.err && f.r.p<0.05);
+      // Los no estimables suelen ser los de efecto MÁS grande (separación): esconderlos
+      // sin decirlo daría una lectura al revés de la realidad.
+      ocultos=antes-vis.length-filas.filter(f=>f.r&&!f.r.err&&f.r.p>=0.05).length;
+    }
+    if(!vis.length){ host.innerHTML='<div class="empty" style="padding:14px;">Sin predictores que mostrar con este filtro.'+
+      (ocultos?' ('+ocultos+' no estimable'+(ocultos===1?'':'s')+' — mirá la lista completa)':'')+'</div>'; return; }
+
+    const th='padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
+    let body='';
+    vis.forEach(f=>{
+      const r=f.r;
+      if(r.err){
+        body+='<tr style="border-top:1px solid var(--border);"><td style="padding:6px 8px;font-weight:600;">'+esc(f.pred.lbl)+'</td>'+
+          '<td style="padding:6px 8px;text-align:center;">'+f.n+'</td>'+
+          '<td colspan="4" style="padding:6px 8px;color:var(--text-2);font-style:italic;">'+esc(r.err)+'</td></tr>';
+        return;
+      }
+      const sig = r.p<0.05 ? (Math.min(f.eventos,f.noEventos)>=30 ? '🟢' : '🟡') : '⚫';
+      const unidad = f.pred.tipo==='c' ? ('por cada +1 '+(f.pred.u||'unidad')) : 'sí vs no';
+      body+='<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:6px 8px;font-weight:600;white-space:nowrap;">'+esc(f.pred.lbl)+
+          '<div style="font-size:10px;color:var(--text-2);font-weight:400;">'+esc(unidad)+'</div></td>'+
+        '<td style="padding:6px 8px;text-align:center;">'+f.n+
+          '<div style="font-size:10px;color:var(--text-2);">'+f.eventos+' / '+f.noEventos+'</div></td>'+
+        '<td style="padding:6px 8px;text-align:right;font-weight:600;">'+r.or.toFixed(2)+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+r.lo.toFixed(2)+' – '+r.hi.toFixed(2)+'</td>'+
+        '<td style="padding:6px 8px;text-align:right;">'+pTxt(r.p)+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-size:15px;">'+sig+'</td></tr>';
+    });
+    host.innerHTML='<table class="est-tbl" style="width:100%;border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+th+'text-align:left;">Predictor</th>'+
+      '<th style="'+th+'text-align:center;">N (ev/no)</th>'+
+      '<th style="'+th+'text-align:right;">OR</th>'+
+      '<th style="'+th+'text-align:right;">IC 95%</th>'+
+      '<th style="'+th+'text-align:right;">p</th>'+
+      '<th style="'+th+'text-align:center;">Sig.</th></tr></thead><tbody>'+body+'</tbody></table>'+
+      _notaHTML('Cada fila es un modelo <b>por separado</b> —un solo predictor— así que estos OR no están '+
+        'ajustados entre sí: si dos predictores están correlacionados, los dos van a salir significativos '+
+        'aunque uno explique al otro. Un OR mayor a 1 indica más probabilidad del desenlace; si el IC 95% '+
+        'cruza el 1, el efecto no se distingue del azar. Desenlace analizado: <b>'+esc(out.lbl)+'</b>. '+
+        'Tampoco hay corrección por comparaciones múltiples: se ajustan hasta '+filas.length+' modelos por '+
+        'desenlace, así que con α=0,05 cabe esperar alguno significativo por azar. Una fila por paciente '+
+        '(si alguien tiene varios ecos se usa el más reciente).'+
+        (ocultos?' <b>'+ocultos+' predictor'+(ocultos===1?'':'es')+' no estimable'+(ocultos===1?'':'s')+
+          '</b> quedan fuera de este filtro; suelen ser los de efecto más extremo.':''));
+  };
+
+  /* ══ Módulo B — comparación entre subgrupos ══
+     Igual que en el módulo A, la variable de corte se excluye de las comparadas: cortar
+     por edad y después "descubrir" que la edad difiere entre los grupos no es un
+     hallazgo, es la definición del corte. */
+  const AV_CORTES = [
+    {k:'hta',  lbl:'HTA (sí / no)',        a:'Con HTA',      b:'Sin HTA',
+     g:s=>{const v=ANT(s,RE_HTA); return v==null?null:(v==='Sí');}, excluye:[]},
+    {k:'sexo', lbl:'Sexo',                 a:'Masculino',    b:'Femenino',
+     g:s=>{const v=SEXO(s); return v==null?null:(v==='Masculino');}, excluye:[]},
+    {k:'fa',   lbl:'FA / flutter (sí / no)', a:'Con FA',     b:'Sin FA',
+     g:s=>{const v=ANT(s,RE_FA); return v==null?null:(v==='Sí');}, excluye:[]},
+    {k:'edad', lbl:'Edad (≥65 / <65)',     a:'65 años o más', b:'Menos de 65',
+     g:s=>{const e=_num(s.edad); return e==null?null:(e>=65);}, excluye:['edad']}
+  ];
+
+  const AV_NUM = AV_PREDS.filter(v=>v.tipo==='c' && v.req==='eco');
+
+  function avSubCalcular(corteKey){
+    const c=AV_CORTES.find(x=>x.k===corteKey)||AV_CORTES[0];
+    const ecos=avEcos();
+    const filas=[];
+    AV_NUM.forEach(v=>{
+      if(c.excluye.indexOf(v.k)>=0) return;
+      const A=[],B=[];
+      ecos.forEach(s=>{
+        let gr,val;
+        try{ gr=c.g(s); val=v.g(_pEco(s)); }catch(e){ return; }
+        if(gr==null||val==null||isNaN(val)) return;
+        (gr?A:B).push(+val);
+      });
+      const r=(A.length&&B.length)?mannwhitney(A,B):null;
+      filas.push({v, A, B, stA:paStats(A), stB:paStats(B), p:r?r.p:null});
+    });
+    return {c, filas};
+  }
+
+  /* Boxplot sin librería extra: Chart.js dibuja la caja como barra flotante [p25,p75] y
+     un plugin local —registrado sólo en este gráfico, no globalmente— agrega la mediana
+     y los bigotes. Bigotes de Tukey: hasta el valor más extremo dentro de 1.5·IQR, y los
+     que quedan afuera se cuentan como atípicos en vez de estirar la caja. */
+  function avTukey(arr){
+    const st=paStats(arr); if(!st.n) return null;
+    const iqr=st.p75-st.p25;
+    const loF=st.p25-1.5*iqr, hiF=st.p75+1.5*iqr;
+    const dentro=st.vals.filter(x=>x>=loF&&x<=hiF);
+    return { p25:st.p25, p75:st.p75, med:st.med, n:st.n,
+             lo: dentro.length?dentro[0]:st.min, hi: dentro.length?dentro[dentro.length-1]:st.max,
+             atipicos: st.n-dentro.length };
+  }
+
+  const avBoxPlugin = {
+    id:'avBox',
+    afterDatasetsDraw(chart){
+      const meta=chart.getDatasetMeta(0); if(!meta||!meta.data) return;
+      const ctx=chart.ctx, y=chart.scales.y;
+      const cajas=chart.$avCajas||[];
+      ctx.save();
+      cajas.forEach((c,i)=>{
+        const el=meta.data[i]; if(!el||!c) return;
+        const x=el.x, w=(el.width||30)*0.6;
+        ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=2;
+        // mediana
+        ctx.beginPath(); ctx.moveTo(x-w/2, y.getPixelForValue(c.med)); ctx.lineTo(x+w/2, y.getPixelForValue(c.med)); ctx.stroke();
+        // bigotes
+        ctx.lineWidth=1.2; ctx.strokeStyle='rgba(226,232,240,.75)';
+        [[c.lo,c.p25],[c.p75,c.hi]].forEach(([d,e])=>{
+          ctx.beginPath(); ctx.moveTo(x, y.getPixelForValue(d)); ctx.lineTo(x, y.getPixelForValue(e)); ctx.stroke();
+        });
+        [c.lo,c.hi].forEach(v=>{
+          ctx.beginPath(); ctx.moveTo(x-w/3, y.getPixelForValue(v)); ctx.lineTo(x+w/3, y.getPixelForValue(v)); ctx.stroke();
+        });
+      });
+      ctx.restore();
+    }
+  };
+
+  window.avSubRender=function(){
+    const host=document.getElementById('av-sg-tabla'), boxHost=document.getElementById('av-sg-box');
+    if(!host) return;
+    if(boxHost){ boxHost.querySelectorAll('canvas').forEach(cv=>{ if(HAS_CHART){const ch=Chart.getChart(cv); if(ch)ch.destroy();} }); boxHost.innerHTML=''; }
+    const corte=(document.getElementById('av-sg-corte')||{}).value||'hta';
+    const {c, filas}=avSubCalcular(corte);
+    const conDato=filas.filter(f=>f.p!=null);
+    if(!conDato.length){ host.innerHTML='<div class="empty" style="padding:14px;">No hay estudios con la variable de corte y valores numéricos para comparar.</div>'; return; }
+
+    const th='padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
+    const celda=st=>st.n
+      ? '<td style="padding:6px 8px;text-align:right;">'+(Math.round(st.med*10)/10)+
+        '<div style="font-size:10px;color:var(--text-2);white-space:nowrap;">'+
+        (Math.round(st.p25*10)/10)+'–'+(Math.round(st.p75*10)/10)+' (n='+st.n+')</div></td>'
+      : '<td style="padding:6px 8px;text-align:right;color:var(--text-2);">—</td>';
+    let body='';
+    filas.slice().sort((x,y)=>(x.p==null?2:x.p)-(y.p==null?2:y.p)).forEach(f=>{
+      body+='<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:6px 8px;font-weight:600;white-space:nowrap;">'+esc(f.v.lbl)+
+          (f.v.u?'<div style="font-size:10px;color:var(--text-2);font-weight:400;">'+esc(f.v.u)+'</div>':'')+'</td>'+
+        celda(f.stA)+celda(f.stB)+
+        '<td style="padding:6px 8px;text-align:right;">'+pTxt(f.p)+'</td>'+
+        '<td style="padding:6px 8px;text-align:center;font-size:15px;">'+
+          (f.p!=null&&f.p<0.05 ? (Math.min(f.stA.n,f.stB.n)>=8?'🟢':'🟡') : '⚫')+'</td></tr>';
+    });
+    host.innerHTML='<table class="est-tbl" style="width:100%;border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+th+'text-align:left;">Variable</th>'+
+      '<th style="'+th+'text-align:right;">'+esc(c.a)+'</th>'+
+      '<th style="'+th+'text-align:right;">'+esc(c.b)+'</th>'+
+      '<th style="'+th+'text-align:right;">p</th>'+
+      '<th style="'+th+'text-align:center;">Sig.</th></tr></thead><tbody>'+body+'</tbody></table>'+
+      _notaHTML('Cada celda es la <b>mediana</b> con su rango intercuartílico (P25–P75) y el n del grupo. '+
+        'El p es de Mann-Whitney, que compara rangos y no promedios. Se comparan '+conDato.length+' variables '+
+        'a la vez, así que con α=0,05 cabe esperar alrededor de '+Math.max(1,Math.round(conDato.length*0.05))+
+        ' resultado significativo por azar: mirar primero los de p más chico y confirmarlos en otra muestra.');
+
+    // Boxplots de las 5 más significativas
+    if(!boxHost) return;
+    const top=conDato.slice().sort((x,y)=>x.p-y.p).slice(0,5);
+    if(!HAS_CHART){ boxHost.innerHTML='<div class="empty" style="padding:12px;">Gráficos no disponibles (no cargó Chart.js). Las medianas de la tabla son correctas igual.</div>'; return; }
+    boxHost.innerHTML='<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Distribución de las '+
+      top.length+' variables con menor p — caja P25–P75, línea de mediana, bigotes de Tukey (1,5·IQR):</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">'+
+      top.map((f,i)=>'<div><div style="font-size:11px;font-weight:600;margin-bottom:4px;">'+esc(f.v.lbl)+
+        (f.v.u?' <span style="color:var(--text-2);font-weight:400;">('+esc(f.v.u)+')</span>':'')+
+        ' <span style="color:var(--text-2);font-weight:400;">p='+pTxt(f.p)+'</span></div>'+
+        '<div style="height:190px;"><canvas data-box="'+i+'"></canvas></div></div>').join('')+'</div>';
+    top.forEach((f,i)=>{
+      const cv=boxHost.querySelector('canvas[data-box="'+i+'"]'); if(!cv) return;
+      const cA=avTukey(f.A), cB=avTukey(f.B); if(!cA||!cB) return;
+      const lo=Math.min(cA.lo,cB.lo), hi=Math.max(cA.hi,cB.hi), aire=(hi-lo)*0.05||1;
+      const yMin=lo-aire, yMax=hi+aire;
+      const ch=new Chart(cv,{ type:'bar',
+        data:{ labels:[c.a,c.b], datasets:[{ label:f.v.lbl,
+          data:[[cA.p25,cA.p75],[cB.p25,cB.p75]],
+          backgroundColor:['rgba(45,212,191,.45)','rgba(244,63,94,.45)'],
+          borderColor:['rgba(45,212,191,.9)','rgba(244,63,94,.9)'], borderWidth:1.5 }] },
+        options:{ responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{display:false},
+            tooltip:{ callbacks:{ label:(it)=>{ const k=it.dataIndex===0?cA:cB;
+              return ['mediana '+(Math.round(k.med*10)/10),
+                      'P25–P75 '+(Math.round(k.p25*10)/10)+'–'+(Math.round(k.p75*10)/10),
+                      'bigotes '+(Math.round(k.lo*10)/10)+'–'+(Math.round(k.hi*10)/10),
+                      'n='+k.n+(k.atipicos?(' · '+k.atipicos+' atípico'+(k.atipicos===1?'':'s')):'')]; } } } },
+          /* El dataset son barras [p25,p75], así que Chart.js escalaría el eje sólo con
+             la caja y los bigotes —que van 1,5·IQR más allá— se dibujarían encima de las
+             etiquetas del eje. Se fija el rango a mano con 5% de aire. */
+          scales:{ x:{ticks:{font:{size:10}}},
+                   y:{beginAtZero:false, min:yMin, max:yMax, ticks:{font:{size:10}}} } },
+        plugins:[avBoxPlugin] });
+      ch.$avCajas=[cA,cB]; ch.update();
+    });
+  };
+
+  /* ══ Módulo C — evolución longitudinal del paciente ══
+     Agrupa por la identidad de paciente que ya arma la app (PATIENTS, que cruza por CI y
+     cae a nombre+fecha de nacimiento si no hay documento), no por CI a mano: así un
+     paciente cargado sin documento en un estudio no se parte en dos.
+
+     El selector muestra iniciales + documento, la misma convención que la tabla de
+     estudios recientes: alcanza para que el médico identifique a su paciente sin volcar
+     el nombre completo en pantalla. */
+  const AV_EVOL_VARS = [
+    {k:'fevi',  lbl:'FEVI',            u:'%',     color:'#2dd4bf', g:s=>FEVI(_pEco(s))},
+    {k:'ee',    lbl:"E/e' promedio",   u:'',      color:'#f59e0b', g:s=>EE(_pEco(s))},
+    {k:'tapse', lbl:'TAPSE',           u:'mm',    color:'#a78bfa', g:s=>TAPSE(_pEco(s))},
+    {k:'psap',  lbl:'PSAP',            u:'mmHg',  color:'#f43f5e', g:s=>PSAP(_pEco(s))}
+  ];
+
+  /* Cuántas series quedarían si no hubiera filtro de período. El seguimiento suele
+     abarcar años, y el rango por defecto son 365 días: sin esto, un médico que sabe que
+     su paciente tiene cuatro ecos ve "sin pacientes" y no tiene forma de sospechar que
+     el filtro los está recortando. */
+  function avSeriesOcultas(){
+    const enBase=new Set(avPacientesConSerie().map(x=>x.key));
+    /* Se cuenta sobre TODO el histórico pero con el MISMO filtro de médico: si no, el
+       aviso diría "probá con Todo el histórico" para pacientes que en realidad esconde
+       el filtro por médico, y ampliar el período no los haría aparecer. */
+    const med=(document.getElementById('est-f-med')||{}).value||'all';
+    const canon=(typeof estAliasMed==='function')?estAliasMed(
+      (typeof filteredStudies==='function')?filteredStudies({from:null,to:null}):[]):(k=>k);
+    const todos=new Map();
+    const universo=(typeof filteredStudies==='function')?filteredStudies({from:null,to:null}):[];
+    universo.filter(s=>s.app==='eco').forEach(s=>{
+      const id=s._pid; if(!id||!id.identifiable||!s.fecha) return;
+      if(med!=='all' && typeof doctorIdentity==='function' && canon(doctorIdentity(s).key)!==med) return;
+      todos.set(id.key,(todos.get(id.key)||0)+1);
+    });
+    let ocultas=0; todos.forEach((n,k)=>{ if(n>=2 && !enBase.has(k)) ocultas++; });
+    return ocultas;
+  }
+
+  function avPacientesConSerie(){
+    const porPac=new Map();
+    avEcosTodos().forEach(s=>{      // TODOS los ecos: acá la repetición es el dato
+      const id=s._pid; if(!id||!id.identifiable) return;
+      if(!porPac.has(id.key)) porPac.set(id.key,{key:id.key, estudios:[], nombre:s.nombre, ci:s.ci, level:id.level});
+      porPac.get(id.key).estudios.push(s);
+    });
+    const out=[];
+    porPac.forEach(v=>{
+      const conFecha=v.estudios.filter(s=>s.fecha).sort((a,b)=>a.fecha-b.fecha);
+      if(conFecha.length<2) return;
+      /* patientIdentity tiene un tercer nivel que agrupa SÓLO por nombre normalizado
+         (L2b), sin documento ni fecha de nacimiento: dos homónimos se fusionarían en una
+         sola serie. Un módulo que grafica "la evolución de este paciente" es el peor
+         lugar para el fallback más laxo del sistema de identidad, así que se marca. */
+      const debil = !v.ci;
+      out.push({ key:v.key, estudios:conFecha, n:conFecha.length, debil,
+                 etiqueta: initials(v.nombre)+' · '+(v.ci||'s/doc')+' ('+conFecha.length+' ecos)'+
+                           (debil?' ⚠ sin documento':'') });
+    });
+    return out.sort((a,b)=>b.n-a.n);
+  }
+
+  window.avEvolRender=function(){
+    const host=document.getElementById('av-ev-cont'); if(!host) return;
+    host.querySelectorAll('canvas').forEach(cv=>{ if(HAS_CHART){const c=Chart.getChart(cv); if(c)c.destroy();} });
+    const lista=avPacientesConSerie();
+    if(!lista.length){
+      const oc=avSeriesOcultas();
+      host.innerHTML='<div class="empty" style="padding:14px;">Ningún paciente tiene dos o más ecocardiogramas '+
+        'con fecha en la población seleccionada.'+
+        (oc>0 ? ' <b>Pero hay '+oc+' paciente'+(oc===1?'':'s')+' con seguimiento fuera del período elegido</b> — '+
+                'el seguimiento suele abarcar años y el filtro de período los está dejando afuera. '+
+                'Probá con «Todo el histórico».'
+              : ' El seguimiento necesita al menos dos estudios del mismo paciente.')+'</div>';
+      return;
+    }
+    const sel=document.getElementById('av-ev-pac');
+    const elegido=(sel&&sel.value)||lista[0].key;
+    let pac=lista.find(x=>x.key===elegido);
+    /* Sin este control, si la población cambió y la clave elegida ya no existe se caía a
+       lista[0] en silencio: el desplegable mostraría un paciente y el gráfico la
+       evolución de otro. En una app clínica eso es un error de identidad de paciente. */
+    if(!pac){
+      host.innerHTML='<div class="empty" style="padding:14px;">El paciente seleccionado ya no está en la '+
+        'población filtrada (cambió el período o el médico). Elegí otro en la lista.</div>';
+      if(typeof avFillSelects==='function') avFillSelects();
+      return;
+    }
+
+    // Tabla de valores por estudio: el gráfico se lee mejor, pero el número exacto tiene
+    // que estar disponible.
+    const th='padding:5px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
+    const fmt=v=>(v==null||isNaN(v))?'—':String(Math.round(v*10)/10);
+    let body='';
+    pac.estudios.forEach(s=>{
+      body+='<tr style="border-top:1px solid var(--border);">'+
+        '<td style="padding:6px 8px;white-space:nowrap;">'+esc(fmtDate(s.fecha))+'</td>'+
+        AV_EVOL_VARS.map(v=>'<td style="padding:6px 8px;text-align:right;">'+fmt(v.g(s))+'</td>').join('')+'</tr>';
+    });
+    const meses = (pac.estudios[pac.estudios.length-1].fecha - pac.estudios[0].fecha)/(1000*60*60*24*30.44);
+
+    const ocultas=avSeriesOcultas();
+    host.innerHTML='<div style="font-size:13px;font-weight:600;margin-bottom:2px;">'+esc(pac.etiqueta)+'</div>'+
+      '<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">'+
+        esc(pac.n+' ecocardiogramas')+' · seguimiento de '+(meses<1?'menos de un mes':(Math.round(meses)+' meses'))+'</div>'+
+      (pac.debil?'<div style="padding:8px 11px;background:rgba(244,63,94,.12);border-left:3px solid #f43f5e;'+
+        'border-radius:4px;font-size:11.5px;line-height:1.5;margin-bottom:10px;">Este paciente se identificó '+
+        '<b>sólo por nombre</b>, sin documento: si hay dos homónimos, esta serie podría estar mezclando estudios '+
+        'de personas distintas. Verificar antes de sacar conclusiones.</div>':'')+
+      (ocultas>0 ? '<div style="padding:8px 11px;background:rgba(234,179,8,.12);border-left:3px solid #eab308;'+
+        'border-radius:4px;font-size:11.5px;line-height:1.5;margin-bottom:10px;">El filtro de período deja afuera '+
+        ocultas+' paciente'+(ocultas===1?'':'s')+' más con dos o más ecos. Para ver el seguimiento completo, '+
+        'elegí «Todo el histórico» en el período.</div>' : '')+
+      '<div style="height:280px;margin-bottom:12px;"><canvas id="av-ev-chart"></canvas></div>'+
+      '<table class="est-tbl" style="width:100%;border-collapse:collapse;font-size:12px;">'+
+      '<thead><tr><th style="'+th+'text-align:left;">Fecha</th>'+
+      AV_EVOL_VARS.map(v=>'<th style="'+th+'text-align:right;">'+esc(v.lbl)+(v.u?' ('+esc(v.u)+')':'')+'</th>').join('')+
+      '</tr></thead><tbody>'+body+'</tbody></table>'+
+      _notaHTML('Cada línea es una medida del mismo paciente a lo largo del tiempo. Las cuatro variables '+
+        'comparten un eje, así que <b>las alturas relativas entre líneas no significan nada</b> —E/e\' y PSAP '+
+        'no se miden en la misma unidad—: lo que se lee es la <b>pendiente</b> de cada una. Un tramo cortado '+
+        'indica que ese estudio no tenía esa medida cargada. Con dos o tres puntos, un cambio puede ser '+
+        'variabilidad entre operadores y no evolución real.');
+
+    if(!HAS_CHART){
+      const box=host.querySelector('#av-ev-chart').parentElement;
+      box.innerHTML='<div class="empty" style="height:100%;display:flex;align-items:center;justify-content:center;">Gráfico no disponible (no cargó Chart.js). La tabla de abajo tiene los valores.</div>';
+      return;
+    }
+    const labels=pac.estudios.map(s=>fmtDate(s.fecha));
+    const datasets=AV_EVOL_VARS.map(v=>({
+      label:v.lbl+(v.u?(' ('+v.u+')'):''),
+      data:pac.estudios.map(s=>{ const x=v.g(s); return (x==null||isNaN(x))?null:+x; }),
+      borderColor:v.color, backgroundColor:v.color, tension:0.25, spanGaps:false, pointRadius:4
+    })).filter(d=>d.data.some(x=>x!=null));
+    new Chart(document.getElementById('av-ev-chart'),{ type:'line', data:{labels,datasets},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{labels:{boxWidth:12,font:{size:10}}} },
+        scales:{ x:{ticks:{font:{size:10}}}, y:{beginAtZero:false,ticks:{font:{size:10}}} } } });
+  };
+
+  window.avFillSelects=function(){
+    const o=document.getElementById('av-lg-out');
+    if(o && !o.options.length) o.innerHTML=AV_OUTCOMES.map(x=>'<option value="'+esc(x.k)+'">'+esc(x.lbl)+'</option>').join('');
+    const c=document.getElementById('av-sg-corte');
+    if(c && !c.options.length) c.innerHTML=AV_CORTES.map(x=>'<option value="'+esc(x.k)+'">'+esc(x.lbl)+'</option>').join('');
+    // El de pacientes se rearma siempre: depende de la población filtrada, no es estático.
+    const pe=document.getElementById('av-ev-pac');
+    if(pe){
+      const prev=pe.value;
+      const lista=avPacientesConSerie();
+      pe.innerHTML=lista.map(x=>'<option value="'+esc(x.key)+'">'+esc(x.etiqueta)+'</option>').join('')
+        || '<option value="">— sin pacientes con 2+ ecos —</option>';
+      if([...pe.options].some(o=>o.value===prev)) pe.value=prev;
+    }
+  };
+  /* Avanzado sólo se dibujaba al entrar a la subtab, así que cambiar el período o el
+     médico dejaba las tres tablas con los números del corte anterior, sin ningún aviso,
+     mientras el resto del panel sí se actualizaba. */
+  window.avRefrescarSiVisible=function(){
+    const n=document.getElementById('est-panel-avanzado');
+    if(!n || n.style.display==='none') return;
+    avFillSelects(); avRenderTodo();
+  };
+  window.avRenderTodo=function(){
+    try{ avLogRender(); }catch(e){ console.error('[avanzado] regresión logística',e); }
+    try{ avSubRender(); }catch(e){ console.error('[avanzado] subgrupos',e); }
+    try{ avEvolRender(); }catch(e){ console.error('[avanzado] evolución',e); }
+  };
+
   window.estSubtab=function(id,el){
     document.querySelectorAll('#view-estadistica .est-subtab').forEach(b=>b.classList.remove('active'));
     if(el) el.classList.add('active');
-    ['asoc','porapp','ia'].forEach(p=>{ const n=document.getElementById('est-panel-'+p); if(n) n.style.display=(p===id?'block':'none'); });
+    ['asoc','porapp','avanzado','ia'].forEach(p=>{ const n=document.getElementById('est-panel-'+p); if(n) n.style.display=(p===id?'block':'none'); });
     if(typeof estFillMedSelect==='function') estFillMedSelect();
     if(id==='asoc'){ estAsocRender(); renderHeatmap(); }
     if(id==='porapp' && typeof paRender==='function'){ paFillAppSelect(); paRender(); }
+    if(id==='avanzado'){ avFillSelects(); avRenderTodo(); }
   };
   /* Fase 4 — filtro por médico. estBase() es la única fuente de la población, así que
      con recomputar todo alcanza: asociaciones, heatmap, forest y descriptivos quedan
@@ -2489,6 +3102,7 @@ function renderCurrent(){
     computeAll(); estAsocRender(); renderHeatmap();
     const pa=document.getElementById('est-panel-porapp');
     if(pa && pa.style.display!=='none' && typeof paRender==='function') paRender();
+    if(typeof avRefrescarSiVisible==='function') avRefrescarSiVisible();
     // Los informes ya generados quedan de la población anterior: se limpian para que
     // nadie lea un texto que no corresponde al médico que ahora está seleccionado.
     estInformesLimpiar();
