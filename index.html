@@ -1019,6 +1019,76 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 const $  = (s,ctx=document)=>ctx.querySelector(s);
 const $$ = (s,ctx=document)=>Array.from(ctx.querySelectorAll(s));
 const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ── Saneo para jsPDF ──
+   jsPDF escribe en Latin-1 (WinAnsi): cualquier carácter fuera de ese rango sale como un
+   glifo equivocado o directamente roto. Este es el ÚNICO saneador; todos los exportadores
+   lo usan. Si aparece un símbolo nuevo, se agrega acá una vez y queda arreglado en los
+   cinco PDF a la vez. */
+const _PDF_MAP = {
+  'ρ':'rho','χ':'X','→':'->','↔':'<->','←':'<-','⇄':'<->',   /* ² y ³ son Latin-1: se dejan */
+  '≥':'>=','≤':'<=','≠':'!=','≈':'~','∼':'~','∞':'inf',
+  /* ±, ×, ÷ y · NO se mapean: son Latin-1 y jsPDF los dibuja bien. Convertirlos
+     degradaría el texto —el separador "·" del informe pasaría a "."—. */
+  '–':'-','—':'-','−':'-','‑':'-','•':'-','▸':'>','◆':'*','▲':'^','▼':'v',
+  '“':'"','”':'"','„':'"','‘':"'",'’':"'",'…':'...','′':"'",'″':'"',
+  'Δ':'D','α':'alfa','β':'beta','σ':'sigma','μ':'micro','κ':'kappa','λ':'lambda','θ':'theta',
+  '⚠':'!','✓':'ok','✗':'x','✅':'ok','❌':'x','ℹ':'i','📄':'','📊':'','📥':'','🗑':'',
+  '🟢':'[verde]','🟡':'[amarillo]','🔴':'[rojo]','⚫':'[negro]','🟠':'[naranja]'
+};
+/* Envuelve un documento jsPDF para que TODO lo que se escriba pase por pdfSafe. Sanear
+   llamada por llamada es lo que produjo este bug: quedaron cinco `doc.text` con guión
+   largo —que jsPDF descarta en silencio, verificado en el content stream— y basta olvidar
+   uno para que el informe salga con el texto mutilado. Con el documento envuelto, un
+   exportador nuevo queda cubierto sin que nadie tenga que acordarse. */
+function pdfDoc(opts){
+  _pdfCaidos = [];   // se reinicia por documento
+  const doc = new window.jspdf.jsPDF(opts);
+  const save0 = doc.save.bind(doc);
+  /* El aviso de caracteres caídos tiene que llegar a quien firma el informe, no sólo a
+     la consola: un cardiólogo no tiene DevTools abierto y el PDF puede salir sembrado
+     de '?' sin que nada lo indique. */
+  doc.save = (...a) => {
+    const r = save0(...a);
+    const unicos = [...new Set(_pdfCaidos)];
+    if(unicos.length && typeof toast==='function'){
+      toast('⚠️ El PDF tiene ' + unicos.length + ' símbolo' + (unicos.length===1?'':'s') +
+            ' que no se pudieron representar (' + unicos.join(' ') + ')');
+    }
+    return r;
+  };
+  const text0 = doc.text.bind(doc);
+  doc.text = (txt, ...resto) => text0(
+    Array.isArray(txt) ? txt.map(pdfSafe) : pdfSafe(txt), ...resto);
+  const split0 = doc.splitTextToSize.bind(doc);
+  // También al medir: si se parte el texto sin sanear, el ancho no corresponde al que
+  // finalmente se dibuja.
+  doc.splitTextToSize = (txt, ...resto) =>
+    split0(Array.isArray(txt) ? txt.map(pdfSafe) : pdfSafe(txt), ...resto);
+  return doc;
+}
+
+let _pdfCaidos=[];   // caracteres sin equivalente vistos en la exportación en curso
+function pdfSafe(t){
+  if(t==null){ console.warn('[pdfSafe] se intentó escribir un texto nulo o indefinido'); return ''; }
+  if(typeof t!=='string' && typeof t!=='number'){
+    console.warn('[pdfSafe] tipo inesperado, se imprimiría mal:',t);
+  }
+  let out=String(t);
+  Object.keys(_PDF_MAP).forEach(k=>{ if(out.indexOf(k)>=0) out=out.split(k).join(_PDF_MAP[k]); });
+  // Selectores de variación y espacios de ancho cero: '⚠️' es U+26A0 + U+FE0F, y sin
+  // sacar el segundo la advertencia salía como '!?'.
+  out = out.replace(/[\uFE0E\uFE0F\u200B-\u200D\u2060]/g,'');
+  /* Red final con flag `u`: sin él, un emoji no mapeado matchea sus dos unidades
+     suplentes por separado y sale '??' con dos avisos de codepoints inservibles.
+     Se marca con '?' en vez de borrar: una "β = 0,3" borrada saldría como " = 0,3",
+     que parece un dato y no lo es. */
+  return out.replace(/[^\x00-\xFF]/gu, c => {
+    _pdfCaidos.push(c);
+    console.warn('[pdfSafe] sin equivalente Latin-1:', c, 'U+'+c.codePointAt(0).toString(16).toUpperCase());
+    return '?';
+  });
+}
 /* Color de la paleta con transparencia. Las gráficas tenían teal y rosa fijos del diseño
    anterior, así que no seguían el tema ni cambiaban con claro/oscuro. */
 function cssvA(n,alpha){
@@ -2195,11 +2265,10 @@ async function generatePDF(){
     }catch(e){ fallos.push('forest plot'); console.warn('[PDF] forest',e); }
   }
 
-  const {jsPDF}=window.jspdf;
   /* compress:true comprime los content streams. Sin esto las gráficas se embeben en
      crudo y el informe pesa decenas de MB: inservible para adjuntar a un envío a
      congreso o a una auditoría. */
-  const doc=new jsPDF({unit:'pt',format:'a4',compress:true});
+  const doc=pdfDoc({unit:'pt',format:'a4',compress:true});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
   const M=48; let y=M;
   const PIE=34;                       // reservado para el pie de página
@@ -2221,11 +2290,12 @@ async function generatePDF(){
      columna siguiente (Helvetica 8pt promedia más de los 3,9pt que se asumían). */
   const celdaTxt=(txt,ancho)=>{ let t=ascii(txt);
     if(doc.getTextWidth(t)<=ancho-4) return t;
-    while(t.length>1 && doc.getTextWidth(t+'…')>ancho-4) t=t.slice(0,-1);
-    return t+'…'; };
+    // '...' y no '…': el wrapper convierte el carácter al dibujar, así que medir con
+    // uno y pintar el otro rompe la garantía de que la celda no invade la siguiente.
+    while(t.length>1 && doc.getTextWidth(t+'...')>ancho-4) t=t.slice(0,-1);
+    return t+'...'; };
   // jsPDF usa Latin-1: los símbolos estadísticos saldrían como basura.
-  const ascii=t=>String(t).replace(/[χ²ρ→↔⚠±–—′″Δ−▸•≥≤]/g,c=>({'χ':'X','²':'2','ρ':'r','→':'->','↔':'-',
-    '⚠':'!','±':'+/-','–':'-','—':'-','′':"'",'″':'"','Δ':'D','−':'-','▸':'>','•':'-','≥':'>=','≤':'<='}[c]||c));
+  const ascii=pdfSafe;   // saneador único (ver pdfSafe)
 
   /* ── 1. Portada ── */
   if(logo){ try{ doc.addImage(logo,'PNG',M,y,64,64); }catch(e){} }
@@ -2693,8 +2763,7 @@ function guiaPDF(){
   catch(e){ console.error('[guiaPDF]',e); toast('❌ No se pudo generar la guía (ver consola)'); }
 }
 function _guiaPDF(){
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({unit:'pt',format:'a4',compress:true});
+  const doc=pdfDoc({unit:'pt',format:'a4',compress:true});
   const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
   const M=52, PIE=34; let y=M;
   const fecha=new Date().toLocaleDateString('es-UY');
@@ -2702,17 +2771,13 @@ function _guiaPDF(){
   /* Se acotan los tags reales en vez de /<[^>]+>/: con esa regex, un "p<0,05 como <b>x</b>"
      matcheaba desde el < literal hasta el primer >, y el PDF imprimía una frase distinta
      —sólo en el PDF, porque en pantalla el parser HTML no trata "<0" como tag—. */
-  const limpio=t=>guiaTexto(t).replace(/<\/?(?:b|i|em|strong|br)\s*\/?>/gi,'')
-    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
-    .replace(/[ρχ²→↔≥≤±–—“”‘’…Δ−•▸]/g,c=>({'ρ':'rho','χ':'X','²':'2','→':'->','↔':'<->','≥':'>=','≤':'<=',
-      '±':'+/-','–':'-','—':'-','“':'"','”':'"','‘':"'",'’':"'",'…':'...','Δ':'D','−':'-','•':'-','▸':'>'}[c]||c))
-    // Los semáforos del capítulo del p-valor son emoji: jsPDF sólo maneja Latin-1 y los
-    // dibujaría como basura, así que se nombran.
-    .replace(/🟢/g,'[verde]').replace(/🟡/g,'[amarillo]').replace(/⚫/g,'[negro]')
-    .replace(/[αβσμκ≈∼∞]/g,c=>({'α':'alfa','β':'beta','σ':'sigma','μ':'micro','κ':'kappa','≈':'~','∼':'~','∞':'inf'}[c]||c))
-    /* Red final: en vez de borrar en silencio —una "β = 0,3" saldría como " = 0,3"— se
-       marca y se avisa por consola, para que un símbolo nuevo no desaparezca sin rastro. */
-    .replace(/[^\x00-\xFF]/g,c=>{ console.warn('[guiaPDF] carácter fuera de Latin-1 descartado:',c); return '?'; });
+  /* Resuelve los tokens, saca el markup de énfasis y decodifica entidades; el saneo de
+     caracteres lo hace pdfSafe, que es el único. */
+  const limpio=t=>pdfSafe(
+    guiaTexto(t).replace(/<\/?(?:b|i|em|strong|br)\s*\/?>/gi,'')
+      .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+      .replace(/&amp;/g,'&')
+  );
   const salto=h=>{ if(y+h>H-M-PIE){ doc.addPage(); y=M; } };
   const bloque=(txt,size,bold,color,sangria)=>{
     const x=M+(sangria||0);
@@ -4203,7 +4268,7 @@ function renderCurrent(){
     const lista=avSubpoblaciones(); if(!lista.length){ toast('⚠️ Sin subpoblaciones'); return; }
     const sel=document.getElementById('av-sp-sel');
     const elegida=lista.find(x=>x.k===(sel&&sel.value))||lista[0];
-    const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'});
+    const doc=pdfDoc({unit:'mm',format:'a4'});
     const mL=14, mR=196; let y=18;
     const linea=(txt,size,bold,color)=>{
       doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size);
@@ -4256,9 +4321,10 @@ function renderCurrent(){
       _avUltimaAsoc.sig.forEach(r=>{
         if(y>272){ doc.addPage(); y=18; }
         doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(30,30,30);
-        const txt=r.lbl+'  —  '+r.method+' '+String(r.stat).replace(/[χ²ρ→↔⚠]/g,m=>({'χ':'X','²':'2','ρ':'r','→':'->','↔':'-','⚠':'!'}[m]||m))+
-          ', N='+r.n+', p='+pTxt(r.p)+', q='+pTxt(r.q);
-        doc.splitTextToSize(txt,mR-mL).forEach(l=>{ doc.text(l,mL,y); y+=4.4; });
+        const txt=pdfSafe(r.lbl+'  —  '+r.method+' '+r.stat+', N='+r.n+', p='+pTxt(r.p)+', q='+pTxt(r.q));
+        // Guarda por LÍNEA: el saneo alarga el texto ('ρ'→'rho', '↔'→'<->'), así que
+        // ahora envuelve más y sin esto se escribía debajo del margen inferior.
+        doc.splitTextToSize(txt,mR-mL).forEach(l=>{ if(y>272){doc.addPage();y=18;} doc.text(l,mL,y); y+=4.4; });
       });
     } else {
       y+=4; linea('(Sin asociaciones calculadas: usar "Ver asociaciones en esta subpoblacion" antes de exportar.)',8,false,[120,120,120]);
@@ -4503,7 +4569,7 @@ function renderCurrent(){
 
   // ── exportar ──
   window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const H=['Categoría','Asociación','N','Método','Estadístico','p','IC 95%','Significativo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.ci,r.sig==='🟢'?'Sí':(r.sig==='🟡'?'Sí (N bajo)':'No')])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
-  window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. Verde=sig N ok / Amarillo=sig N bajo / Negro=no sig.',mL,y);y+=7; const cols=[['Asociacion',66],['N',12],['Metodo',34],['Estadistico',40],['p',18],['IC 95%',34],['Sig',14]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=r.sig==='🟢'?'SI':(r.sig==='🟡'?'si*':'no'); const vals=[r.lbl,String(r.n),r.method,r.stat.replace(/[χ²ρ→↔⚠]/g,m=>({'χ':'X','²':'2','ρ':'r','→':'->','↔':'-','⚠':'!'}[m]||m)),pTxt(r.p),r.ci,sg]; let x=mL; vals.forEach((v,i)=>{doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
+  window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. Verde=sig N ok / Amarillo=sig N bajo / Negro=no sig.',mL,y);y+=7; const cols=[['Asociacion',66],['N',12],['Metodo',34],['Estadistico',40],['p',18],['IC 95%',34],['Sig',14]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=r.sig==='🟢'?'SI':(r.sig==='🟡'?'si*':'no'); const vals=[r.lbl,String(r.n),r.method,r.stat,pTxt(r.p),r.ci,sg].map(pdfSafe); let x=mL; vals.forEach((v,i)=>{doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
 
   // ── Análisis IA ──
   window.estGuardarKey=function(){ const inp=document.getElementById('est-api-key'); const k=(inp.value||'').trim(); if(!k){toast('Ingresá una clave');return;} localStorage.setItem('ca_anthropic_key',k); inp.value=''; document.getElementById('est-key-status').textContent='Clave guardada: sk-ant-…'+k.slice(-4); toast('✅ Clave guardada (solo en este navegador)'); };
@@ -4686,7 +4752,7 @@ function renderCurrent(){
     toast('✅ Informe generado');
   };
   window.estInformeCopiar=function(id){ const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Nada para copiar');return;} navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ Copiado')).catch(()=>toast('No se pudo copiar')); };
-  window.estInformePDF=function(id,titulo){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Generá el informe primero');return;} const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:'mm',format:'a4'}); const mL=14,mR=196; let y=18; doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — '+titulo,mL,y);y+=8; doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30,30,30); const lines=doc.splitTextToSize(el.textContent,mR-mL); lines.forEach(l=>{ if(y>282){doc.addPage();y=18;} doc.text(l,mL,y); y+=5.2; }); doc.save('ceiboanalytics_'+id+'.pdf'); toast('✅ PDF exportado'); };
+  window.estInformePDF=function(id,titulo){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Generá el informe primero');return;} const doc=pdfDoc({unit:'mm',format:'a4'}); const mL=14,mR=196; let y=18; doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(20,40,80);doc.text(pdfSafe('CeiboAnalytics — '+titulo),mL,y);y+=8; doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(30,30,30); const lines=doc.splitTextToSize(pdfSafe(el.textContent),mR-mL); lines.forEach(l=>{ if(y>282){doc.addPage();y=18;} doc.text(l,mL,y); y+=5.2; }); doc.save('ceiboanalytics_'+id+'.pdf'); toast('✅ PDF exportado'); };
   /* ── Contexto que se le manda al modelo ──
      RESGUARDO: se arma sólo con agregados —N, medias, dispersión y resultados de los
      contrastes—. No sale ningún identificador: ni nombre, ni documento, ni fecha de
@@ -4969,7 +5035,7 @@ window.paExportXLSX=function(){
 window.paExportPDF=function(){
   if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;}
   const filas=paFilas(); if(!filas.length){toast('⚠️ Sin datos');return;}
-  const {jsPDF}=window.jspdf; const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'});
   const mL=10; let y=16;
   doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);
   doc.text('CeiboAnalytics — Estadistica descriptiva por app',mL,y); y+=7;
@@ -4977,7 +5043,7 @@ window.paExportPDF=function(){
   const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;};
   head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30);
   filas.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);}
-    let x=mL; r.forEach((v,i)=>{ doc.text(String(v).replace(/[²³áéíóúñÁÉÍÓÚÑ]/g,m=>({'²':'2','³':'3','á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n'}[m]||m)).substring(0,Math.floor(cols[i][1]/1.7)),x,y); x+=cols[i][1]; }); y+=5; });
+    let x=mL; r.forEach((v,i)=>{ doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y); x+=cols[i][1]; }); y+=5; });
   doc.save('ceiboanalytics_por_app.pdf'); toast('✅ PDF exportado');
 };
 
