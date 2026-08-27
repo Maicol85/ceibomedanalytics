@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="dark">
+<!-- Claro por defecto: es el modo de ThesiSmart y EvidenceSmart, y el que se imprime
+     y se proyecta bien. El botón del header conserva la preferencia del usuario. -->
+<html lang="es" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -77,56 +79,69 @@
   --grid:        #2c2c2a;
   --baseline:    #383835;
   --border:      rgba(255,255,255,0.10);
-  --series-1:    #3987e5; /* azul */
-  --series-2:    #d95926; /* naranja */
-  --series-3:    #199e70; /* aqua */
-  --series-4:    #c98500; /* amarillo */
-  --series-5:    #d55181; /* magenta */
-  --series-6:    #008300; /* verde */
-  --series-7:    #9085e9; /* violeta */
-  --series-8:    #e66767; /* rojo */
-  --good:        #0ca30c;
-  --warning:     #fab219;
-  --serious:     #ec835a;
-  --critical:    #d03b3b;
-  --accent:      #3987e5;
+  --shadow:      0 2px 12px rgba(0,0,0,0.35);
+  --accentLt:    rgba(93,173,226,0.16);
+  --accentMid:   #5dade2;
+  --series-1:    #5dade2;
+  --series-2:    #d99058;
+  --series-3:    #48c9b0;
+  --series-4:    #d4ac0d;
+  --series-5:    #8fa9cc;
+  --series-6:    #52be80;
+  --series-7:    #99a3ad;
+  --series-8:    #e6807a;
+  --good:        #52be80;
+  --warning:     #d4ac0d;
+  --serious:     #e59866;
+  --critical:    #e6807a;
+  --accent:      #2874a6;   /* más profundo que el celeste: blanco encima queda legible */
 }
 :root[data-theme="light"]{
   color-scheme: light;
-  --page:        #f9f9f7;
+  /* Paleta tomada de ThesiSmart y EvidenceSmart (mismo bloque en las dos):
+     azul profundo #1a5276 sobre blanco, con #f0f2f5 de fondo. El teal se conserva como
+     color de DATOS (--series-3), no de interfaz: la referencia usa azul en el chrome. */
+  --page:        #f0f2f5;
   --surface-1:   #ffffff;
-  --surface-2:   #fcfcfb;
-  --surface-3:   #f0efec;
-  --text-1:      #0b0b0b;
-  --text-2:      #52514e;
-  --muted:       #898781;
-  --grid:        #e1e0d9;
-  --baseline:    #c3c2b7;
-  --border:      rgba(11,11,11,0.10);
-  --series-1:    #2a78d6;
-  --series-2:    #eb6834;
-  --series-3:    #1baf7a;
-  --series-4:    #eda100;
-  --series-5:    #e87ba4;
-  --series-6:    #008300;
-  --series-7:    #4a3aa7;
-  --series-8:    #e34948;
-  --good:        #0ca30c;
-  --warning:     #fab219;
-  --serious:     #ec835a;
-  --critical:    #d03b3b;
-  --accent:      #2a78d6;
+  --surface-2:   #f7fafc;
+  --surface-3:   #eef3f7;
+  --text-1:      #0f1923;
+  --text-2:      #3d4f5c;
+  --muted:       #7a8d99;
+  --grid:        #e6ecf0;
+  --baseline:    #c9d4dc;
+  --border:      #dce3e8;
+  --shadow:      0 2px 12px rgba(15,25,35,0.08);
+  --accentLt:    #d6eaf8;
+  --accentMid:   #2980b9;
+  --series-1:    #1a5276; /* azul profundo */
+  --series-2:    #c0703a; /* terracota */
+  --series-3:    #17a28c; /* teal */
+  --series-4:    #b7950b; /* ocre */
+  --series-5:    #6c8ebf; /* azul grisáceo */
+  --series-6:    #1e8449; /* verde */
+  --series-7:    #7a8d99; /* gris */
+  --series-8:    #922b21; /* rojo profundo */
+  --good:        #1e8449;
+  --warning:     #b7770d;
+  --serious:     #c0703a;
+  --critical:    #922b21;
+  --accent:      #1a5276;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
   background: var(--page);
   color: var(--text-1);
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+/* Jerarquía: los títulos en serif son la firma visual de ThesiSmart/EvidenceSmart y
+   separan de un vistazo el encabezado del dato. */
+h1,h2,h3,.card-hdr,.serif{font-family:Georgia,'Times New Roman',serif;font-weight:600;letter-spacing:-.2px;}
+h1{font-size:1.5rem;} h2{font-size:1.15rem;} h3{font-size:1rem;}
 a{color:var(--accent);}
 button{font-family:inherit;}
 
@@ -155,8 +170,9 @@ button{font-family:inherit;}
   background:none; border:none; color:var(--text-2);
   cursor:pointer; text-align:left; width:100%; font-size:14px;
 }
-.navbtn:hover{background:var(--surface-2); color:var(--text-1);}
-.navbtn.active{background:var(--surface-3); color:var(--text-1); font-weight:600;}
+.navbtn:hover{background:var(--surface-2); color:var(--accent);}
+.navbtn.active{background:var(--accentLt); color:var(--accent); font-weight:700;
+  border-left:3px solid var(--accentMid); padding-left:9px;}
 .navbtn .ic{width:18px;text-align:center;opacity:.9;}
 .sidebar .spacer{flex:1;}
 .side-foot{font-size:11px;color:var(--muted);padding:8px;}
@@ -182,9 +198,33 @@ select, input[type="date"], input[type="text"]{
   border:1px solid var(--border); border-radius:8px;
   padding:7px 12px; font-size:13px; cursor:pointer;
 }
-.btn:hover{background:var(--surface-3);}
+.btn{border-radius:7px;font-weight:600;transition:all .18s;}
+.btn:hover{background:var(--surface-3);border-color:var(--accentMid);color:var(--accent);}
 .btn.primary{background:var(--accent); color:#fff; border-color:transparent;}
-.btn.primary:hover{filter:brightness(1.08);}
+.btn.primary:hover{background:var(--accentMid); color:#fff; filter:none;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+/* ── Acordeón explicativo de gráficas y tablas ──
+   Se usa <details>/<summary> nativo: no necesita JS, es accesible por teclado y por
+   lector de pantalla sin ARIA extra, y sobrevive a un re-render de innerHTML. */
+.explica{margin-top:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);}
+.explica>summary{cursor:pointer;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--accent);
+  list-style:none;display:flex;align-items:center;gap:6px;border-radius:8px;}
+.explica>summary::-webkit-details-marker{display:none;}
+.explica>summary::after{content:'▾';margin-left:auto;transition:transform .18s;font-size:11px;}
+.explica[open]>summary::after{transform:rotate(180deg);}
+.explica>summary:hover{background:var(--accentLt);}
+.explica .cuerpo{padding:2px 14px 12px;font-size:12.5px;line-height:1.6;color:var(--text-2);}
+.explica .cuerpo b{color:var(--text-1);}
+.explica .cuerpo dt{font-weight:700;color:var(--accent);margin-top:9px;font-size:12px;}
+.explica .cuerpo dd{margin:2px 0 0;}
+.explica .resultado{margin-top:10px;padding:9px 11px;background:var(--surface-1);
+  border-left:3px solid var(--series-3);border-radius:0 6px 6px 0;color:var(--text-1);}
+
+/* Título descriptivo de cada gráfica */
+.graf-tit{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:14px;
+  color:var(--text-1);margin:0 0 2px;}
+.graf-sub{font-size:12px;color:var(--muted);margin:0 0 10px;}
 /* Selector de apps del dashboard */
 .app-filter{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 18px;}
 .app-filter .af-lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-right:2px;}
@@ -214,7 +254,8 @@ h3.sub{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing
 .card{
   background: var(--surface-1);
   border:1px solid var(--border);
-  border-radius:12px; padding:16px;
+  border-radius:12px; padding:20px;
+  box-shadow: var(--shadow);
 }
 .card.pad0{padding:0;}
 .stat{display:flex;flex-direction:column;gap:4px;}
@@ -228,9 +269,13 @@ h3.sub{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing
 /* ---------- Tables ---------- */
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--border);}
-th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+th{color:var(--accent);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+   background:var(--surface-3);border-bottom:2px solid var(--border);}
 td{color:var(--text-2);}
-tbody tr:hover{background:var(--surface-2);}
+tbody tr:nth-child(even){background:var(--surface-2);}
+tbody tr:hover{background:var(--accentLt);}
+/* La fila de detalle del acordeón no es clickeable: no debe iluminarse como una fila. */
+tbody tr.asoc-det,tbody tr.asoc-det:hover,tbody tr.asoc-det:nth-child(even){background:var(--surface-3);}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 .tablewrap{overflow-x:auto;}
 
@@ -543,7 +588,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
       <section class="view" id="view-estadistica">
         <style>
           #view-estadistica .est-subtab{padding:8px 16px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;}
-          #view-estadistica .est-subtab.active{background:var(--accent,#2dd4bf);color:#08110f;border-color:var(--accent,#2dd4bf);}
+          #view-estadistica .est-subtab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
           #view-estadistica table.est-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
           #view-estadistica table.est-tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);padding:6px 8px;border-bottom:1px solid var(--border);}
           #view-estadistica table.est-tbl td{padding:6px 8px;border-bottom:1px solid var(--border);}
@@ -590,6 +635,38 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
               <button class="btn" onclick="estExportXLSX()">📊 Exportar tabla → Excel</button>
             </div>
           </div>
+          <details class="explica" style="margin:12px 0 0;">
+            <summary>ℹ️ ¿Cómo leer la tabla de asociaciones?</summary>
+            <div class="cuerpo">
+              <p style="margin:6px 0 0;">Cada fila compara dos variables de tus estudios y responde una sola
+              pregunta: <b>¿se mueven juntas más de lo que cabría esperar por azar?</b></p>
+              <dl style="margin:4px 0 0;">
+                <dt>p-valor</dt>
+                <dd>Probabilidad de ver una asociación así de marcada <b>si en realidad no existiera ninguna</b>.
+                    Un p de 0,03 significa que ese resultado aparecería 3 de cada 100 veces por puro azar.
+                    Por convención se considera significativo por debajo de 0,05, pero es un umbral arbitrario:
+                    0,049 y 0,051 no son mundos distintos. <b>El p no mide cuán grande es el efecto</b>, solo
+                    cuán poco compatible es con el azar — con muchos pacientes, una diferencia trivial da p chico.</dd>
+                <dt>Semáforo</dt>
+                <dd><b>🟢</b> significativa y con suficientes casos. <b>🟡</b> significativa pero con N por debajo
+                    del recomendado, o con frecuencias esperadas menores a 5 en el Chi² — el resultado puede no
+                    sostenerse. <b>⚫</b> no significativa, o sin datos para calcularla.</dd>
+                <dt>IC 95%</dt>
+                <dd>Rango donde plausiblemente está el valor real. Cuanto más angosto, más precisa la estimación.
+                    <b>Si incluye el cero</b> (o el 1, cuando es un odds ratio), el efecto no se distingue del azar.
+                    Un intervalo muy ancho avisa que hay pocos datos, aunque el p sea significativo.</dd>
+                <dt>Fuerza de la asociación</dt>
+                <dd>Qué tan estrechamente se acompañan las dos variables, según el valor absoluto del coeficiente:
+                    <b>débil</b> por debajo de 0,30 · <b>moderada</b> entre 0,30 y 0,50 · <b>fuerte</b> entre 0,50
+                    y 0,70 · <b>muy fuerte</b> por encima de 0,70. Es independiente del p: una asociación puede ser
+                    fuerte y no significativa (pocos casos), o débil y significativa (muchos casos).</dd>
+              </dl>
+              <div class="resultado">Tocá cualquier fila para desplegar los datos reales que produjeron ese
+              número —la tabla de contingencia, las medianas por grupo o el gráfico de dispersión— junto con una
+              lectura en lenguaje simple. Todo esto describe <b>asociación, no causalidad</b>: son estudios
+              observacionales y transversales.</div>
+            </div>
+          </details>
           <div class="card" style="margin:12px 0 16px;overflow-x:auto;"><div id="est-asoc-tabla"></div></div>
           <div id="est-scatter-wrap" class="card" style="display:none;margin-bottom:16px;position:relative;">
             <button onclick="estCloseScatter()" title="Cerrar" style="position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text-2);font-size:18px;cursor:pointer;">✕</button>
@@ -746,6 +823,19 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 const $  = (s,ctx=document)=>ctx.querySelector(s);
 const $$ = (s,ctx=document)=>Array.from(ctx.querySelectorAll(s));
 const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+/* Color de la paleta con transparencia. Las gráficas tenían teal y rosa fijos del diseño
+   anterior, así que no seguían el tema ni cambiaban con claro/oscuro. */
+function cssvA(n,alpha){
+  const h=cssv(n);
+  const m=/^#([0-9a-f]{6})$/i.exec(h);
+  if(!m){
+    // '' haría que el canvas ignore el fillStyle y conserve el color anterior, en silencio.
+    if(!h) console.warn('[paleta] token sin valor:',n);
+    return h || 'transparent';
+  }
+  const v=parseInt(m[1],16);
+  return 'rgba('+((v>>16)&255)+','+((v>>8)&255)+','+(v&255)+','+alpha+')';
+}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function normTxt(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();}
@@ -1838,7 +1928,9 @@ async function generatePDF(){
       const fcfg={type:'bar',
         data:{labels:est.forest.map(r=>r.lbl),
           datasets:[{data:est.forest.map(r=>[r.lo,r.hi]),
-            backgroundColor:est.forest.map(r=>r.coef<0?'rgba(59,130,246,.65)':'rgba(244,63,94,.65)'),
+            /* Colores FIJOS: el resto del bloque del PDF también lo es. Con tokens, el
+               informe impreso salía salmón pálido si el navegador estaba en modo oscuro. */
+            backgroundColor:est.forest.map(r=>r.coef<0?'rgba(41,98,255,.65)':'rgba(146,43,33,.65)'),
             borderColor:'#666',borderWidth:1}]},
         options:{indexAxis:'y',plugins:{legend:{display:false}},
           scales:{x:{min:-1,max:1,title:{display:true,text:'Coeficiente (r / ρ) — IC 95%',color:ink},
@@ -2117,6 +2209,118 @@ function switchView(v){
   $('#viewTitle').textContent=VIEW_TITLES[v]||'';
   renderCurrent();
 }
+/* ══ Explicación por gráfica ══
+   Cada gráfica lleva título descriptivo y un acordeón con tres cosas: qué es, cómo se
+   lee, y qué dice TU muestra. Lo último no puede ser texto fijo, así que se calcula
+   leyendo el chart ya renderizado: así vale para cualquier gráfica sin tocar las ocho
+   funciones de render, y no puede desincronizarse de lo que está en pantalla. */
+const GRAF_META={
+  chEvol:{t:'Evolución mensual de estudios',s:'Cuántos estudios se hicieron cada mes, por aplicación',
+    q:'Una línea por app con el conteo mensual de estudios.',
+    c:'Mirá la pendiente, no la altura: lo que informa es si el volumen crece, cae o se mantiene. Los valles suelen ser licencias o feriados, no caída de demanda.'},
+  chVol:{t:'Volumen por aplicación',s:'Peso relativo de cada app en el total del período',
+    q:'La proporción de estudios que aporta cada aplicación.',
+    c:'Sirve para ver de dónde viene el grueso del trabajo. Una app con muy pocos estudios va a dar estadísticas inestables en el resto del panel.'},
+  chFevi:{t:'Distribución de FEVI',s:'Cómo se reparte la función sistólica en EcoSmart',
+    q:'Cuántos estudios caen en cada rango de fracción de eyección.',
+    c:'El corte clínico habitual separa FEVI reducida (≤40%), levemente reducida (41–49%) y conservada (≥50%). Una barra alta en el extremo bajo indica una población más enferma que la general.'},
+  chSexo:{t:'Distribución por sexo',s:'Composición de la población estudiada',
+    q:'Proporción de mujeres y varones entre los estudios del período.',
+    c:'Un desbalance marcado condiciona todo lo demás: varias variables cardiológicas tienen valores de referencia distintos por sexo.'},
+  chEdad:{t:'Distribución etaria',s:'Cómo se reparten las edades de la población',
+    q:'Cuántos pacientes hay en cada franja de edad.',
+    c:'La forma importa más que el promedio: dos poblaciones con la misma media pueden tener perfiles de riesgo opuestos si una es bimodal.'},
+  chMets:{t:'METs promedio por mes',s:'Capacidad funcional alcanzada en ErgoSmart',
+    q:'El promedio mensual de METs alcanzados en la ergometría.',
+    c:'Un mes con pocos estudios mueve mucho el promedio: leer junto con el volumen de ese mes antes de interpretar un salto.'},
+  chQualEvol:{t:'Evolución de la completitud',s:'Qué proporción de campos se completa, mes a mes',
+    q:'El porcentaje de campos medibles efectivamente cargados.',
+    c:'Es un indicador de calidad del registro, no del paciente. Una caída suele coincidir con períodos de mucha demanda asistencial.'},
+  chMed:{t:'Volumen por médico',s:'Cuántos estudios firmó cada profesional',
+    q:'El conteo de estudios por profesional en el período.',
+    c:'Sirve para dimensionar la carga, no para comparar desempeño: la complejidad de los estudios no es la misma en todos.'}
+};
+
+/* Resume lo que muestra el chart ya dibujado. Devuelve null si no puede decir nada
+   honesto, en vez de inventar una frase. */
+function grafResultado(ch){
+  if(!ch||!ch.data||!ch.data.datasets||!ch.data.datasets.length) return null;
+  const labels=ch.data.labels||[], ds=ch.data.datasets;
+  /* null marca "mes sin dato" y la gráfica lo dibuja como hueco (spanGaps). Number(null)
+     es 0, así que sin este mapeo el resumen decía "METs bajó de 7,2 a 0" donde la línea
+     simplemente se interrumpe: una afirmación clínicamente alarmante y falsa. */
+  const nums=a=>a.map(v=>(v&&typeof v==='object')?v.y:v).map(v=>v==null?NaN:Number(v)).filter(v=>isFinite(v));
+  if(ch.config.type==='doughnut'||ch.config.type==='pie'){
+    const d=nums(ds[0].data), tot=d.reduce((a,b)=>a+b,0);
+    if(!tot) return null;
+    const i=d.indexOf(Math.max(...d));
+    return '<b>'+esc(String(labels[i]))+'</b> concentra el '+Math.round(100*d[i]/tot)+'% de los '+tot+' estudios.';
+  }
+  if(ch.config.type==='bar'){
+    const d=nums(ds[0].data); if(!d.length) return null;
+    const tot=d.reduce((a,b)=>a+b,0);
+    if(!tot) return null;   // todo en cero: indexOf(0) daría un "ganador" inventado
+    const i=d.indexOf(Math.max(...d));
+    return 'El grupo más numeroso es <b>'+esc(String(labels[i]))+'</b>, con '+d[i]+
+      (tot?(' de '+tot+' ('+Math.round(100*d[i]/tot)+'%)'):'')+'.';
+  }
+  if(ch.config.type==='line'){
+    const partes=[];
+    ds.forEach(dd=>{
+      const d=nums(dd.data); if(d.length<2) return;
+      const ini=d[0], fin=d[d.length-1];
+      /* Comparar contra ini*1.1 se invierte con ini negativo y no sirve con ini=0:
+         se usa la diferencia relativa al rango de la serie. */
+      const rango=Math.max(...d)-Math.min(...d);
+      const umbral=rango*0.1 || Math.abs(ini)*0.1;
+      const dif=fin-ini;
+      const dir = dif>umbral ? 'subió' : (dif<-umbral ? 'bajó' : 'se mantuvo estable');
+      partes.push('<b>'+esc(String(dd.label||'la serie'))+'</b> '+dir+
+        ' (de '+(Math.round(ini*10)/10)+' a '+(Math.round(fin*10)/10)+')');
+    });
+    if(!partes.length) return null;
+    return 'Entre el primer y el último punto del período: '+partes.join(' · ')+'.';
+  }
+  return null;
+}
+
+/* Inserta el título y el acordeón una sola vez por gráfica. Idempotente: si ya existe,
+   sólo refresca el resultado. */
+function grafExplicaciones(){
+  Object.keys(GRAF_META).forEach(id=>{
+    const cv=document.getElementById(id); if(!cv) return;
+    const box=cv.closest('.chartbox'); if(!box) return;
+    const card=box.parentElement; if(!card) return;
+    const meta=GRAF_META[id];
+    let det=card.querySelector('details.explica[data-graf="'+id+'"]');
+    if(!det){
+      /* El <h3> puede estar dentro de la card o justo antes de ella (chEvol es el único
+         así). Si no se contempla, el título viejo queda y el nuevo se suma debajo. */
+      let h=card.querySelector(':scope > h3');
+      if(!h){ const prev=card.previousElementSibling; if(prev && prev.tagName==='H3') h=prev; }
+      const tit=document.createElement('div');
+      tit.innerHTML='<p class="graf-tit">'+esc(meta.t)+'</p><p class="graf-sub">'+esc(meta.s)+'</p>';
+      if(h && h.parentElement===card) card.replaceChild(tit,h);
+      else { if(h) h.remove(); card.insertBefore(tit,box); }
+      det=document.createElement('details');
+      det.className='explica'; det.setAttribute('data-graf',id);
+      det.innerHTML='<summary>ℹ️ ¿Qué muestra esta gráfica?</summary>'+
+        '<div class="cuerpo"><dl style="margin:6px 0 0;">'+
+        '<dt>Qué es</dt><dd>'+esc(meta.q)+'</dd>'+
+        '<dt>Cómo leerla</dt><dd>'+esc(meta.c)+'</dd>'+
+        '</dl><div class="resultado" data-res>Todavía sin datos para resumir.</div></div>';
+      card.appendChild(det);
+    }
+    const res=det.querySelector('[data-res]');
+    if(res){
+      const ch=(typeof Chart!=='undefined')?Chart.getChart(cv):null;
+      const txt=ch?grafResultado(ch):null;
+      res.innerHTML = txt ? ('<b>En tu muestra:</b> '+txt)
+                          : 'Sin datos suficientes en el período seleccionado para resumir esta gráfica.';
+    }
+  });
+}
+
 function renderCurrent(){
   try{
     if(currentView==='dashboard')renderDashboard();
@@ -2128,6 +2332,8 @@ function renderCurrent(){
     else if(currentView==='estadistica' && typeof estRender==='function')estRender();
     else if(currentView==='informe')initReport();
   }catch(e){console.error('Error al renderizar',currentView,e);toast('Error al renderizar (ver consola)');}
+  // Después del render: los charts ya existen, así que el resumen refleja lo dibujado.
+  try{ grafExplicaciones(); }catch(e){ console.warn('[gráficas] no se pudo armar la explicación',e); }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2499,7 +2705,9 @@ function renderCurrent(){
       if(fs==='01'&&!(r.p!=null&&r.p<0.01))return false;
       if(fn&&r.n<fn)return false;
       if(fc!=='all'&&r.cat!==fc)return false;
-      if(ff!=='all'){ const a=r.coef==null?null:Math.abs(r.coef); if(a==null)return false; if(ff==='debil'&&!(a<0.3))return false; if(ff==='mod'&&!(a>=0.3&&a<=0.6))return false; if(ff==='fuerte'&&!(a>0.6))return false; }
+      if(ff!=='all'){ const a=r.coef==null?null:Math.abs(r.coef); if(a==null)return false; if(ff==='debil'&&!(a<0.3))return false; if(ff==='mod'&&!(a>=0.3&&a<0.5))return false; if(ff==='fuerte'&&!(a>=0.5))return false; }
+      // Cortes alineados con fuerzaTxt y con el panel "¿Cómo leer la tabla?": el filtro
+      // usaba 0,6 y rotulaba "moderada" lo que la lectura simple llamaba "fuerte".
       return true;
     });
   }
@@ -2517,18 +2725,18 @@ function renderCurrent(){
     if(r.plot.type==='scatter'){
       const pts=r.plot.pairs.map(p=>({x:p[0],y:p[1]}));
       const xs=r.plot.pairs.map(p=>p[0]); const xmin=Math.min.apply(null,xs),xmax=Math.max.apply(null,xs);
-      const dss=[{label:'Pacientes',data:pts,backgroundColor:'rgba(45,212,191,0.7)',pointRadius:4}];
+      const dss=[{label:'Pacientes',data:pts,backgroundColor:cssvA('--series-3',0.7),pointRadius:4}];
       if(rectaVisible(r.plot, r.p!=null && r.p<0.05)){
         dss.push({label:'Tendencia (mínimos cuadrados)',type:'line',
           data:[{x:xmin,y:r.plot.intercept+r.plot.slope*xmin},{x:xmax,y:r.plot.intercept+r.plot.slope*xmax}],
-          borderColor:'#f59e0b',borderWidth:2,pointRadius:0,fill:false});
+          borderColor:cssv('--series-4'),borderWidth:2,pointRadius:0,fill:false});
       }
       _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:dss},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}}}});
     } else if(r.plot.type==='strip'){
-      const ds=r.plot.groups.map((g,i)=>({label:g.lbl+' (n='+g.vals.length+')',data:g.vals.map(v=>({x:i+1+(Math.round(v*7)%10-5)/60,y:v})),backgroundColor:['rgba(45,212,191,.7)','rgba(244,63,94,.7)','rgba(59,130,246,.7)','rgba(234,179,8,.7)'][i%4],pointRadius:4}));
+      const ds=r.plot.groups.map((g,i)=>({label:g.lbl+' (n='+g.vals.length+')',data:g.vals.map(v=>({x:i+1+(Math.round(v*7)%10-5)/60,y:v})),backgroundColor:[cssvA('--series-3',0.7),cssvA('--series-8',0.7),'rgba(59,130,246,.7)','rgba(234,179,8,.7)'][i%4],pointRadius:4}));
       _chScatter=new Chart(ctx,{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,scales:{x:{min:0.5,max:r.plot.groups.length+0.5,ticks:{stepSize:1,callback:(v)=>r.plot.groups[v-1]?r.plot.groups[v-1].lbl:''}}}}});
     } else {
-      const datasets=r.plot.bV.map((b,ci)=>({label:String(b),data:r.plot.aV.map((a,ri)=>r.plot.tbl[ri][ci]),backgroundColor:['#2dd4bf','#f43f5e','#3b82f6','#eab308','#a78bfa'][ci%5]}));
+      const datasets=r.plot.bV.map((b,ci)=>({label:String(b),data:r.plot.aV.map((a,ri)=>r.plot.tbl[ri][ci]),backgroundColor:seriesColors()[ci%5]}));
       _chScatter=new Chart(ctx,{type:'bar',data:{labels:r.plot.aV.map(String),datasets},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true},y:{stacked:true}}}});
     }
     document.getElementById('est-scatter-wrap').scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -2551,7 +2759,7 @@ function renderCurrent(){
   }
   const _f1 = v => (v==null||isNaN(v)) ? '—' : String(Math.round(v*10)/10);
   const _pctFila = (x,tot) => tot>0 ? (Math.round(1000*x/tot)/10).toFixed(1)+'%' : '—';
-  const _notaHTML = html => '<div style="margin-top:8px;padding:8px 10px;background:var(--bg-1);'+
+  const _notaHTML = html => '<div style="margin-top:8px;padding:8px 10px;background:var(--surface-2);'+
     'border-left:3px solid var(--accent);border-radius:4px;font-size:11px;line-height:1.5;'+
     'color:var(--text-2);">'+html+'</div>';
   const _th = 'padding:4px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-2);';
@@ -2642,13 +2850,13 @@ function renderCurrent(){
       return;
     }
     const pts=pl.pairs.map(q=>({x:q[0],y:q[1]}));
-    const ds=[{label:'Pacientes',data:pts,backgroundColor:'rgba(45,212,191,0.7)',pointRadius:3.5}];
+    const ds=[{label:'Pacientes',data:pts,backgroundColor:cssvA('--series-3',0.7),pointRadius:3.5}];
     const conRecta=rectaVisible(pl, sig);
     if(conRecta){
       const xs=pts.map(q=>q.x), x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
       ds.push({label:'Tendencia (mínimos cuadrados)',type:'line',
         data:[{x:x0,y:pl.intercept+pl.slope*x0},{x:x1,y:pl.intercept+pl.slope*x1}],
-        borderColor:'#f59e0b',borderWidth:2,pointRadius:0,fill:false});
+        borderColor:cssv('--series-4'),borderWidth:2,pointRadius:0,fill:false});
     }
     new Chart(el,{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:conRecta,labels:{boxWidth:12,font:{size:10}}}},
@@ -2659,8 +2867,56 @@ function renderCurrent(){
   /* La regla de la tabla pone cursor:pointer y hover a todo tbody tr, incluida la fila
      de detalle, que no es clickeable. */
   (function(){ const st=document.createElement('style');
-    st.textContent='#est-asoc-tabla tr.asoc-det{cursor:default;background:var(--bg-1)!important;}';
+    st.textContent='#est-asoc-tabla tr.asoc-det{cursor:default;background:var(--surface-3)!important;}';
     document.head.appendChild(st); })();
+
+  /* Lectura en lenguaje simple de ESTA asociación con SUS números, no una explicación
+     genérica: se arma con el N, el sentido del coeficiente y el p de esa fila. */
+  // pTxt devuelve '<0.001' para los p muy chicos, así que concatenar 'p=' da 'p=<0.001'.
+  const pFrase = p => (p!=null && p<0.001) ? 'p<0.001' : ('p='+pTxt(p));
+  function lecturaSimple(r){
+    const n=r.n, sig=r.p!=null&&r.p<0.05;
+    const partes=[];
+    if(r.p==null) return 'No alcanzaron los datos para calcular esta asociación en la población seleccionada.';
+
+    if(r.coef===0){
+      partes.push('En tus '+n+' casos no se detecta ninguna tendencia entre las dos variables.');
+    } else if(r.coef!=null){
+      const dir = r.coef>0 ? 'cuando una sube, la otra también tiende a subir'
+                           : 'cuando una sube, la otra tiende a bajar';
+      const f = fuerzaTxt(r.coef);
+      partes.push('En tus '+n+' casos, las dos variables se acompañan de forma <b>'+f+'</b>: '+dir+'.');
+    } else if(/Chi²/.test(r.method)){
+      partes.push('En tus '+n+' casos se comparó cómo se reparten las categorías entre los grupos.');
+    } else if(/Kruskal/.test(r.method)){
+      partes.push('En tus '+n+' casos se comparó el valor típico de la variable entre los grupos comparados.');
+    } else {
+      partes.push('En tus '+n+' casos se comparó el valor típico de la variable entre los dos grupos.');
+    }
+
+    if(sig){
+      partes.push((r.coef!=null?'La asociación es <b>más marcada':'La diferencia es <b>mayor')+
+        ' de lo que cabría esperar por azar</b> ('+pFrase(r.p)+').');
+      if(r.sig==='🟡'){
+        partes.push(/fe<5/.test(r.stat||'')
+          ? '<b>Con reserva:</b> alguna casilla tiene muy pocos casos esperados, así que el Chi² pierde validez acá — conviene confirmarlo con un test exacto de Fisher.'
+          : '<b>Con reserva:</b> el resultado es significativo pero se apoya en pocos casos, así que puede no sostenerse al sumar pacientes.');
+      }
+    } else {
+      partes.push('Lo observado <b>es compatible con el azar</b> ('+pFrase(r.p)+'), '+
+        'lo que no prueba que no exista relación: con '+n+' caso'+(n===1?'':'s')+' puede faltar potencia para detectarla.');
+    }
+    /* El IC numérico ya viene en plot.ci: volver a parsear el string de display es
+       frágil y no hace falta. */
+    const ci = (r.plot && Array.isArray(r.plot.ci)) ? r.plot.ci : null;
+    if(ci && isFinite(ci[0]) && isFinite(ci[1])){
+      partes.push('El valor real está plausiblemente entre '+ci[0].toFixed(2)+' y '+ci[1].toFixed(2)+
+        (ci[0]<0 && ci[1]>0
+          ? ', y <b>ese rango incluye el cero</b>: por eso el efecto no se distingue del azar.'
+          : ', un rango que no incluye el cero.'));
+    }
+    return partes.join(' ');
+  }
 
   function detalleHTML(r){
     if(!r.plot) return '<div style="color:var(--text-2);font-size:12px;">Sin datos suficientes para mostrar el detalle de esta asociación.</div>';
@@ -2687,7 +2943,12 @@ function renderCurrent(){
     // abría con el click de la fila.
     const ampliar = r.plot ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:11px;" '+
       'data-ampliar>Ver el gráfico en grande ↗</button></div>' : '';
-    det.innerHTML='<td colspan="7" style="padding:12px 16px;background:var(--bg-1);">'+detalleHTML(r)+ampliar+'</td>';
+    det.innerHTML='<td colspan="7" style="padding:12px 16px;">'+
+      '<div style="margin:0 0 12px;padding:10px 12px;background:var(--surface-1);border:1px solid var(--border);'+
+      'border-left:3px solid var(--series-3);border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.6;">'+
+      '<div style="font-weight:700;color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Qué dice este resultado</div>'+
+      lecturaSimple(r)+'</div>'+
+      detalleHTML(r)+ampliar+'</td>';
     tr.parentNode.insertBefore(det, tr.nextSibling);
     tr.setAttribute('aria-expanded','true');
     const ch=tr.querySelector('.asoc-chev'); if(ch)ch.textContent='▾';
@@ -2703,10 +2964,21 @@ function renderCurrent(){
     if(!sig.length){ if(_chForest){_chForest.destroy();_chForest=null;} const c=el.getContext('2d'); c.clearRect(0,0,el.width,el.height); return; }
     const labels=sig.map(r=>r.lbl);
     const bars=sig.map(r=>{ const m=r.ci.replace(/[\[\]]/g,'').split(',').map(x=>parseFloat(x)); return [m[0],m[1]]; });
-    _chForest=new Chart(el.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:'IC 95% del coeficiente',data:bars,backgroundColor:sig.map(r=>r.coef<0?'rgba(59,130,246,.6)':'rgba(244,63,94,.6)'),borderColor:'#888',borderWidth:1}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const r=sig[c.dataIndex];return 'coef='+r.coef.toFixed(2)+'  IC '+r.ci+'  p='+pTxt(r.p);}}}},scales:{x:{title:{display:true,text:'Coeficiente (r/ρ) — IC 95%'},suggestedMin:-1,suggestedMax:1,grid:{color:(c)=>c.tick.value===0?'#888':'rgba(128,128,128,.15)'}}}}});
+    _chForest=new Chart(el.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:'IC 95% del coeficiente',data:bars,backgroundColor:sig.map(r=>r.coef<0?'rgba(59,130,246,.6)':cssvA('--series-8',0.6)),borderColor:cssv('--baseline'),borderWidth:1}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const r=sig[c.dataIndex];return 'coef='+r.coef.toFixed(2)+'  IC '+r.ci+'  p='+pTxt(r.p);}}}},scales:{x:{title:{display:true,text:'Coeficiente (r/ρ) — IC 95%'},suggestedMin:-1,suggestedMax:1,grid:{color:(c)=>c.tick.value===0?'#888':'rgba(128,128,128,.15)'}}}}});
   }
 
-  const colorR=r=>{ const a=Math.min(1,Math.abs(r)); if(r>=0){ const g=Math.round(255*(1-a)); return 'rgb(255,'+g+','+g+')'; } const g=Math.round(255*(1-a)); return 'rgb('+g+','+g+',255)'; };
+  /* La rampa terminaba en blanco fijo: pensada para fondo oscuro. En tema claro las
+     correlaciones débiles se fundían con la card. Ahora interpola desde el color de la
+     superficie hacia el extremo, así que r≈0 siempre se distingue del fondo. */
+  const _hex2rgb=h=>{ const m=/^#([0-9a-f]{6})$/i.exec(String(h).trim());
+    return m?[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)]:[255,255,255]; };
+  const colorR=r=>{
+    const a=Math.min(1,Math.abs(r));
+    const base=_hex2rgb(cssv('--surface-1'));
+    const fin=_hex2rgb(cssv(r>=0?'--series-8':'--series-1'));
+    const c=base.map((b,i)=>Math.round(b+(fin[i]-b)*a));
+    return 'rgb('+c[0]+','+c[1]+','+c[2]+')';
+  };
   function renderHeatmap(){
     if(!HAS_CHART)return; const el=document.getElementById('est-heatmap'); if(!el)return;
     const vars=[['FEVI',FEVI],['E/e\'',EE],['PSAP',PSAP],['TAPSE',TAPSE],['Vol AI',LAVI],['METs',METS]];
@@ -3069,11 +3341,11 @@ function renderCurrent(){
       cajas.forEach((c,i)=>{
         const el=meta.data[i]; if(!el||!c) return;
         const x=el.x, w=(el.width||30)*0.6;
-        ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=2;
+        ctx.strokeStyle=cssv('--text-1'); ctx.lineWidth=2;   // era gris claro: invisible en tema claro
         // mediana
         ctx.beginPath(); ctx.moveTo(x-w/2, y.getPixelForValue(c.med)); ctx.lineTo(x+w/2, y.getPixelForValue(c.med)); ctx.stroke();
         // bigotes
-        ctx.lineWidth=1.2; ctx.strokeStyle='rgba(226,232,240,.75)';
+        ctx.lineWidth=1.2; ctx.strokeStyle=cssv('--baseline');
         [[c.lo,c.p25],[c.p75,c.hi]].forEach(([d,e])=>{
           ctx.beginPath(); ctx.moveTo(x, y.getPixelForValue(d)); ctx.lineTo(x, y.getPixelForValue(e)); ctx.stroke();
         });
@@ -3140,8 +3412,8 @@ function renderCurrent(){
       const ch=new Chart(cv,{ type:'bar',
         data:{ labels:[c.a,c.b], datasets:[{ label:f.v.lbl,
           data:[[cA.p25,cA.p75],[cB.p25,cB.p75]],
-          backgroundColor:['rgba(45,212,191,.45)','rgba(244,63,94,.45)'],
-          borderColor:['rgba(45,212,191,.9)','rgba(244,63,94,.9)'], borderWidth:1.5 }] },
+          backgroundColor:[cssvA('--series-3',0.45),cssvA('--series-8',0.45)],
+          borderColor:[cssvA('--series-3',0.9),cssvA('--series-8',0.9)], borderWidth:1.5 }] },
         options:{ responsive:true, maintainAspectRatio:false,
           plugins:{ legend:{display:false},
             tooltip:{ callbacks:{ label:(it)=>{ const k=it.dataIndex===0?cA:cB;
@@ -3385,7 +3657,7 @@ function renderCurrent(){
     let body='';
     filas.forEach(f=>{
       const dif = f.q!=null && f.q<0.05;
-      body+='<tr style="border-top:1px solid var(--border);'+(dif?'background:rgba(45,212,191,.10);':'')+'">'+
+      body+='<tr style="border-top:1px solid var(--border);'+(dif?'background:var(--accentLt);':'')+'">'+
         '<td style="padding:6px 8px;font-weight:600;white-space:nowrap;">'+(dif?'◆ ':'')+esc(f.v.lbl)+
           (f.v.u?'<div style="font-size:10px;color:var(--text-2);font-weight:400;">'+esc(f.v.u)+'</div>':'')+'</td>'+
         celda(f.stA)+celda(f.stG)+
@@ -3564,10 +3836,10 @@ function renderCurrent(){
      estudios recientes: alcanza para que el médico identifique a su paciente sin volcar
      el nombre completo en pantalla. */
   const AV_EVOL_VARS = [
-    {k:'fevi',  lbl:'FEVI',            u:'%',     color:'#2dd4bf', g:s=>FEVI(_pEco(s))},
-    {k:'ee',    lbl:"E/e' promedio",   u:'',      color:'#f59e0b', g:s=>EE(_pEco(s))},
-    {k:'tapse', lbl:'TAPSE',           u:'mm',    color:'#a78bfa', g:s=>TAPSE(_pEco(s))},
-    {k:'psap',  lbl:'PSAP',            u:'mmHg',  color:'#f43f5e', g:s=>PSAP(_pEco(s))}
+    {k:'fevi',  lbl:'FEVI',            u:'%',     tok:'--series-3', g:s=>FEVI(_pEco(s))},
+    {k:'ee',    lbl:"E/e' promedio",   u:'',      tok:'--series-4', g:s=>EE(_pEco(s))},
+    {k:'tapse', lbl:'TAPSE',           u:'mm',    tok:'--series-5', g:s=>TAPSE(_pEco(s))},
+    {k:'psap',  lbl:'PSAP',            u:'mmHg',  tok:'--series-8', g:s=>PSAP(_pEco(s))}
   ];
 
   /* Cuántas series quedarían si no hubiera filtro de período. El seguimiento suele
@@ -3659,7 +3931,7 @@ function renderCurrent(){
     host.innerHTML='<div style="font-size:13px;font-weight:600;margin-bottom:2px;">'+esc(pac.etiqueta)+'</div>'+
       '<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">'+
         esc(pac.n+' ecocardiogramas')+' · seguimiento de '+(meses<1?'menos de un mes':(Math.round(meses)+' meses'))+'</div>'+
-      (pac.debil?'<div style="padding:8px 11px;background:rgba(244,63,94,.12);border-left:3px solid #f43f5e;'+
+      (pac.debil?'<div style="padding:8px 11px;background:var(--surface-3);border-left:3px solid var(--critical);'+
         'border-radius:4px;font-size:11.5px;line-height:1.5;margin-bottom:10px;">Este paciente se identificó '+
         '<b>sólo por nombre</b>, sin documento: si hay dos homónimos, esta serie podría estar mezclando estudios '+
         'de personas distintas. Verificar antes de sacar conclusiones.</div>':'')+
@@ -3687,7 +3959,7 @@ function renderCurrent(){
     const datasets=AV_EVOL_VARS.map(v=>({
       label:v.lbl+(v.u?(' ('+v.u+')'):''),
       data:pac.estudios.map(s=>{ const x=v.g(s); return (x==null||isNaN(x))?null:+x; }),
-      borderColor:v.color, backgroundColor:v.color, tension:0.25, spanGaps:false, pointRadius:4
+      borderColor:cssv(v.tok), backgroundColor:cssv(v.tok), tension:0.25, spanGaps:false, pointRadius:4
     })).filter(d=>d.data.some(x=>x!=null));
     new Chart(document.getElementById('av-ev-chart'),{ type:'line', data:{labels,datasets},
       options:{ responsive:true, maintainAspectRatio:false,
@@ -4281,9 +4553,10 @@ function bindEvents(){
   $('#dTo').addEventListener('change',renderCurrent);
   $('#refreshBtn').addEventListener('click',async()=>{await CeiboRead.hidratar();loadData();renderCurrent();toast('Datos actualizados');});
   { const cif=$('#caImportFile'); if(cif) cif.addEventListener('change',e=>{ if(e.target.files[0]) caHandleFile(e.target.files[0]); }); }
-  $('#dashAppFilter').addEventListener('change',e=>{const cb=e.target.closest('input[data-app]');if(!cb)return;dashAppFilter[cb.dataset.app]=cb.checked;const lbl=cb.closest('.app-toggle');if(lbl){lbl.classList.toggle('on',cb.checked);lbl.classList.toggle('off',!cb.checked);}renderDashboard();});
+  $('#dashAppFilter').addEventListener('change',e=>{const cb=e.target.closest('input[data-app]');if(!cb)return;dashAppFilter[cb.dataset.app]=cb.checked;const lbl=cb.closest('.app-toggle');if(lbl){lbl.classList.toggle('on',cb.checked);lbl.classList.toggle('off',!cb.checked);}renderCurrent();});  // renderCurrent: rearma títulos y resúmenes
   $('#themeBtn').addEventListener('click',toggleTheme);
-  $('#medSel').addEventListener('change',renderMedico);
+  // renderCurrent() y no renderMedico(): es donde se rearman los títulos y resúmenes.
+  $('#medSel').addEventListener('change',renderCurrent);
   $('#cmpPreset').addEventListener('change',()=>{setCmpPreset();});
   $('#cmpRun').addEventListener('click',()=>renderPeriodos(true));
   $('#rptYear').addEventListener('change',renderReportPreview);
@@ -4302,7 +4575,8 @@ function toggleTheme(){
 /* ---------- Init ---------- */
 async function init(){
   const savedTheme=(()=>{try{return localStorage.getItem('ceibo_analytics_theme');}catch(e){return null;}})();
-  if(savedTheme){document.documentElement.setAttribute('data-theme',savedTheme);$('#themeBtn').textContent=savedTheme==='dark'?'🌙':'☀';}
+  if(savedTheme){document.documentElement.setAttribute('data-theme',savedTheme);}
+  $('#themeBtn').textContent=document.documentElement.getAttribute('data-theme')==='dark'?'🌙':'☀';
   if(HAS_CHART){
     Chart.defaults.font.family='system-ui, -apple-system, "Segoe UI", sans-serif';
     Chart.defaults.color=cssv('--text-2');
