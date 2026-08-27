@@ -221,6 +221,21 @@ select, input[type="date"], input[type="text"]{
 .explica .resultado{margin-top:10px;padding:9px 11px;background:var(--surface-1);
   border-left:3px solid var(--series-3);border-radius:0 6px 6px 0;color:var(--text-1);}
 
+/* ── Guía estadística ── */
+.guia-cap{margin-bottom:10px;background:var(--surface-1);box-shadow:var(--shadow);}
+.guia-cap>summary{padding:13px 16px;font-family:Georgia,'Times New Roman',serif;font-size:15px;font-weight:600;}
+.guia-cap>.cuerpo{padding:2px 18px 16px;font-size:13.5px;line-height:1.7;}
+.guia-cap>.cuerpo p{color:var(--text-2);}
+.guia-cap>.cuerpo b{color:var(--text-1);}
+.guia-ej{margin:12px 0;padding:11px 14px;background:var(--surface-2);
+  border-left:3px solid var(--series-3);border-radius:0 8px 8px 0;color:var(--text-1);}
+.guia-err{margin:9px 0;padding:10px 14px;background:var(--surface-2);
+  border-left:3px solid var(--critical);border-radius:0 8px 8px 0;color:var(--text-2);}
+.guia-err b{color:var(--critical);}
+.guia-app{margin:14px 0 0;padding:12px 14px;background:var(--accentLt);
+  border-radius:8px;color:var(--text-1);}
+.guia-app b{color:var(--accent);}
+
 /* Título descriptivo de cada gráfica */
 .graf-tit{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:14px;
   color:var(--text-1);margin:0 0 2px;}
@@ -462,6 +477,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
     <button class="navbtn" data-view="calidad"><span class="ic">✓</span>Calidad</button>
     <button class="navbtn" data-view="estadistica"><span class="ic">📊</span>Estadística avanzada</button>
     <button class="navbtn" data-view="informe"><span class="ic">📄</span>Informe PDF</button>
+    <button class="navbtn" data-view="guia"><span class="ic">📖</span>Guía estadística</button>
     <div class="spacer"></div>
     <div class="side-foot">CeiboMed Suite · datos locales del navegador. Nada sale de este equipo.</div>
   </aside>
@@ -808,6 +824,21 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           <canvas id="pdfForest" width="900" height="520"></canvas>
         </div>
       </section>
+
+      <section class="view" id="view-guia">
+        <div class="card" style="margin-bottom:14px;">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;">
+            <div style="flex:1;min-width:260px;">
+              <h2 style="margin:0 0 6px;">Cómo leer lo que calcula CeiboAnalytics</h2>
+              <p class="hint" style="margin:0;">Siete capítulos con lo mínimo necesario para interpretar el panel
+              sin haber hecho un curso de bioestadística. Cada uno cierra explicando dónde aparece eso en la app.</p>
+            </div>
+            <button class="btn primary" onclick="guiaPDF()">📥 Descargar guía completa (PDF)</button>
+          </div>
+        </div>
+        <div id="guia-cap"></div>
+      </section>
+
     </div>
   </div>
 </div>
@@ -2201,7 +2232,7 @@ function pTxtPDF(p){ return p==null?'—':(p<0.001?'<0.001':p.toFixed(3)); }
 /* ============================================================
    NAVEGACIÓN / EVENTOS
    ============================================================ */
-const VIEW_TITLES={dashboard:'Plataforma general',poblacion:'Perfil epidemiológico cruzado',brechas:'Brechas asistenciales inter-app',medico:'Análisis por médico',periodos:'Comparación entre períodos',calidad:'Calidad del laboratorio consolidada',estadistica:'Estadística avanzada',informe:'Informe anual exportable'};
+const VIEW_TITLES={dashboard:'Plataforma general',poblacion:'Perfil epidemiológico cruzado',brechas:'Brechas asistenciales inter-app',medico:'Análisis por médico',periodos:'Comparación entre períodos',calidad:'Calidad del laboratorio consolidada',estadistica:'Estadística avanzada',informe:'Informe anual exportable',guia:'Guía estadística'};
 function switchView(v){
   currentView=v;
   $$('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
@@ -2321,6 +2352,188 @@ function grafExplicaciones(){
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   GUÍA ESTADÍSTICA
+   El contenido vive en UNA sola estructura y de ahí salen el HTML y el PDF. Cuando la
+   pantalla y el informe se arman por separado, tarde o temprano divergen: alcanza con
+   corregir una redacción en un lado y olvidarse del otro.
+   OJO con el escape: los cuerpos (p / ej / err / app) se insertan SIN escapar a
+   propósito, porque llevan <b> e <i> de énfasis; sólo el ícono y el título pasan por
+   esc(). Consecuencia: estas cadenas tienen que ser SIEMPRE literales del código. Si
+   alguna vez un capítulo necesita interpolar un valor de la muestra, ese valor va por
+   esc() en el punto de interpolación — el markup de alrededor no lo protege.
+   Y el early-return de dataset.listo sólo vale mientras GUIA sea texto fijo: si un
+   capítulo pasa a leer un dato de la muestra, hay que sacarlo o queda cacheado viejo.
+   ══════════════════════════════════════════════════════════════════════════ */
+const GUIA = [
+  { ic:'📊', t:'Estadística descriptiva',
+    p:['Son los cuatro o cinco números con los que se resume una variable. La <b>media</b> es el promedio; la <b>mediana</b> es el valor que deja la mitad de los casos a cada lado; el <b>desvío estándar (DS)</b> mide cuánto se dispersan los datos alrededor de la media, y <b>P25</b> y <b>P75</b> son los valores por debajo de los cuales quedan el 25% y el 75% de los pacientes.',
+       '<b>Cuándo media y cuándo mediana.</b> La media se deja arrastrar por los valores extremos; la mediana no. Si en tu base hay un PSAP de 95 mmHg entre veinte pacientes normales, la media sube y deja de representar a nadie. Con valores atípicos, o cuando la distribución es asimétrica, la mediana describe mejor a tu paciente típico. Por eso todas las pruebas no paramétricas del panel reportan mediana.',
+       '<b>Qué dice el DS.</b> Un DS chico significa que tus pacientes se parecen entre sí; uno grande, que la población es heterogénea. En una distribución aproximadamente normal, cerca del 68% de los casos cae a un DS de la media.'],
+    ej:'FEVI media 54% ± 12% significa que, <b>si la distribución es aproximadamente normal, unos dos tercios</b> de tus pacientes están entre 42% y 66% — y que uno de cada tres queda afuera de ese rango. Cuidado justamente con la FEVI: suele ser asimétrica, con la moda cerca de 60–65 y una cola larga hacia abajo, así que conviene contrastarlo con el histograma y con el P25–P75.',
+    err:['Reportar media ± DS cuando la distribución es asimétrica: da un rango que incluye valores imposibles. Con una media de 5 y un DS de 8, el rango habitual de ±2 DS va de −11 a 21: la mitad inferior es imposible.',
+         'Confundir DS con error estándar. El DS describe a los pacientes; el error estándar describe la precisión de la media y siempre es más chico. Reportar el segundo hace parecer los datos más homogéneos de lo que son.'],
+    app:'La subtab <b>Por app</b> muestra N, media, mediana, DS, P25, P75, mínimo y máximo de cada variable, junto a un histograma para ver la forma de la distribución. Si el histograma sale con una cola larga hacia un lado, mirá la mediana y no la media.' },
+
+  { ic:'📈', t:'Correlaciones — Pearson y Spearman',
+    p:['Una correlación mide si dos variables numéricas se mueven juntas. El coeficiente va de −1 a +1: <b>positivo</b> significa que cuando una sube la otra también, y <b>negativo</b> que cuando una sube la otra baja.',
+       '<b>Pearson</b> busca una relación lineal y asume datos aproximadamente normales, sin valores extremos. <b>Spearman</b> trabaja sobre los rangos —el orden— en vez de los valores crudos, así que tolera outliers y detecta cualquier relación monótona aunque no sea una recta. Con datos clínicos, que suelen tener extremos, Spearman es la opción más segura y es la que usa el panel por defecto.',
+       '<b>Cómo leer la magnitud</b> (los mismos cortes que usa el panel): entre 0 y 0,30 la asociación es <b>débil</b>; entre 0,30 y 0,50, <b>moderada</b>; entre 0,50 y 0,70, <b>fuerte</b>; de 0,70 para arriba, <b>muy fuerte</b>. El signo indica el sentido, no la calidad: un −0,72 es una asociación muy fuerte.'],
+    ej:'Si FEVI ↔ PSAP da ρ = −0,42, quiere decir que en tu muestra los pacientes con peor función sistólica tienden a tener presiones pulmonares más altas, con una fuerza moderada. Es lo esperable fisiopatológicamente, pero el número no prueba que una cosa cause la otra.',
+    err:['Leer un coeficiente alto como causalidad. Dos variables pueden acompañarse porque una tercera las mueve a las dos: la edad explica una parte de casi todo en cardiología.',
+         'Interpretar una correlación fuerte calculada sobre pocos pacientes. Con N=8, un ρ de 0,70 puede no ser significativo: mirá el intervalo de confianza antes de entusiasmarte.',
+         'Usar Pearson con una variable muy sesgada o con un outlier: un solo valor extremo puede crear —o borrar— una correlación entera.'],
+    app:'En la subtab <b>Asociaciones</b>, las filas con el símbolo ↔ son correlaciones. Al tocarlas se despliega el gráfico de dispersión con tus pacientes reales: si ves una nube sin forma no hay relación, y si los puntos siguen una pendiente, la hay. La recta de tendencia solo se dibuja cuando el resultado es significativo y su sentido coincide con el del coeficiente.' },
+
+  { ic:'⚖️', t:'Comparación de grupos — Mann-Whitney y Kruskal-Wallis',
+    p:['Estas pruebas responden si una variable numérica toma valores distintos según el grupo al que pertenece el paciente. <b>Mann-Whitney</b> compara <b>dos</b> grupos (con y sin HTA, por ejemplo). <b>Kruskal-Wallis</b> es su extensión para <b>tres o más</b> (los grados de disfunción diastólica).',
+       'Las dos comparan <b>rangos</b>, no promedios: ordenan todos los valores y miran si los de un grupo tienden a quedar más arriba. Por eso el resultado se reporta con la <b>mediana y el rango intercuartílico</b> de cada grupo, y no con la media. Con precisión: no contrastan medianas sino la tendencia de un grupo a quedar por encima del otro, así que si las distribuciones tienen formas muy distintas pueden dar significativo con medianas parecidas.',
+       'Un p significativo dice que los grupos difieren, pero no cuánto. Para eso hay que mirar las medianas: si son 14,2 y 10,1 la diferencia es clínicamente relevante; si son 14,2 y 13,9, probablemente no, por más que el p sea chico.'],
+    ej:'Vol AI indexado según FA: con FA mediana 42 ml/m² (P25–P75 40–46), sin FA mediana 33 (31–37), p<0,001. Los rangos casi no se superponen, así que la diferencia no es solo estadística sino que se ve en el paciente individual.',
+    err:['Mirar solo el p y no las medianas. Con muchos pacientes, una diferencia de 0,3 mmHg puede dar p<0,001 y no cambiar ninguna conducta.',
+         'Usar Kruskal-Wallis y concluir cuál grupo difiere de cuál. La prueba dice que <i>al menos uno</i> difiere; identificar cuál requiere comparaciones adicionales, que a su vez necesitan corrección.',
+         'Comparar grupos muy desbalanceados (40 contra 3) y tratar el resultado como sólido.'],
+    app:'Las filas con → comparan una variable entre grupos. Si la variable es numérica (Mann-Whitney o Kruskal-Wallis) vas a ver la mediana, el P25–P75 y el N de cada grupo, que es exactamente lo que hay que reportar; si las dos son categóricas, el test es un Chi² y lo que se despliega es la tabla de contingencia del capítulo siguiente. En <b>Avanzado → Comparación entre subgrupos</b> podés cortar toda la población por HTA, sexo, FA o edad y ver todas las variables a la vez, con diagramas de caja.' },
+
+  { ic:'🔲', t:'Tablas de contingencia y Chi²',
+    p:['Cuando las dos variables son <b>categóricas</b> —tiene o no tiene HTA, grado de disfunción diastólica, sexo— la comparación se hace con una tabla de contingencia: una grilla donde <b>cada celda cuenta los pacientes que tienen esa combinación</b> de características.',
+       'El <b>Chi²</b> compara lo que observaste con lo que esperarías si las dos variables fueran independientes. Cuanto más se aparta el reparto observado del esperado, mayor el estadístico y menor el p.',
+       '<b>La condición que se suele pasar por alto:</b> el Chi² necesita que las <b>frecuencias esperadas</b> de las celdas sean razonables. Con esperadas menores a 5 la aproximación deja de valer y el p no es confiable. No se arregla con más análisis sino con más pacientes, o usando un test exacto de Fisher.'],
+    ej:'Grado diastólico contra HTA: de 22 pacientes con grado I, 18 tienen HTA (82%) y 4 no; de 12 sin disfunción, 3 tienen HTA (25%). El reparto es muy distinto entre filas, y eso es lo que el Chi² cuantifica.',
+    err:['Leer los porcentajes en la dirección equivocada. "El 82% de los que tienen grado I son hipertensos" no es lo mismo que "el 82% de los hipertensos tienen grado I".',
+         'Ignorar el aviso de frecuencias esperadas menores a 5 y reportar el p como si nada.',
+         'Aplicar Chi² a una tabla armada con muchas categorías chicas: cuantas más celdas, más se diluyen los casos y menos confiable el resultado.'],
+    app:'<b>En CeiboAnalytics, al tocar una fila cuyas dos variables son categóricas se despliega la tabla de contingencia con los datos reales de tu muestra.</b> (Las filas de correlación despliegan un gráfico de dispersión, y las de comparación de grupos, las medianas.) Vas a ver los conteos por celda, los totales por fila y columna, el porcentaje sobre la fila y, si alguna frecuencia esperada quedó por debajo de 5, un aviso explícito recomendando confirmarlo con test exacto.' },
+
+  { ic:'🎯', t:'El p-valor — qué significa y qué NO significa',
+    p:['El p-valor responde una pregunta muy específica: <b>si en la realidad no hubiera ninguna asociación, ¿qué tan raro sería observar un resultado al menos tan marcado como el mío?</b> Un p de 0,03 significa que, si no hubiera ninguna asociación real, un resultado así de marcado <b>o más</b> aparecería en 3 de cada 100 repeticiones del estudio.',
+       'El umbral de 0,05 es una <b>convención</b>, no una ley de la naturaleza. Un 0,049 y un 0,051 describen prácticamente la misma evidencia; tratarlos como categorías opuestas es un artefacto.',
+       '<b>El p depende muchísimo del tamaño de la muestra.</b> Con N grande, diferencias clínicamente irrelevantes dan p significativos. Con N chico, efectos reales e importantes no alcanzan significación. Por eso un p alto <b>no prueba que no haya asociación</b>: puede ser simplemente que faltaron pacientes para detectarla.'],
+    ej:'Con 2.000 pacientes, una diferencia de FEVI de 1,5 puntos entre dos grupos puede dar p<0,001. Es estadísticamente sólida y clínicamente irrelevante: nadie cambia una conducta por punto y medio de FEVI.',
+    err:['Leer p<0,05 como "el hallazgo es importante". El p mide compatibilidad con el azar, no magnitud ni relevancia clínica.',
+         'Leer p<0,05 como "A causa B". Ningún p establece causalidad; el diseño del estudio es lo que lo hace, y estos datos son observacionales y transversales.',
+         'Leer p=0,20 como "quedó demostrado que no hay relación". Ausencia de evidencia no es evidencia de ausencia.',
+         'Interpretar el p como la probabilidad de que la hipótesis sea falsa. No lo es: es la probabilidad de obtener datos <b>al menos tan extremos como los observados</b> suponiendo que no hay efecto.'],
+    app:'En la tabla de asociaciones el p está en su columna, y el semáforo lo traduce: 🟢 significativa con N suficiente, 🟡 significativa pero con reservas —pocos casos o frecuencias esperadas bajas—, ⚫ no significativa o no calculable. Al desplegar una fila, la app escribe en una frase qué significa ese p con tus números.' },
+
+  { ic:'📏', t:'Intervalo de confianza del 95%',
+    p:['El IC 95% es el <b>rango de valores compatibles con tus datos</b>. Dicho sin tecnicismos: dónde está plausiblemente el valor real, más allá del número puntual que te tocó estimar con esta muestra.',
+       '<b>Su ancho es información.</b> Un intervalo angosto indica una estimación precisa; uno muy ancho avisa que hay pocos datos, aunque el p haya salido significativo. Dos estudios pueden dar el mismo coeficiente y ser muy distintos en solidez.',
+       '<b>Y contiene al p.</b> Si el intervalo de una correlación <b>cruza el cero</b>, o el de un odds ratio <b>cruza el 1</b>, el efecto no se distingue del azar: eso <b>en general</b> va de la mano de un p mayor a 0,05, y además te dice cuán grande podría llegar a ser el efecto en el mejor y el peor caso. No es una equivalencia exacta: en este panel el IC de ρ sale de la transformación de Fisher y el p de una aproximación sobre los rangos, así que en el borde —p entre 0,04 y 0,06 con N chico— los dos criterios pueden discrepar levemente.'],
+    ej:'Un OR de 22 suena impresionante, hasta que ves el intervalo: de 1,2 a 410. Eso no es un hallazgo, es una muestra demasiado chica. Un OR de 1,8 con IC de 1,4 a 2,3 dice muchísimo más.',
+    err:['Reportar solo el p y omitir el intervalo. El p dice "pasa o no pasa"; el intervalo dice cuánto y con qué precisión.',
+         'Celebrar un efecto enorme sin mirar el ancho del intervalo: los efectos gigantes con muestras chicas casi siempre se achican al replicarlos.',
+         'Interpretar el IC como "el 95% de mis pacientes está en ese rango". No describe pacientes, describe la incertidumbre sobre el parámetro.',
+         'Leerlo como "hay 95% de probabilidad de que el valor real esté acá dentro". En el marco frecuentista el valor real es fijo: lo aleatorio es el intervalo. El 95% describe el procedimiento — si repitieras el estudio muchas veces, unos 95 de cada 100 intervalos así construidos contendrían el valor real.'],
+    app:'La tabla de asociaciones tiene una columna de IC 95% y el <b>forest plot</b> lo dibuja: cada barra es un intervalo y la línea del cero está marcada. <b>Ojo: el forest muestra sólo las que ya dieron significativas, así que en la práctica ninguna barra cruza el cero</b> — lo que se lee ahí es el ancho de cada intervalo y qué tan lejos del cero queda. Al desplegar una fila, la app dice en palabras si el rango incluye el cero. La columna de IC está vacía (—) en Mann-Whitney, Kruskal-Wallis y Chi², que no producen un coeficiente con intervalo.' },
+
+  { ic:'🔬', t:'Corrección por comparaciones múltiples (FDR)',
+    p:['El panel corre <b>{{N}} asociaciones a la vez</b>. Con el umbral habitual de 0,05, alrededor de {{N5}} van a dar "significativas" aunque no exista ninguna relación real: es aritmética, no mala suerte. Cuantas más pruebas hacés, más falsos positivos acumulás.',
+       'La corrección de <b>Benjamini-Hochberg</b> ajusta los p teniendo en cuenta cuántas pruebas se hicieron, y controla la <b>tasa de falsos descubrimientos</b>: <b>en promedio</b>, qué proporción de los hallazgos que anunciás son ruido. En una corrida concreta puede ser algo mayor. El valor ajustado se llama <b>q</b>.',
+       'Es menos severa que otras correcciones —Bonferroni, por ejemplo— porque no intenta evitar todo falso positivo, sino mantenerlos en una proporción tolerable. Para un panel exploratorio como éste es el equilibrio adecuado.'],
+    ej:'De 10 asociaciones con p<0,05 en una corrida, pueden quedar 6 tras aplicar FDR. Esas 6 son las que conviene mirar primero; las otras 4 no quedan descartadas, quedan como hipótesis a confirmar en otra muestra.',
+    err:['Recorrer subpoblaciones hasta encontrar una donde algo dé significativo, y reportar solo esa. Se llama <b>subgroup shopping</b> y es la forma más común de publicar ruido: si mirás diez subgrupos, esperá encontrar algo "significativo" en varios por puro azar.',
+         'Aplicar la corrección dentro de cada análisis y olvidar que se hicieron muchos análisis. El módulo de subpoblaciones corrige dentro de cada subgrupo, pero la multiplicidad entre subgrupos no la corrige nadie.',
+         'Descartar un hallazgo solo porque no sobrevive al FDR: puede ser real y faltar potencia. Lo que corresponde es tratarlo como hipótesis y confirmarlo en otra muestra.'],
+    app:'El informe básico dice cuántas asociaciones eran significativas y cuántas sobreviven al FDR. <b>Cuidado con la tabla: su semáforo usa el p sin corregir</b>, así que un 🟢 puede no sobrevivir al FDR. Para eso hay que mirar el informe básico, el módulo de subpoblaciones —que ordena por q— o el informe anual en PDF, que lista únicamente las que superan la corrección.' }
+];
+
+/* {{N}} y {{N5}} se resuelven al pintar, no al definir GUIA: el número de asociaciones
+   lo publica el módulo de estadística después, y si se interpolara en el literal quedaría
+   congelado en el fallback y mentiría al agregar una asociación. */
+function guiaTexto(t){
+  const n=(typeof window.ASSOC_N==='number')?window.ASSOC_N:61;
+  return String(t).replace(/\{\{N5\}\}/g,String(Math.round(n*0.05))).replace(/\{\{N\}\}/g,String(n));
+}
+
+function guiaRender(){
+  const host=document.getElementById('guia-cap'); if(!host) return;
+  if(host.dataset.listo==='1') return;   // contenido estático: se arma una sola vez
+  host.innerHTML = GUIA.map((c,i)=>
+    '<details class="explica guia-cap"'+(i===0?' open':'')+'>'+
+      '<summary><span style="font-size:15px;">'+esc(c.ic)+'</span> '+(i+1)+'. '+esc(c.t)+'</summary>'+
+      '<div class="cuerpo">'+
+        c.p.map(x=>'<p style="margin:8px 0;">'+guiaTexto(x)+'</p>').join('')+
+        '<div class="guia-ej"><b>Ejemplo.</b> '+guiaTexto(c.ej)+'</div>'+
+        c.err.map(e=>'<div class="guia-err"><b>⚠️ Error frecuente.</b> '+guiaTexto(e)+'</div>').join('')+
+        '<div class="guia-app"><b>¿Cómo lo muestra CeiboAnalytics?</b> '+guiaTexto(c.app)+'</div>'+
+      '</div>'+
+    '</details>').join('');
+  host.dataset.listo='1';
+}
+
+/* PDF de la guía: se arma desde GUIA, la misma fuente que la pantalla. */
+function guiaPDF(){
+  if(!window.jspdf||!window.jspdf.jsPDF){ toast('❌ PDF no disponible (jsPDF no cargó)'); return; }
+  try{ _guiaPDF(); }
+  catch(e){ console.error('[guiaPDF]',e); toast('❌ No se pudo generar la guía (ver consola)'); }
+}
+function _guiaPDF(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'a4',compress:true});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
+  const M=52, PIE=34; let y=M;
+  const fecha=new Date().toLocaleDateString('es-UY');
+  // jsPDF usa Latin-1 y el texto tiene símbolos estadísticos y viñetas.
+  /* Se acotan los tags reales en vez de /<[^>]+>/: con esa regex, un "p<0,05 como <b>x</b>"
+     matcheaba desde el < literal hasta el primer >, y el PDF imprimía una frase distinta
+     —sólo en el PDF, porque en pantalla el parser HTML no trata "<0" como tag—. */
+  const limpio=t=>guiaTexto(t).replace(/<\/?(?:b|i|em|strong|br)\s*\/?>/gi,'')
+    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+    .replace(/[ρχ²→↔≥≤±–—“”‘’…Δ−•▸]/g,c=>({'ρ':'rho','χ':'X','²':'2','→':'->','↔':'<->','≥':'>=','≤':'<=',
+      '±':'+/-','–':'-','—':'-','“':'"','”':'"','‘':"'",'’':"'",'…':'...','Δ':'D','−':'-','•':'-','▸':'>'}[c]||c))
+    // Los semáforos del capítulo del p-valor son emoji: jsPDF sólo maneja Latin-1 y los
+    // dibujaría como basura, así que se nombran.
+    .replace(/🟢/g,'[verde]').replace(/🟡/g,'[amarillo]').replace(/⚫/g,'[negro]')
+    .replace(/[αβσμκ≈∼∞]/g,c=>({'α':'alfa','β':'beta','σ':'sigma','μ':'micro','κ':'kappa','≈':'~','∼':'~','∞':'inf'}[c]||c))
+    /* Red final: en vez de borrar en silencio —una "β = 0,3" saldría como " = 0,3"— se
+       marca y se avisa por consola, para que un símbolo nuevo no desaparezca sin rastro. */
+    .replace(/[^\x00-\xFF]/g,c=>{ console.warn('[guiaPDF] carácter fuera de Latin-1 descartado:',c); return '?'; });
+  const salto=h=>{ if(y+h>H-M-PIE){ doc.addPage(); y=M; } };
+  const bloque=(txt,size,bold,color,sangria)=>{
+    const x=M+(sangria||0);
+    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size);
+    doc.setTextColor.apply(doc,color||[45,45,45]);
+    doc.splitTextToSize(limpio(txt),W-M-x).forEach(l=>{ salto(size+5); doc.text(l,x,y); y+=size+4; });
+  };
+
+  // Portada
+  doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(26,82,118);
+  doc.text('Guía estadística',M,y+40); y+=68;
+  doc.setFont('helvetica','normal'); doc.setFontSize(13); doc.setTextColor(60,60,60);
+  doc.text('Cómo leer lo que calcula CeiboAnalytics',M,y); y+=24;
+  doc.setFontSize(10); doc.setTextColor(120,120,120);
+  doc.text('CeiboAnalytics · Suite CeiboMed · '+fecha,M,y); y+=34;
+  doc.setDrawColor(220); doc.line(M,y,W-M,y); y+=24;
+  doc.setFontSize(11); doc.setTextColor(45,45,45);
+  GUIA.forEach((c,i)=>{ salto(17); doc.text(limpio((i+1)+'. '+c.t),M+8,y); y+=17; });
+
+  GUIA.forEach((c,i)=>{
+    doc.addPage(); y=M;
+    bloque((i+1)+'. '+c.t,17,true,[26,82,118]); y+=6;
+    doc.setDrawColor(220); doc.line(M,y,W-M,y); y+=16;
+    c.p.forEach(t=>{ bloque(t,10.5,false); y+=7; });
+    /* Reservar espacio para el rótulo MÁS un par de líneas: si no, "ERROR FRECUENTE"
+       quedaba solo al pie y su texto arrancaba en la página siguiente. */
+    const rotulo=(txt,color)=>{ salto(9+2*14); bloque(txt,9,true,color); };
+    y+=4; rotulo('EJEMPLO',[23,162,140]); bloque(c.ej,10,false,[60,60,60],10); y+=10;
+    c.err.forEach(e=>{ rotulo('ERROR FRECUENTE',[146,43,33]); bloque(e,10,false,[60,60,60],10); y+=8; });
+    y+=4; rotulo('COMO LO MUESTRA CEIBOANALYTICS',[26,82,118]);
+    bloque(c.app,10,false,[60,60,60],10);
+  });
+
+  const pags=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pags;i++){
+    doc.setPage(i);
+    doc.setDrawColor(235); doc.line(M,H-PIE+6,W-M,H-PIE+6);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text('CeiboAnalytics · Suite CeiboMed · generado el '+fecha,M,H-PIE+20);
+    doc.text('pag. '+i+'/'+pags,W-M-42,H-PIE+20);
+  }
+  doc.save('CeiboAnalytics_guia_estadistica.pdf');
+  toast('✅ Guía exportada');
+}
+
 function renderCurrent(){
   try{
     if(currentView==='dashboard')renderDashboard();
@@ -2331,6 +2544,7 @@ function renderCurrent(){
     else if(currentView==='calidad')renderCalidad();
     else if(currentView==='estadistica' && typeof estRender==='function')estRender();
     else if(currentView==='informe')initReport();
+    else if(currentView==='guia')guiaRender();
   }catch(e){console.error('Error al renderizar',currentView,e);toast('Error al renderizar (ver consola)');}
   // Después del render: los charts ya existen, así que el resumen refleja lo dibujado.
   try{ grafExplicaciones(); }catch(e){ console.warn('[gráficas] no se pudo armar la explicación',e); }
@@ -2692,6 +2906,7 @@ function renderCurrent(){
     return {...base,n:r.N,method:'Chi²',stat:'χ²='+r.chi2.toFixed(2)+(r.minE<5?' ⚠fe<5':''),p:r.p,ci:'—',sig:sigLight(r.p,r.N>=20&&r.minE>=5),coef:null,plot:{type:'bar',aV,bV,tbl,al:P.izq,bl:P.der,minE:r.minE}};
   }
 
+  window.ASSOC_N = ASSOC.length;   // lo consume la Guía estadística
   let _results=[];
   function computeAll(){ rebuildCross(); _results=ASSOC.map(runOne); return _results; }
 
