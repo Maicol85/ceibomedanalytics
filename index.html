@@ -319,6 +319,58 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 }
 .empty .big{font-size:15px;color:var(--text-2);margin-bottom:4px;}
 .hint{font-size:12px;color:var(--muted);margin-top:8px;}
+
+/* ══ Orientación para quien abre la app por primera vez ══════════════════════
+   Tres piezas: la bienvenida de tres pasos, el ícono "?" por sección y el cartel
+   flotante de la primera visita a Asociaciones. */
+#bienvenida{position:fixed;inset:0;z-index:400;background:rgba(10,20,26,.62);
+  display:none;align-items:center;justify-content:center;padding:20px;}
+#bienvenida.on{display:flex;}
+#bienvenida .bv-box{background:var(--surface-1);border:1px solid var(--border);border-radius:16px;
+  padding:26px 26px 20px;max-width:640px;width:100%;max-height:92vh;overflow:auto;
+  box-shadow:0 24px 70px rgba(0,0,0,.42);}
+#bienvenida h2{font-family:Georgia,'Times New Roman',serif;font-size:21px;margin:0 0 4px;color:var(--text-1);}
+#bienvenida .bv-sub{font-size:13px;color:var(--text-2);margin-bottom:20px;line-height:1.5;}
+.bv-paso{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--border);}
+.bv-paso:first-of-type{border-top:none;}
+.bv-num{flex:0 0 auto;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;
+  font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;}
+.bv-cuerpo{min-width:0;}
+.bv-t{font-size:14.5px;font-weight:700;color:var(--text-1);margin-bottom:3px;}
+.bv-d{font-size:13px;line-height:1.55;color:var(--text-2);}
+.bv-d code{background:var(--surface-2);padding:1px 5px;border-radius:4px;font-size:12px;}
+#bienvenida .bv-pie{margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+
+/* Ícono "?" contextual. El texto vive en data-ayuda y lo muestra un único panel
+   flotante: con un div por sección el DOM se llenaba de cajas ocultas. */
+.ayuda-ico{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+  border-radius:50%;border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);
+  font-size:12px;font-weight:700;cursor:pointer;padding:0;margin-left:7px;vertical-align:middle;
+  flex:0 0 auto;font-family:inherit;line-height:1;}
+.ayuda-ico:hover,.ayuda-ico[aria-expanded="true"]{background:var(--accent);color:#fff;border-color:var(--accent);}
+#ayuda-pop{position:absolute;z-index:350;max-width:290px;background:var(--surface-1);
+  border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.55;
+  color:var(--text-1);box-shadow:0 10px 30px rgba(0,0,0,.3);display:none;}
+#ayuda-pop.on{display:block;}
+
+/* Cartel de la primera visita a Asociaciones */
+#coach-asoc{position:absolute;z-index:340;max-width:290px;background:var(--accent);color:#fff;
+  border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.5;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);display:none;}
+#coach-asoc.on{display:block;}
+#coach-asoc button{margin-top:9px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);
+  color:#fff;border-radius:6px;padding:4px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+#coach-asoc button:hover{background:rgba(255,255,255,.3);}
+
+/* Toggle modo básico / experto */
+.modo-tog{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.modo-tog button{background:var(--surface-2);color:var(--text-2);border:none;padding:6px 11px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+.modo-tog button.on{background:var(--accent);color:#fff;}
+.modo-nota{font-size:12px;color:var(--text-2);margin-bottom:14px;padding:9px 12px;
+  background:var(--surface-2);border-left:3px solid var(--border);border-radius:0 8px 8px 0;}
+.modo-nota button{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;
+  font-size:12px;font-family:inherit;padding:0;text-decoration:underline;}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px;}
 .field{display:flex;flex-direction:column;gap:4px;}
 .field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
@@ -670,6 +722,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           <input type="date" id="dTo" title="Hasta">
         </span>
         <button class="btn" id="refreshBtn" title="Releer datos de localStorage">↻ Actualizar datos</button>
+        <div class="modo-tog" role="group" aria-label="Nivel de detalle">
+          <button type="button" id="modo-basico" data-modo="basico" title="Sólo lo esencial: asociaciones e IA">Básico</button>
+          <button type="button" id="modo-experto" data-modo="experto" title="Todo: descriptivas por app, regresión y subpoblaciones">Experto</button>
+        </div>
         <button class="btn" id="themeBtn" title="Día / noche">🌙</button>
       </div>
     </div>
@@ -680,6 +736,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
     <div class="content">
       <!-- ===================== DASHBOARD ===================== -->
       <section class="view active" id="view-dashboard">
+        <h2 class="section" style="margin-top:0;">Plataforma general<button type="button" class="ayuda-ico" aria-label="Para qué sirve esta sección" aria-expanded="false" data-ayuda="Resumen de tu laboratorio. Revisalo para tener una visión general de tu población: cuántos estudios hay, de qué apps vienen y cómo se distribuyen en el tiempo.">?</button></h2>
         <div class="card" id="importPanel" style="margin-bottom:14px">
           <h3 class="sub" style="margin-top:0">📥 Importar datos de las apps</h3>
           <p class="hint" style="margin-top:0">Cada app corre en su propio subdominio, por lo que Analytics no puede leer su <code>localStorage</code> directamente. Exportá el JSON desde cada app (menú ⋯ → “Exportar para Analytics”) y cargalo acá. Los datos quedan guardados en este navegador.</p>
@@ -799,8 +856,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           #view-estadistica .ia-out-h{font-size:12px;font-weight:700;color:var(--accent);
             text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:none;}
         </style>
-        <h2 class="section">Estadística avanzada</h2>
+        <h2 class="section">Estadística avanzada<button type="button" class="ayuda-ico" aria-label="Para qué sirve esta sección" aria-expanded="false" data-ayuda="Acá se cruzan los datos de todas tus apps. Empezá por Asociaciones; el resto son cortes más finos de lo mismo.">?</button></h2>
         <div id="est-crossinfo" class="card" style="margin-bottom:14px;"></div>
+        <div id="est-modo-nota"></div>
         <div style="display:flex;gap:8px;margin-bottom:16px;">
           <button class="est-subtab active" data-est="asoc" onclick="estSubtab('asoc',this)">Asociaciones</button>
           <button class="est-subtab" data-est="porapp" onclick="estSubtab('porapp',this)">Por app</button>
@@ -829,6 +887,8 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 
         <!-- PANEL ASOCIACIONES -->
         <div id="est-panel-asoc">
+          <div class="card-hdr" style="margin-bottom:10px;">Asociaciones<button type="button" class="ayuda-ico" aria-label="Para qué sirve esta sección" aria-expanded="false" data-ayuda="Busca relaciones entre variables. Tocar una fila muestra los datos reales de tu muestra que respaldan ese resultado.">?</button></div>
+          <div id="est-asoc-estado"></div>
           <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
             <div class="field"><label>Significancia</label><select id="est-f-sig" onchange="estAsocRender()"><option value="all">Todos</option><option value="05">p&lt;0.05</option><option value="01">p&lt;0.01</option></select></div>
             <div class="field"><label>N mínimo</label><select id="est-f-n" onchange="estAsocRender()"><option value="0">Todos</option><option value="15">≥15</option><option value="30">≥30</option></select></div>
@@ -922,7 +982,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 
           <!-- ── Módulo D: análisis de subpoblaciones ── -->
           <div class="card" style="margin-bottom:16px;">
-            <div class="card-hdr">🎯 Análisis de subpoblaciones
+            <div class="card-hdr">🎯 Análisis de subpoblaciones<button type="button" class="ayuda-ico" aria-label="Para qué sirve esta sección" aria-expanded="false" data-ayuda="Analiza un subgrupo específico (por ejemplo, los pacientes con FA) y lo compara con el resto de tu población.">?</button>
               <span class="hint" style="font-weight:400;">— sólo combinaciones con 10 pacientes o más</span>
             </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:10px 0;">
@@ -970,7 +1030,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div id="est-informe-basico" style="white-space:pre-wrap;font-size:13px;line-height:1.55;margin-top:12px;"></div>
           </div>
           <div class="card">
-            <h3 class="section" style="font-size:15px;">Análisis con Claude</h3>
+            <h3 class="section" style="font-size:15px;">Análisis con Claude<button type="button" class="ayuda-ico" aria-label="Para qué sirve esta sección" aria-expanded="false" data-ayuda="Usá la IA para interpretar tus resultados, compararlos con la literatura, proponer hipótesis o generar un borrador de abstract. Todo lo que devuelve es un borrador que tenés que verificar.">?</button></h3>
             <div style="font-size:12px;color:var(--text-2);margin-bottom:12px;">Cuatro análisis independientes sobre las asociaciones ya calculadas (claude-sonnet-4-6). Cada uno manda a la API sólo estadísticos agregados, nunca datos de pacientes. Requiere API key configurada.</div>
 
             <div class="ia-aviso">
@@ -1053,7 +1113,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
               <p class="hint" style="margin:0;">Siete capítulos con lo mínimo necesario para interpretar el panel
               sin haber hecho un curso de bioestadística. Cada uno cierra explicando dónde aparece eso en la app.</p>
             </div>
-            <button class="btn primary" onclick="guiaPDF()">📥 Descargar guía completa (PDF)</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <!-- El pie de la bienvenida dice que se puede volver a verla desde acá,
+                   así que la puerta tiene que existir. -->
+              <button class="btn" onclick="abrirBienvenida()">🧭 Ver «Por dónde empezar»</button>
+              <button class="btn primary" onclick="guiaPDF()">📥 Descargar guía completa (PDF)</button>
+            </div>
           </div>
         </div>
         <div id="guia-cap"></div>
@@ -1063,6 +1128,55 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- ══════════ Bienvenida: tres pasos para quien abre la app por primera vez ══════════ -->
+<div id="bienvenida" role="dialog" aria-modal="true" aria-labelledby="bv-titulo">
+  <div class="bv-box">
+    <h2 id="bv-titulo">Bienvenido a CeiboAnalytics</h2>
+    <p class="bv-sub">Esta app cruza los estudios de tus otras apps de CeiboMed y busca relaciones entre ellos.
+      Son tres pasos y el orden importa: sin el primero, los otros dos no tienen con qué trabajar.</p>
+
+    <div class="bv-paso">
+      <div class="bv-num">1</div>
+      <div class="bv-cuerpo">
+        <div class="bv-t">📥 Importá tus datos</div>
+        <div class="bv-d">Cada app vive en su propio subdominio, así que Analytics no puede leer sus datos solo.
+          En EcoSmart o ErgoSmart entrá al menú <code>⋯ → Exportar para Analytics</code>, guardá el archivo
+          y cargalo acá con los botones <b>📥 Importar</b> del panel superior del dashboard.
+          Los estudios quedan en este navegador; no se suben a ningún lado.</div>
+      </div>
+    </div>
+
+    <div class="bv-paso">
+      <div class="bv-num">2</div>
+      <div class="bv-cuerpo">
+        <div class="bv-t">📊 Explorá las asociaciones</div>
+        <div class="bv-d">Andá a <b>Estadística avanzada → Asociaciones</b>. La tabla prueba decenas de relaciones
+          entre tus variables y marca cuáles dan significativas. Tocá cualquier fila para ver los datos reales
+          de tu muestra que produjeron ese número.</div>
+      </div>
+    </div>
+
+    <div class="bv-paso">
+      <div class="bv-num">3</div>
+      <div class="bv-cuerpo">
+        <div class="bv-t">🤖 Pedile a la IA que interprete</div>
+        <div class="bv-d">En la subtab <b>Análisis IA</b> podés pedirle a Claude que explique tus resultados,
+          los compare con la literatura, proponga hipótesis o redacte un borrador de abstract.
+          Necesita tu API key de Anthropic, que se carga ahí mismo.</div>
+      </div>
+    </div>
+
+    <div class="bv-pie">
+      <button class="btn primary" id="bv-cerrar">Entendido, ir al dashboard</button>
+      <span class="hint" style="margin:0;">Podés volver a verla desde <b>📖 Guía estadística</b>.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Panel único para todos los "?" contextuales, y cartel de la primera visita -->
+<div id="ayuda-pop" role="tooltip"></div>
+<div id="coach-asoc" role="status"></div>
 
 <script>
 "use strict";
@@ -3314,7 +3428,15 @@ function renderCurrent(){
 
   window.ASSOC_N = ASSOC.length;   // lo consume la Guía estadística
   let _results=[];
-  function computeAll(){ rebuildCross(); _results=ASSOC.map(runOne); return _results; }
+  function computeAll(){
+    rebuildCross(); _results=ASSOC.map(runOne);
+    /* bhQ acá y no sólo en los call sites: el semáforo de la tabla usa el p SIN corregir,
+       y el q vivía únicamente en el informe básico, en subpoblaciones y en el informe anual.
+       Quien se queda en la tabla —que es la pantalla por defecto— no tenía forma de saber
+       que un 🟢 puede no sobrevivir al FDR. Los call sites con otra familia la recalculan. */
+    bhQ(_results);
+    return _results;
+  }
 
   function filtered(){
     const fs=(document.getElementById('est-f-sig')||{}).value||'all';
@@ -3526,6 +3648,14 @@ function renderCurrent(){
           ? '<b>Con reserva:</b> alguna casilla tiene muy pocos casos esperados, así que el Chi² pierde validez acá — conviene confirmarlo con un test exacto de Fisher.'
           : '<b>Con reserva:</b> el resultado es significativo pero se apoya en pocos casos, así que puede no sostenerse al sumar pacientes.');
       }
+      /* El semáforo de la tabla mira el p crudo. Con decenas de contrastes a la vez, unos
+         cuantos "significativos" son ruido esperable, y esto se dice acá —en el gesto que
+         el médico ya hace, tocar la fila— y no en otra pantalla a la que habría que ir. */
+      if(r.q!=null && r.q>=0.05){
+        partes.push('<b>Ojo:</b> se corrieron decenas de contrastes a la vez y éste '+
+          '<b>no sobrevive a la corrección por comparaciones múltiples</b> (q='+pTxt(r.q)+'). '+
+          'Tomalo como hipótesis para explorar, no como hallazgo establecido.');
+      }
     } else {
       partes.push('Lo observado <b>es compatible con el azar</b> ('+pFrase(r.p)+'), '+
         'lo que no prueba que no exista relación: con '+n+' caso'+(n===1?'':'s')+' puede faltar potencia para detectarla.');
@@ -3629,7 +3759,18 @@ function renderCurrent(){
     // Se asigna antes del early return: si no, quedaba con las filas del render anterior
     // y el índice de data-ri apuntaba a otra asociación.
     _asocRows = rows;
-    if(!rows.length){ host.innerHTML='<div style="padding:16px;color:var(--text-2);text-align:center;">Sin asociaciones que cumplan los filtros (o pocos pacientes con datos cruzados).</div>'; renderForest(); return; }
+    /* Nunca una tabla vacía sin explicación: el estado dice QUÉ falta y qué hacer.
+       El aviso de N bajo va arriba y no reemplaza la tabla, porque con 12 estudios los
+       números se calculan igual —lo que cambia es cuánto valen—. */
+    /* Sobre _results y NO sobre rows: rows ya pasó por filtered(), así que contar ahí
+       hacía que "cero filas" implicara siempre "cero calculables", y la app le echaba la
+       culpa a los datos del médico cuando en realidad no había asociaciones que pasaran
+       SUS filtros — que es un resultado negativo legítimo, no una base incompleta. */
+    const nCalc = _results.filter(r=>r.p!=null).length;
+    const est = (typeof estadoAsociaciones==='function') ? estadoAsociaciones(rows.length, nCalc) : {banner:'',vacio:'',bloquea:false};
+    const eh = document.getElementById('est-asoc-estado');
+    if(eh) eh.innerHTML = est.banner;
+    if(est.bloquea || !rows.length){ host.innerHTML = est.vacio; renderForest(); return; }
     let body='';
     rows.forEach((r,idx)=>{ body+='<tr class="asoc-fila" data-ri="'+idx+'" tabindex="0" aria-expanded="false" style="cursor:pointer;">'+
       '<td><span class="asoc-chev" style="display:inline-block;width:12px;color:var(--text-2);">▸</span> '+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td>'+r.ci+'</td><td style="text-align:center;font-size:15px;">'+r.sig+'</td></tr>'; });
@@ -3640,6 +3781,8 @@ function renderCurrent(){
       tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); asocToggle(tr,idx); } });
     });
     renderForest();
+    // Después de dibujar: el cartel se ancla a la primera fila y necesita que exista.
+    if(typeof quizasCoachAsoc==='function') setTimeout(quizasCoachAsoc,0);
   };
 
   window.estRender=function(){
@@ -4698,7 +4841,9 @@ function renderCurrent(){
   };
 
   // ── exportar ──
-  window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const H=['Categoría','Asociación','N','Método','Estadístico','p','IC 95%','Significativo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.ci,r.sig==='🟢'?'Sí':(r.sig==='🟡'?'Sí (N bajo)':'No')])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
+  window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} /* La columna q y el "sobrevive FDR" van en el archivo: esta planilla se manda a un
+       coautor y "Significativo: Sí" sin el q ajustado se lee como hallazgo establecido. */
+    const H=['Categoría','Asociación','N','Método','Estadístico','p','q (FDR)','Sobrevive FDR','IC 95%','Significativo (p sin corregir)']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.q!=null?pTxt(r.q):'—',r.p!=null?((r.q!=null&&r.q<0.05)?'Sí':'No'):'—',r.ci,r.sig==='🟢'?'Sí':(r.sig==='🟡'?'Sí (N bajo)':'No')])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
   window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. Verde=sig N ok / Amarillo=sig N bajo / Negro=no sig.',mL,y);y+=7; const cols=[['Asociacion',66],['N',12],['Metodo',34],['Estadistico',40],['p',18],['IC 95%',34],['Sig',14]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=r.sig==='🟢'?'SI':(r.sig==='🟡'?'si*':'no'); const vals=[r.lbl,String(r.n),r.method,r.stat,pTxt(r.p),r.ci,sg].map(pdfSafe); let x=mL; vals.forEach((v,i)=>{doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
 
   // ── Análisis IA ──
@@ -5405,6 +5550,257 @@ window.paExportPDF=function(){
   doc.save('ceiboanalytics_por_app.pdf'); toast('✅ PDF exportado');
 };
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ORIENTACIÓN — bienvenida, ayudas contextuales, cartel de primera vez y
+   modo básico / experto.
+   Todo lo que se recuerda va en localStorage y son sólo preferencias de UI:
+   ningún dato clínico, así que borrarlas no pierde nada del trabajo.
+   ══════════════════════════════════════════════════════════════════════════ */
+const OR_VISTO = 'ca_onboarding_visto';
+const OR_COACH = 'ca_coach_asoc_visto';
+const OR_MODO  = 'ca_modo_ui';
+
+function orGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function orSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ /* modo privado: la app sigue */ } }
+
+/* ── Bienvenida ─────────────────────────────────────────────────────────── */
+function abrirBienvenida(){
+  document.getElementById('bienvenida').classList.add('on');
+  // El diálogo se declara aria-modal: si el foco se queda en el body, el tabulado
+  // recorre la página de atrás como si el modal no existiera.
+  const b=document.getElementById('bv-cerrar');
+  if(b) setTimeout(()=>{ try{ b.focus(); }catch(e){} }, 30);
+}
+function cerrarBienvenida(){
+  document.getElementById('bienvenida').classList.remove('on');
+  orSet(OR_VISTO,'1');
+}
+/* Se muestra la primera vez, y también si no hay ningún estudio cargado: sin datos
+   el dashboard está vacío y el paso que falta es justamente el primero. Una vez que
+   hay datos, no vuelve a aparecer. */
+/* Una vez que la cerró, no vuelve: sin datos el estado vacío de Asociaciones ya explica
+   la importación, y repetir el modal en cada F5 es ruido, no ayuda. Queda la puerta
+   explícita en la Guía estadística. */
+function quizasBienvenida(){
+  if(orGet(OR_VISTO)==='1') return;
+  abrirBienvenida();
+}
+
+/* ── Ayudas contextuales "?" ────────────────────────────────────────────── */
+let ayudaAbierta=null;
+function cerrarAyuda(){
+  const pop=document.getElementById('ayuda-pop');
+  pop.classList.remove('on');
+  if(ayudaAbierta){
+    ayudaAbierta.setAttribute('aria-expanded','false');
+    ayudaAbierta.removeAttribute('aria-describedby');
+  }
+  ayudaAbierta=null;
+}
+function abrirAyuda(btn){
+  const pop=document.getElementById('ayuda-pop');
+  if(ayudaAbierta===btn){ cerrarAyuda(); return; }
+  cerrarAyuda();
+  pop.textContent=btn.getAttribute('data-ayuda')||'';
+  pop.classList.add('on');
+  /* Posición en coordenadas de documento (scrollX/Y) porque el panel es
+     position:absolute: con position:fixed quedaba pegado al viewport y se
+     despegaba del botón al hacer scroll. */
+  const r=btn.getBoundingClientRect();
+  const ancho=Math.min(290, window.innerWidth-24);
+  let x=r.left+window.scrollX;
+  // Si se saldría por la derecha, se ancla al borde en vez de desbordar.
+  if(x+ancho > window.scrollX+window.innerWidth-12) x=window.scrollX+window.innerWidth-ancho-12;
+  pop.style.width=ancho+'px';
+  pop.style.left=Math.max(window.scrollX+12,x)+'px';
+  pop.style.top=(r.bottom+window.scrollY+7)+'px';
+  btn.setAttribute('aria-expanded','true');
+  // Sin esto el lector de pantalla anuncia "expandido" y nunca el texto de la ayuda,
+  // que es justamente lo que este módulo vino a agregar.
+  btn.setAttribute('aria-describedby','ayuda-pop');
+  ayudaAbierta=btn;
+}
+
+/* ── Cartel de la primera visita a Asociaciones ─────────────────────────── */
+function cerrarCoach(){
+  const c=document.getElementById('coach-asoc');
+  if(c) c.classList.remove('on');
+}
+function quizasCoachAsoc(){
+  if(orGet(OR_COACH)==='1') return;
+  const fila=document.querySelector('#est-asoc-tabla tbody tr.asoc-fila');
+  if(!fila) return;   // sin filas no hay nada que señalar
+  const c=document.getElementById('coach-asoc');
+  /* Si ya está visible sólo se reubica: reinyectar el innerHTML en cada resize hace que
+     un lector de pantalla lo reanuncie sin parar (role="status" es una región viva). */
+  const yaVisible=c.classList.contains('on');
+  if(!yaVisible) c.innerHTML='👆 Tocá cualquier fila para ver los datos reales que generaron este resultado.'+
+              '<br><button type="button" id="coach-ok">Entendido</button>';
+  c.classList.add('on');
+  const r=fila.getBoundingClientRect();
+  const ancho=Math.min(290, window.innerWidth-24);
+  c.style.width=ancho+'px';
+  c.style.left=Math.max(window.scrollX+12, Math.min(r.left+window.scrollX, window.scrollX+window.innerWidth-ancho-12))+'px';
+  c.style.top=(r.bottom+window.scrollY+8)+'px';
+  if(!yaVisible){
+    const ok=document.getElementById('coach-ok');
+    if(ok) ok.addEventListener('click',()=>{ orSet(OR_COACH,'1'); cerrarCoach(); });
+  }
+}
+/* Al tocar una fila el cartel ya cumplió su función: se marca visto y se va. */
+function coachCumplido(){ if(orGet(OR_COACH)!=='1'){ orSet(OR_COACH,'1'); } cerrarCoach(); }
+
+/* ── Modo básico / experto ──────────────────────────────────────────────── */
+/* Sin preferencia guardada, el defecto es básico SÓLO si la app está vacía. Quien ya
+   tiene estudios cargados venía usando la versión anterior, donde estaba todo: pasarlo a
+   básico le haría desaparecer módulos que ya conocía sin haber pedido nada. */
+function modoActual(){
+  const v = orGet(OR_MODO);
+  if(v) return v==='experto' ? 'experto' : 'basico';
+  return (typeof STUDIES!=='undefined' && STUDIES.length) ? 'experto' : 'basico';
+}
+/* Las subtabs que el modo básico esconde. Subpoblaciones vive DENTRO de
+   "Avanzado", así que se oculta con ella y no necesita entrada propia. */
+const MODO_OCULTA = ['porapp','avanzado'];
+
+function aplicarModo(modo, inicial){
+  // En la carga inicial NO se persiste: si se guardara, la heurística de modoActual()
+  // ("no eligió todavía") quedaría destruida en el primer arranque.
+  if(!inicial) orSet(OR_MODO, modo);
+  document.getElementById('modo-basico').classList.toggle('on', modo==='basico');
+  document.getElementById('modo-experto').classList.toggle('on', modo==='experto');
+  const basico = modo==='basico';
+  MODO_OCULTA.forEach(k=>{
+    const btn=document.querySelector('#view-estadistica .est-subtab[data-est="'+k+'"]');
+    if(btn) btn.style.display = basico ? 'none' : '';
+  });
+  /* Si el modo básico esconde la subtab que estaba abierta, hay que mover al usuario:
+     si no, queda mirando un panel cuyo botón ya no existe y sin forma de volver. */
+  if(basico){
+    const activa=document.querySelector('#view-estadistica .est-subtab.active');
+    if(activa && MODO_OCULTA.indexOf(activa.dataset.est)>=0){
+      const asoc=document.querySelector('#view-estadistica .est-subtab[data-est="asoc"]');
+      if(asoc && typeof estSubtab==='function') estSubtab('asoc', asoc);
+    }
+  }
+  pintarNotaModo(basico);
+  if(!inicial) toast(basico?'Modo básico':'Modo experto');
+}
+
+/* Nada desaparece en silencio: si el modo básico escondió análisis, se dice cuáles
+   y se ofrece el cambio ahí mismo. Sin esto, alguien que ya usaba Subpoblaciones
+   abriría la app un día y no encontraría el módulo. */
+function pintarNotaModo(basico){
+  const host=document.getElementById('est-modo-nota');
+  if(!host) return;
+  host.innerHTML = basico
+    ? '<div class="modo-nota">🔎 Estás en <b>modo básico</b>: se muestran Asociaciones y Análisis IA. '+
+      'En <button type="button" id="nota-a-experto">modo experto</button> se agregan las descriptivas '+
+      'por app, la regresión logística, la comparación entre subgrupos, la <b>evolución de un paciente</b> '+
+      'y el análisis de subpoblaciones.</div>'
+    : '';
+  const b=document.getElementById('nota-a-experto');
+  if(b) b.addEventListener('click',()=>aplicarModo('experto'));
+}
+
+/* ── Estados vacíos con instrucción, nunca una pantalla en blanco ───────── */
+const MIN_N_CONFIABLE = 15;
+/* Devuelve qué mostrar según por qué la tabla no sirve. `bloquea` distingue los casos
+   en que la tabla NO debe dibujarse: sin estudios, filtered() igual devuelve las 68
+   filas con N=0 y guiones, y eso se lee como "se analizó y no había nada", que es
+   justo lo contrario de lo que pasa. */
+function estadoAsociaciones(nFilas, nCalculables){
+  const n = (typeof estBaseStudies==='function') ? estBaseStudies().length : STUDIES.length;
+  const out = {banner:'', vacio:'', bloquea:false};
+  if(!STUDIES.length){
+    out.bloquea = true;
+    out.vacio = '<div class="empty"><div class="big">Aún no importaste datos</div>'+
+      'Usá los botones <b>📥 Importar</b> del panel superior del dashboard para cargar estudios desde '+
+      'EcoSmart, ErgoSmart, EcoEstrés o CardioSalud. Se exportan desde cada app con '+
+      '<b>⋯ → Exportar para Analytics</b>.</div>';
+    return out;
+  }
+  if(!n){
+    /* Distinguir período de filtro por médico: si hay estudios en el rango pero ninguno es
+       del médico elegido, decir "no hay estudios en este período" manda a ampliar las fechas,
+       que no arregla nada, y el médico termina creyendo que falló la importación. */
+    const nPeriodo = (typeof filteredStudies==='function') ? filteredStudies().length : 0;
+    out.bloquea = true;
+    out.vacio = nPeriodo
+      ? '<div class="empty"><div class="big">El médico seleccionado no tiene estudios en este período</div>'+
+        'Hay '+nPeriodo+' estudios en el rango de fechas, pero ninguno es suyo. '+
+        'Poné «Todos (servicio)» en el filtro <b>Médico</b>, arriba a la derecha.</div>'
+      : '<div class="empty"><div class="big">No hay estudios en este período</div>'+
+        'Tenés '+STUDIES.length+' estudios cargados, pero ninguno cae en el rango de fechas elegido. '+
+        'Probá con «Todo el histórico» en el selector de período.</div>';
+    return out;
+  }
+  if(nCalculables===0){
+    out.bloquea = true;
+    out.vacio = '<div class="empty"><div class="big">No se pudo calcular ninguna asociación</div>'+
+      'Hay '+n+' estudios en el período, pero ninguna de las variables que se cruzan pudo calcularse. '+
+      'Las causas posibles son: faltan campos por completar en las apps de origen; no hay pacientes con estudios '+
+      'de dos apps distintas (un cruce necesita, por ejemplo, un eco y una ergometría de la misma persona); '+
+      'el filtro por médico exige que los DOS estudios del par sean suyos; o alguna variable no varía en esta '+
+      'muestra, en cuyo caso no hay nada con qué medir una asociación.</div>';
+    return out;
+  }
+  /* El N que importa es el de cada contraste, no el de estudios cargados: un contraste
+     cruzado necesita que el MISMO paciente tenga estudios de dos apps, así que 40 estudios
+     pueden dar 6 pares. Se mira el máximo de las filas calculables, que es el mejor caso. */
+  const nMax = (typeof _results!=='undefined' && _results.length)
+    ? Math.max(0, ..._results.filter(r=>r.p!=null).map(r=>r.n||0)) : 0;
+  if(nMax && nMax < MIN_N_CONFIABLE){
+    /* Aviso, no bloqueo: la tabla se calcula igual. Lo que se dice es cuánta confianza
+       merece, que es distinto de no poder calcularla. */
+    out.banner = '<div class="modo-nota" style="border-left-color:var(--warning);">'+
+      '⚠️ La asociación con más casos de esta tabla se apoya en <b>'+nMax+'</b>, por debajo de los '+
+      MIN_N_CONFIABLE+' que hacen falta para que un resultado sea confiable. '+
+      'Tenés '+n+' estudios en el período, pero lo que manda es la columna <b>N</b> de cada fila: '+
+      'un contraste cruzado necesita que el mismo paciente tenga estudios de dos apps distintas.</div>';
+  }
+  if(!nFilas){
+    out.vacio = '<div class="empty"><div class="big">No se encontraron asociaciones significativas</div>'+
+      'Puede deberse a un N pequeño, a que en tu población estas variables no se asocian, o a que los '+
+      'filtros de significancia, N mínimo, categoría o fuerza están dejando todo afuera. '+
+      'Probá poniéndolos en «Todos».</div>';
+  }
+  return out;
+}
+
+function bindOrientacion(){
+  const bv=document.getElementById('bv-cerrar');
+  if(bv) bv.addEventListener('click', cerrarBienvenida);
+  document.getElementById('bienvenida').addEventListener('click', e=>{
+    if(e.target.id==='bienvenida') cerrarBienvenida();   // click en el fondo
+  });
+  document.querySelectorAll('.modo-tog button[data-modo]').forEach(b=>{
+    b.addEventListener('click',()=>aplicarModo(b.dataset.modo));
+  });
+  // Ayudas "?": delegado, así funciona también en el HTML que se re-renderiza.
+  document.addEventListener('click', e=>{
+    const ico=e.target.closest('.ayuda-ico');
+    if(ico){ e.stopPropagation(); abrirAyuda(ico); return; }
+    if(!e.target.closest('#ayuda-pop')) cerrarAyuda();
+    if(e.target.closest('#est-asoc-tabla tbody tr.asoc-fila')) coachCumplido();
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key!=='Escape') return;
+    cerrarAyuda(); cerrarCoach();
+    const b=document.getElementById('bienvenida');
+    if(b.classList.contains('on')) cerrarBienvenida();
+  });
+  // El panel y el cartel se posicionan contra el documento: al cambiar el ancho
+  // quedan corridos, así que se cierran en vez de mostrarse fuera de lugar.
+  /* Se cierra la ayuda (es efímera por naturaleza) pero el cartel de primera vez se
+     REPOSICIONA: cerrarlo al rotar el celular haría desaparecer la única pista que
+     tiene alguien que abre la tabla por primera vez. */
+  window.addEventListener('resize', ()=>{
+    cerrarAyuda();
+    if(document.getElementById('coach-asoc').classList.contains('on')) quizasCoachAsoc();
+  });
+}
+
 function setupMobileNav(){
   $('#mobileNav').innerHTML=$$('.sidebar .navbtn').map(b=>`<button class="navbtn ${b.classList.contains('active')?'active':''}" data-view="${b.dataset.view}">${b.textContent}</button>`).join('');
 }
@@ -5450,14 +5846,19 @@ async function init(){
     Chart.defaults.color=cssv('--text-2');
   }
   bindEvents();
+  bindOrientacion();
   // Hay que esperar la base compartida antes del primer loadData(): si no,
   // el dashboard se pintaría vacío y recién aparecerían los datos al refrescar.
   await CeiboRead.hidratar();
   loadData();
+  // Después de loadData: modoActual() mira STUDIES para no degradar a básico a alguien
+  // que ya venía usando la app con todo a la vista.
+  aplicarModo(modoActual(), true);
   renderAppFilterBar();
   setupMobileNav();
   switchView('dashboard');
   if(!STUDIES.length){toast('Sin datos — cargá estudios en EcoSmart / ErgoSmart / EcoEstrés');}
+  quizasBienvenida();
 }
 document.addEventListener('DOMContentLoaded',init);
 </script>
