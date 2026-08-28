@@ -2858,6 +2858,10 @@ function renderCurrent(){
   const PSAP=pr=>ecoF(pr.eco,'psap',['psap_calc','psap']);
   const TAPSE=pr=>ecoF(pr.eco,'tapse',['tapse']);
   const LAVI=pr=>ecoF(pr.eco,'lavi',['ai_vol_index','lavi','lavi_calc']);
+  /* Masa VI se leía con el path crudo `pr.eco.eco?.masa_vi` en cada sitio de uso, que es
+     el único accessor que no pasaba por ecoF: perdía el fallback a `campos` y tenía dos
+     modos de falla distintos según qué nivel faltara (null silencioso o TypeError). */
+  const MASA=pr=>ecoF(pr.eco,'masa_vi',['masa_vi','masa_idx']);
   const METS=pr=>metsOf(pr.ergo);
   const POS =pr=>posOf(pr.ergo);
   const DIAST=pr=>{ const g=(pr.eco.eco&&pr.eco.eco.grado_diastolico)||_pick(pr.eco.campos,['grado_diastolico']); if(!g)return null; const t=String(g).toLowerCase(); return /iii|ii|\bi\b|alterad|pseudo|restrict|relajaci/.test(t)&&!/sin|normal/.test(t)?'Disfunción':(/sin|normal/.test(t)?'Normal':'Disfunción'); };
@@ -2950,13 +2954,34 @@ function renderCurrent(){
     {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → HTA',  t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>ANT(pr.eco,RE_HTA)},
     {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → DM',   t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>ANT(pr.eco,RE_DM)},
     {cat:'EcoSmart', scope:'eco', lbl:'Geometría VI → sexo', t:'chi', ca:pr=>GEOMS(pr.eco), cb:pr=>SEXO(pr.eco)},
-    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx ↔ edad',  t:'sp', x:pr=>pr.eco.eco.masa_vi, y:pr=>pr.eco.edad},
-    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx → HTA',   t:'mw', val:pr=>pr.eco.eco.masa_vi, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'Masa VI idx', gl:'HTA'},
-    {cat:'EcoSmart', scope:'eco', lbl:"Vol AI idx ↔ E/e'",   t:'sp', x:LAVI, y:EE},
+    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx ↔ edad',  t:'sp', x:MASA, y:pr=>pr.eco.edad},
+    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx → HTA',   t:'mw', val:MASA, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'Masa VI idx', gl:'HTA'},
+    {cat:'EcoSmart', scope:'eco', lbl:'Masa VI idx ↔ PSAP',  t:'sp', x:MASA, y:PSAP},
     {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx ↔ edad',   t:'sp', x:LAVI, y:pr=>pr.eco.edad},
     {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → FA',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_FA); return v==null?null:(v==='Sí'?1:0);}, vl:'Vol AI idx', gl:'FA / flutter'},
     {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → HTA',    t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_HTA);return v==null?null:(v==='Sí'?1:0);}, vl:'Vol AI idx', gl:'HTA'},
     {cat:'EcoSmart', scope:'eco', lbl:'Vol AI idx → DM',     t:'mw', val:LAVI, grp:pr=>{const v=ANT(pr.eco,RE_DM); return v==null?null:(v==='Sí'?1:0);}, vl:'Vol AI idx', gl:'DM'},
+
+    /* Cruces que faltaban contra el Laboratorio de EcoSmart.
+       No se agregan TAPSE ↔ FEVI ni Vol AI idx → FA/HTA/DM: la primera es la misma
+       prueba que FEVI ↔ TAPSE —Spearman es simétrico, mismo ρ y mismo p— y las otras
+       tres ya están tres líneas más arriba. Repetirlas duplicaría filas en la tabla y,
+       peor, inflaría el número de tests que corrige el FDR, subiendo el q de TODAS las
+       asociaciones y no sólo el de las repetidas.
+       Por la misma razón se sacó "Vol AI idx ↔ E/e'", que ya estaba y era la inversa
+       exacta de "E/e' ↔ Vol AI idx": daban ρ, N y p idénticos y el informe podía
+       listar el mismo hallazgo dos veces como si fueran dos. */
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI ↔ TAPSE', t:'sp', x:FEVI, y:TAPSE},
+    /* HTP() y VALVSIG() ya devuelven la etiqueta categórica ('HTP'/'No HTP',
+       'Significativa'/'No significativa'), así que NO se envuelven en YN(): las dos
+       ramas son strings truthy y YN() las colapsaría a 'Sí', dejando una columna
+       constante y un Chi² degenerado. Además HTP recibe el par pr, no pr.eco. */
+    {cat:'EcoSmart', scope:'eco', lbl:'HTP → valvulopatía significativa', t:'chi', ca:pr=>HTP(pr), cb:pr=>VALVSIG(pr.eco)},
+    {cat:'EcoSmart', scope:'eco', lbl:'HTP → FA',            t:'chi', ca:pr=>HTP(pr), cb:pr=>ANT(pr.eco,RE_FA)},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI (categoría) → HTA', t:'chi', ca:pr=>FEVICAT(pr.eco), cb:pr=>ANT(pr.eco,RE_HTA)},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI (categoría) → DM',  t:'chi', ca:pr=>FEVICAT(pr.eco), cb:pr=>ANT(pr.eco,RE_DM)},
+    {cat:'EcoSmart', scope:'eco', lbl:'FEVI (categoría) → FA',  t:'chi', ca:pr=>FEVICAT(pr.eco), cb:pr=>ANT(pr.eco,RE_FA)},
+    {cat:'EcoSmart', scope:'eco', lbl:'Grado DD → sexo',     t:'chi', ca:pr=>DDGRADO(pr.eco), cb:pr=>SEXO(pr.eco)},
 
     /* ── ErgoSmart intra-app (scope:'ergo') ── */
     {cat:'ErgoSmart', scope:'ergo', lbl:'METs ↔ edad', t:'sp', x:METS, y:pr=>pr.ergo.edad},
@@ -3117,7 +3142,19 @@ function renderCurrent(){
      además descartaba "hombre". Femenino se evalúa primero por esa razón. */
   const SEXO = s => { const x=String((s&&s.sexo)||'').toLowerCase().trim();
     return /^f|muj/.test(x)?'Femenino':(/^m|hom|masc/.test(x)?'Masculino':null); };
-  const FEVIRED = s => { const f=(s&&s.eco)?s.eco.fevi_simpson:null; return f==null?null:(f<50?'FEVI reducida':'FEVI conservada'); };
+  /* Corte unificado en ≤40, el mismo que usan el KPI de población, el desenlace
+     `fevi_red` de la regresión y el texto de la guía. Antes cortaba en <50 y el
+     módulo de regresión en ≤40: dos definiciones distintas del mismo nombre, así
+     que un informe podía decir "FEVI reducida" sobre dos poblaciones diferentes
+     según de qué subtab saliera la cifra.
+     La categoría opuesta es 'FEVI no reducida', no 'conservada': con este corte
+     ahí adentro cae la franja 41–49, que la ESC llama levemente reducida y que
+     llamar conservada sería falso. */
+  const FEVIRED = s => { const f=(s&&s.eco)?s.eco.fevi_simpson:null; return f==null?null:(f<=40?'FEVI reducida':'FEVI no reducida'); };
+  /* Categórica de tres niveles (ESC 2021), para los Chi² que necesitan el gradiente
+     y no sólo el binario. Los cortes coinciden con FEVIRED en el extremo bajo. */
+  const FEVICAT = s => { const f=(s&&s.eco)?s.eco.fevi_simpson:null;
+    return f==null?null:(f<=40?'FEVI reducida (≤40%)':(f<50?'FEVI levemente reducida (41–49%)':'FEVI conservada (≥50%)')); };
   const DDGRADO = s => { const g=(s&&s.eco)?s.eco.grado_diastolico:null; return g?String(g):null; };
   const GEOMS = s => { const g=(s&&s.eco)?s.eco.geometria_vi:null; return g?String(g):null; };
   /* Valvulopatía significativa = alguna moderada o severa. Se mira el texto del grado y
@@ -3157,7 +3194,8 @@ function renderCurrent(){
      veces primera y a veces segunda. El p no cambia (Chi² es invariante a permutación),
      pero dos tablas contiguas dejan de leerse igual. */
   const ORD_CAT = ['Sí','No','Positiva','Negativa','Femenino','Masculino',
-                   'FEVI conservada','FEVI reducida','sin','Sin disfunción','I','II','III',
+                   'FEVI conservada (≥50%)','FEVI levemente reducida (41–49%)','FEVI reducida (≤40%)',
+                   'FEVI no reducida','FEVI reducida','sin','Sin disfunción','I','II','III',
                    'Normal','Remodelado concéntrico','Hipertrofia excéntrica','Hipertrofia concéntrica',
                    'No significativa','Significativa'];
   const ordCat = (x,y) => { const a=ORD_CAT.indexOf(x), b=ORD_CAT.indexOf(y);
@@ -3650,9 +3688,9 @@ function renderCurrent(){
   const AV_OUTCOMES = [
     {k:'ergo_pos', lbl:'Ergometría positiva', req:'par',
      y:pr=>{ const v=POS(pr); return v==null?null:(v?1:0); }, excluye:[]},
-    /* Ojo: acá el corte es ≤40 (lo pedido para este módulo), mientras FEVIRED —el que
-       usan las asociaciones de la subtab de al lado— corta en <50. Son dos definiciones
-       distintas del mismo nombre, por eso la etiqueta lleva el umbral explícito. */
+    /* Corte ≤40, el mismo de FEVIRED/FEVICAT en las asociaciones de la subtab de al
+       lado. La etiqueta conserva el umbral explícito porque acá es el desenlace de la
+       regresión y conviene que se lea sin salir de la tabla. */
     {k:'fevi_red', lbl:'FEVI reducida (≤40%)', req:'eco',
      y:pr=>{ const v=FEVI(pr); return v==null?null:(v<=40?1:0); }, excluye:['fevi']},
     {k:'htp',      lbl:'HTP presente (PSAP>35)', req:'eco',
@@ -4215,7 +4253,10 @@ function renderCurrent(){
     if(!lista.length){ toast('⚠️ Ninguna combinación llega a 10 pacientes'); return; }
     const sel=document.getElementById('av-sp-sel');
     const elegida=lista.find(x=>x.k===(sel&&sel.value))||lista[0];
-    host.innerHTML='<div class="hint" style="padding:8px;">Calculando las 61 asociaciones sobre '+elegida.n+' pacientes…</div>';
+    /* ASSOC.length y no un número escrito a mano: el literal quedaba viejo cada vez que
+       se agregaba una fila al motor, y acá el número de tests es justamente lo que
+       justifica la corrección por comparaciones múltiples que se muestra al lado. */
+    host.innerHTML='<div class="hint" style="padding:8px;">Calculando las '+ASSOC.length+' asociaciones sobre '+elegida.n+' pacientes…</div>';
 
     const res = avConSubpoblacion(elegida.claves, ()=>computeAll().map(r=>({...r})));
     const conDato=res.filter(r=>r.p!=null);
@@ -4252,7 +4293,7 @@ function renderCurrent(){
         '<td style="padding:6px 8px;text-align:right;">'+pTxt(r.p)+'</td>'+
         '<td style="padding:6px 8px;text-align:right;">'+pTxt(r.q)+'</td></tr>').join('')+
       '</tbody></table>'+
-      _notaHTML('De las 61 asociaciones del motor, '+conDato.length+' se pudieron calcular sobre estos '+
+      _notaHTML('De las '+ASSOC.length+' asociaciones del motor, '+conDato.length+' se pudieron calcular sobre estos '+
         elegida.n+' pacientes. <b>Las que quedaron afuera suelen ser las que usan el propio criterio del '+
         'subgrupo</b> —si la subpoblación es «FA», dentro de ella todos tienen FA y no hay dos grupos que '+
         'comparar— más las que dependen de estudios que este subgrupo no tiene. '+
