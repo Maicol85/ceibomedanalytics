@@ -214,6 +214,20 @@ select, input[type="date"], input[type="text"]{
 .explica>summary::after{content:'▾';margin-left:auto;transition:transform .18s;font-size:11px;}
 .explica[open]>summary::after{transform:rotate(180deg);}
 .explica>summary:hover{background:var(--accentLt);}
+/* Panel de ayuda de las gráficas que llevan el ℹ️ al lado del título (forest y heatmap).
+   Mismo lenguaje visual que .explica, pero disparado por un botón chico en el encabezado
+   en vez de una barra de summary a todo el ancho.
+   display por atributo [hidden] y no max-height: con overflow+max-height Safari rompe el
+   hit-test de lo que quede adentro. */
+.explica-panel{margin:6px 0 12px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface-2);font-size:12.5px;line-height:1.6;color:var(--text-2);}
+.explica-panel[hidden]{display:none;}
+.explica-panel dl{margin:0;}
+.explica-panel dt{font-weight:700;color:var(--accent);margin-top:9px;font-size:12px;}
+.explica-panel dt:first-child{margin-top:0;}
+.explica-panel dd{margin:2px 0 0;}
+.explica-panel b{color:var(--text-1);}
+.explica-panel .resultado{margin-top:10px;padding-top:9px;border-top:1px dashed var(--border);color:var(--text-1);}
 .explica .cuerpo{padding:2px 14px 12px;font-size:12.5px;line-height:1.6;color:var(--text-2);}
 .explica .cuerpo b{color:var(--text-1);}
 .explica .cuerpo dt{font-weight:700;color:var(--accent);margin-top:9px;font-size:12px;}
@@ -980,12 +994,69 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div style="position:relative;height:340px;"><canvas id="est-scatter"></canvas></div>
           </div>
           <div class="card" style="margin-bottom:16px;">
-            <h3 class="section" style="font-size:15px;">Forest plot — asociaciones significativas (IC 95%)</h3>
+            <h3 class="section" style="font-size:15px;display:flex;align-items:center;gap:6px;">
+              <span>Forest plot — asociaciones significativas (IC 95%)</span>
+              <button type="button" class="ayuda-ico" id="btn-expl-forest" aria-expanded="false" aria-controls="expl-forest"
+                      aria-label="¿Cómo leer esta gráfica?" title="¿Cómo leer esta gráfica?"
+                      onclick="grafExplicaToggle('expl-forest',this)">ℹ️</button>
+            </h3>
+            <div class="explica-panel" id="expl-forest" hidden>
+              <dl>
+                <dt>Qué es</dt>
+                <dd>Cada barra horizontal va del <b>límite inferior al superior del intervalo de confianza
+                    del 95%</b> del coeficiente de correlación (r de Pearson o ρ de Spearman).
+                    El coeficiente puntual <b>no está dibujado</b>: pasá el mouse por encima de la barra
+                    para verlo, o leelo en la columna «Estadístico» de la tabla. No lo estimes por el medio
+                    de la barra: el intervalo se calcula en otra escala y se transforma de vuelta, así que
+                    su centro queda corrido hacia el cero.</dd>
+                <dt>Cómo leerlo</dt>
+                <dd>Las barras a la <b>izquierda del 0</b> son correlaciones negativas (a mayor X, menor Y);
+                    a la <b>derecha</b>, positivas.
+                    <br><b>El ancho no mide solidez.</b> Depende del N <i>y</i> de cuán extremo es el
+                    coeficiente: cerca de ±1 los intervalos se ven angostos aunque haya pocos casos, así que
+                    la barra más finita puede ser la de menos pacientes. Para juzgar cuán firme es un
+                    hallazgo mirá la columna <b>N</b> y el semáforo de la tabla.
+                    <br><b>Ninguna barra cruza el cero</b>, y no es un hallazgo: este gráfico dibuja
+                    únicamente las que ya dieron significativas. Tampoco responde a los filtros de la tabla,
+                    así que puede mostrar barras aunque la tabla de arriba haya quedado vacía.
+                    Y significación no es lo mismo que relevancia clínica.</dd>
+              </dl>
+              <div class="resultado" id="expl-forest-res">Todavía sin datos para resumir.</div>
+            </div>
             <div style="position:relative;height:360px;"><canvas id="est-forest"></canvas></div>
           </div>
           <div class="card">
-            <h3 class="section" style="font-size:15px;">Heatmap de correlaciones</h3>
-            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">FEVI · E/e' · PSAP · TAPSE · Vol AI · METs — azul (−) → blanco (0) → rojo (+).</div>
+            <h3 class="section" style="font-size:15px;display:flex;align-items:center;gap:6px;">
+              <span>Heatmap de correlaciones</span>
+              <button type="button" class="ayuda-ico" id="btn-expl-heat" aria-expanded="false" aria-controls="expl-heat"
+                      aria-label="¿Cómo leer esta gráfica?" title="¿Cómo leer esta gráfica?"
+                      onclick="grafExplicaToggle('expl-heat',this)">ℹ️</button>
+            </h3>
+            <div class="explica-panel" id="expl-heat" hidden>
+              <dl>
+                <dt>Qué es</dt>
+                <dd>Una matriz con la correlación entre cada par de variables numéricas del laboratorio.
+                    Se calcula sobre los pacientes que tienen <b>eco y ergometría</b>, no sobre todos los
+                    estudios: por eso su N suele ser menor que el del resto del panel.
+                    <br><b>Todas las celdas usan r de Pearson.</b> La tabla de asociaciones usa Spearman en
+                    casi todos estos pares, y en los intra-eco los calcula sobre todos los ecos y no sólo
+                    sobre los cruzados: por eso un mismo par puede dar un número distinto acá y allá.
+                    Ante la duda, vale el de la tabla.</dd>
+                <dt>Cómo leerlo</dt>
+                <dd><b>Cuanto más intenso el rojo</b>, más fuerte la correlación positiva (las dos suben
+                    juntas); <b>cuanto más intenso el azul</b>, más fuerte la negativa (una sube, la otra baja).
+                    <b>Cuanto más pálida la celda —más parecida al fondo de esta tarjeta—, más cerca de cero</b>:
+                    en tema claro eso se ve blanco y en tema oscuro casi negro, así que guiate por la
+                    intensidad y no por el color absoluto.
+                    <br>La diagonal es roja porque cada variable se correlaciona consigo misma: está cableada,
+                    no calculada, y conviene saltearla.
+                    <br>Una celda <b>gris</b> es una que no se pudo calcular: o no hubo al menos 3 pares,
+                    o una de las dos variables no varía en esta muestra — que son problemas distintos, porque
+                    el primero se arregla sumando pacientes y el segundo no.</dd>
+              </dl>
+              <div class="resultado" id="expl-heat-res">Todavía sin datos para resumir.</div>
+            </div>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">FEVI · E/e' · PSAP · TAPSE · Vol AI · METs — azul (−) → tono del fondo (0) → rojo (+).</div>
             <div style="position:relative;height:360px;"><canvas id="est-heatmap"></canvas></div>
           </div>
         </div>
@@ -2845,6 +2916,16 @@ function grafResultado(ch){
 
 /* Inserta el título y el acordeón una sola vez por gráfica. Idempotente: si ya existe,
    sólo refresca el resultado. */
+/* Toggle del panel de ayuda de forest y heatmap. Con [hidden] y aria-expanded en el botón:
+   el botón es el control, así que funciona con teclado y el lector de pantalla lo anuncia. */
+function grafExplicaToggle(id, btn){
+  const el=document.getElementById(id); if(!el) return;
+  const abierto = el.hasAttribute('hidden');
+  if(abierto) el.removeAttribute('hidden'); else el.setAttribute('hidden','');
+  if(btn) btn.setAttribute('aria-expanded', String(abierto));
+}
+window.grafExplicaToggle = grafExplicaToggle;
+
 function grafExplicaciones(){
   Object.keys(GRAF_META).forEach(id=>{
     const cv=document.getElementById(id); if(!cv) return;
@@ -3890,10 +3971,18 @@ function renderCurrent(){
     if(!HAS_CHART)return; if(_chForest)_chForest.destroy();
     const sig=_results.filter(r=>r.p!=null&&r.p<0.05&&r.ci!=='—'&&r.coef!=null);
     const el=document.getElementById('est-forest'); if(!el)return;
-    if(!sig.length){ if(_chForest){_chForest.destroy();_chForest=null;} const c=el.getContext('2d'); c.clearRect(0,0,el.width,el.height); return; }
+    if(!sig.length){ if(_chForest){_chForest.destroy();_chForest=null;} const c=el.getContext('2d'); c.clearRect(0,0,el.width,el.height); forestResumen([]); return; }
     const labels=sig.map(r=>r.lbl);
-    const bars=sig.map(r=>{ const m=r.ci.replace(/[\[\]]/g,'').split(',').map(x=>parseFloat(x)); return [m[0],m[1]]; });
+    /* Del array numérico (plot.ci) y no parseando el string de display: si algún día ciTxt
+       cambia a coma decimal o toLocaleString, esto devolvía [NaN,NaN] y el panel seguía
+       narrando texto sobre top.ci como si nada. Es el mismo patrón que la ruta del PDF ya
+       había marcado como frágil. */
+    const bars=sig.map(r=>{ if(r.plot && Array.isArray(r.plot.ci)) return [r.plot.ci[0], r.plot.ci[1]];
+      const m=String(r.ci).replace(/[\[\]]/g,'').split(',').map(x=>parseFloat(x)); return [m[0],m[1]]; });
     _chForest=new Chart(el.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:'IC 95% del coeficiente',data:bars,backgroundColor:sig.map(r=>r.coef<0?'rgba(59,130,246,.6)':cssvA('--series-8',0.6)),borderColor:cssv('--baseline'),borderWidth:1}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const r=sig[c.dataIndex];return 'coef='+r.coef.toFixed(2)+'  IC '+r.ci+'  p='+pTxt(r.p);}}}},scales:{x:{title:{display:true,text:'Coeficiente (r/ρ) — IC 95%'},suggestedMin:-1,suggestedMax:1,grid:{color:(c)=>c.tick.value===0?'#888':'rgba(128,128,128,.15)'}}}}});
+    /* Después de construir el chart: si Chart.js lanza, no queda un "En tu muestra: …"
+       describiendo un canvas en blanco. */
+    forestResumen(sig);
   }
 
   /* La rampa terminaba en blanco fijo: pensada para fondo oscuro. En tema claro las
@@ -3908,13 +3997,74 @@ function renderCurrent(){
     const c=base.map((b,i)=>Math.round(b+(fin[i]-b)*a));
     return 'rgb('+c[0]+','+c[1]+','+c[2]+')';
   };
+  /* El resumen se calcula con la MISMA lista que se dibuja, en el mismo momento: si se
+     leyera aparte podría describir un conjunto distinto del que el médico tiene delante. */
+  function forestResumen(sig){
+    const el=document.getElementById('expl-forest-res'); if(!el) return;
+    if(!sig.length){
+      el.textContent='No hay asociaciones significativas con intervalo de confianza en esta población, así que el gráfico está vacío.';
+      return;
+    }
+    const top=sig.slice().sort((a,b)=>Math.abs(b.coef)-Math.abs(a.coef))[0];
+    const dir = top.coef<0 ? 'negativa (cuando una sube, la otra baja)' : 'positiva (las dos suben juntas)';
+    const fuerza = fuerzaTxt(top.coef);   // misma escala que la tabla, no una copia del corte
+    const nBH = sig.filter(sobreviveFDR).length;
+    el.innerHTML = '<b>En tu muestra:</b> '+(sig.length===1?'la única asociación dibujada':'de las '+sig.length+' asociaciones dibujadas, la de mayor coeficiente')+
+      ' es <b>'+esc(top.lbl)+'</b> — '+
+      dir+', de fuerza '+fuerza+' ('+(top.coef<0?'':'+')+top.coef.toFixed(2)+', IC 95% '+esc(top.ci)+
+      ', N='+top.n+')'+
+      /* El q ya está calculado sobre la familia completa: decirlo acá evita que la barra más
+         larga se lea como el hallazgo más firme cuando no sobrevive a la corrección. */
+      (top.q!=null && top.q>=0.05 ? '. <b>No sobrevive a la corrección por comparaciones múltiples</b> (q='+pTxt(top.q)+'): tomala como hipótesis.' : '.') +
+      /* La reserva de N bajo es la misma que pinta 🟠 en la tabla. Sin esto, el panel que
+         existe para explicar la gráfica era el único lugar donde la salvedad no aparecía —
+         y justo sobre la barra que el propio panel eligió como titular. */
+      (top.nOk===false ? ' <b>Su N está por debajo del umbral recomendado para el método</b>, así que el coeficiente es inestable: la tabla la marca 🟠.' : '') +
+      ' De las '+sig.length+' dibujada'+(sig.length===1?'':'s')+', '+nBH+' sobrevive'+(nBH===1?'':'n')+
+      ' a la corrección por comparaciones múltiples.';
+  }
+
+  function heatResumen(pts, vars){
+    const el=document.getElementById('expl-heat-res'); if(!el) return;
+    const n=vars.length;
+    /* Se excluye la diagonal —siempre r=1 por construcción, sería la respuesta siempre— y
+       se toma cada par UNA vez: la matriz es simétrica y si no, el "máximo" sale duplicado. */
+    const pares=[];
+    pts.forEach(p=>{
+      const i=n-1-p.y, j=p.x;
+      if(i>=j) return;                       // diagonal y triángulo inferior fuera
+      if(p.r==null || !isFinite(p.r)) return;
+      pares.push({a:vars[i][0], b:vars[j][0], r:p.r, n:p.n});
+    });
+    if(!pares.length){
+      el.textContent='No hubo pares suficientes para calcular ninguna correlación: el heatmap se arma sobre pacientes que tengan eco y ergometría del mismo período.';
+      return;
+    }
+    const top=pares.slice().sort((x,y)=>Math.abs(y.r)-Math.abs(x.r))[0];
+    const fuerza = fuerzaTxt(top.r);   // misma escala que la tabla y la lectura de cada fila
+    const dir = top.r<0 ? 'inversa (una sube, la otra baja)' : 'directa (suben juntas)';
+    el.innerHTML='<b>En tu muestra:</b> el par más correlacionado es <b>'+esc(top.a)+' × '+esc(top.b)+
+      '</b>, con r='+(top.r<0?'':'+')+top.r.toFixed(2)+' — relación '+dir+', de fuerza '+fuerza+
+      '. Se calculó sobre '+top.n+' paciente'+(top.n===1?'':'s')+' que tienen las dos variables'+
+      (top.n<15 ? ', que son pocos: con este N la correlación es inestable y un solo caso extremo la mueve entera.' : '.') +
+      ' Es r de Pearson, así que puede no coincidir con el de la tabla, que usa Spearman en casi todos estos pares.'+
+      ' Correlación no implica causa.';
+  }
+
   function renderHeatmap(){
     if(!HAS_CHART)return; const el=document.getElementById('est-heatmap'); if(!el)return;
     const vars=[['FEVI',FEVI],['E/e\'',EE],['PSAP',PSAP],['TAPSE',TAPSE],['Vol AI',LAVI],['METs',METS]];
     const n=vars.length; const pts=[];
-    for(let i=0;i<n;i++)for(let j=0;j<n;j++){ const pairs=[]; _ecoErgo.forEach(pr=>{const x=vars[i][1](pr),y=vars[j][1](pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);}); const r=i===j?{r:1}:(pearson(pairs)||{r:null}); pts.push({x:j,y:n-1-i,r:r.r}); }
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){ const pairs=[]; _ecoErgo.forEach(pr=>{const x=vars[i][1](pr),y=vars[j][1](pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);}); /* n de la CELDA: cada par se calcula sobre los pacientes que tienen las DOS variables,
+       que son muchos menos que los del cruce eco+ergo. Sin esto el resumen atribuía a la
+       correlación un N que no era el suyo, y su propio aviso de N bajo no se disparaba nunca
+       justo donde hace falta: el par de mayor |r| suele ser el que menos pares tiene.
+       La diagonal se apaga si no hay datos: r=1 cableado sobre una variable sin un solo
+       valor pinta rojo saturado en una fila que por lo demás está toda gris. */
+      const r=i===j?{r:pairs.length?1:null}:(pearson(pairs)||{r:null}); pts.push({x:j,y:n-1-i,r:r.r,n:pairs.length}); }
     if(_chHeat)_chHeat.destroy();
     _chHeat=new Chart(el.getContext('2d'),{type:'scatter',data:{datasets:[{data:pts,pointStyle:'rectRounded',radius:26,backgroundColor:pts.map(p=>p.r==null?'rgba(128,128,128,.15)':colorR(p.r)),borderColor:'#555',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:(c)=>{const p=pts[c.dataIndex];return vars[n-1-p.y][0]+' × '+vars[p.x][0]+': r='+(p.r==null?'—':p.r.toFixed(2));}}}},scales:{x:{min:-0.5,max:n-0.5,ticks:{stepSize:1,callback:v=>vars[v]?vars[v][0]:''},grid:{display:false}},y:{min:-0.5,max:n-0.5,ticks:{stepSize:1,callback:v=>vars[n-1-v]?vars[n-1-v][0]:''},grid:{display:false}}}}});
+    heatResumen(pts, vars);
   }
 
   window.estAsocRender=function(){
@@ -6076,7 +6226,10 @@ function bindOrientacion(){
   });
   // Ayudas "?": delegado, así funciona también en el HTML que se re-renderiza.
   document.addEventListener('click', e=>{
-    const ico=e.target.closest('.ayuda-ico');
+    /* Sólo los que TIENEN data-ayuda: la clase .ayuda-ico también la usan los ℹ️ del forest
+       y el heatmap, que abren su propio acordeón. Sin este filtro el handler delegado corría
+       además del onclick del botón, pisaba su aria-expanded y abría un popover vacío. */
+    const ico=e.target.closest('.ayuda-ico[data-ayuda]');
     if(ico){ e.stopPropagation(); abrirAyuda(ico); return; }
     if(!e.target.closest('#ayuda-pop')) cerrarAyuda();
     if(e.target.closest('#est-asoc-tabla tbody tr.asoc-fila')) coachCumplido();
@@ -6084,6 +6237,12 @@ function bindOrientacion(){
   document.addEventListener('keydown', e=>{
     if(e.key!=='Escape') return;
     cerrarAyuda(); cerrarCoach();
+    // Los paneles ℹ️ de las gráficas: misma clase de botón, misma respuesta al teclado.
+    document.querySelectorAll('.explica-panel:not([hidden])').forEach(pn=>{
+      pn.setAttribute('hidden','');
+      const b=document.querySelector('[aria-controls="'+pn.id+'"]');
+      if(b) b.setAttribute('aria-expanded','false');
+    });
     const b=document.getElementById('bienvenida');
     if(b.classList.contains('on')) cerrarBienvenida();
   });
