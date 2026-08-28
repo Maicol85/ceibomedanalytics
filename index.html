@@ -2864,7 +2864,21 @@ function renderCurrent(){
   const MASA=pr=>ecoF(pr.eco,'masa_vi',['masa_vi','masa_idx']);
   const METS=pr=>metsOf(pr.ergo);
   const POS =pr=>posOf(pr.ergo);
-  const DIAST=pr=>{ const g=(pr.eco.eco&&pr.eco.eco.grado_diastolico)||_pick(pr.eco.campos,['grado_diastolico']); if(!g)return null; const t=String(g).toLowerCase(); return /iii|ii|\bi\b|alterad|pseudo|restrict|relajaci/.test(t)&&!/sin|normal/.test(t)?'Disfunción':(/sin|normal/.test(t)?'Normal':'Disfunción'); };
+  /* "Indeterminado" es una categoría real de la ASE: quiere decir que el patrón no se
+     puede clasificar, NO que el paciente tenga disfunción. Antes la rama por defecto era
+     'Disfunción', así que un indeterminado —y también un "N/A", un "-" o cualquier texto
+     libre que no matcheara— entraba al grupo enfermo sin dejar rastro.
+     Ahora: categoría propia para el indeterminado, y null para lo que no se reconoce.
+     Un dato ilegible no es un diagnóstico. */
+  const DIAST=pr=>{
+    const g=(pr.eco.eco&&pr.eco.eco.grado_diastolico)||_pick(pr.eco.campos,['grado_diastolico']);
+    if(!g) return null;
+    const t=String(g).toLowerCase();
+    if(/indetermin|no\s*evaluad|no\s*valorab|no\s*concluy/.test(t)) return 'Indeterminado';
+    if(/sin|normal/.test(t)) return 'Normal';
+    if(/iii|ii|\bi\b|alterad|pseudo|restrict|relajaci/.test(t)) return 'Disfunción';
+    return null;
+  };
   const GEOM=pr=>{ const g=(pr.eco.eco&&pr.eco.eco.geometria_vi)||_pick(pr.eco.campos,['geometria_vi','geometria']); return g?String(g):null; };
   const HTP =pr=>{ const p=PSAP(pr); return p==null?null:(p>35?'HTP':'No HTP'); };
   const YN  =v=>v==null?null:(v?'Sí':'No');
@@ -2889,7 +2903,7 @@ function renderCurrent(){
   const ranks=arr=>{const idx=arr.map((v,i)=>[v,i]).sort((a,b)=>a[0]-b[0]);const r=new Array(arr.length);let i=0;while(i<idx.length){let j=i;while(j+1<idx.length&&idx[j+1][0]===idx[i][0])j++;const av=(i+j)/2+1;for(let k=i;k<=j;k++)r[idx[k][1]]=av;i=j+1;}return r;};
   const fisherCI=(r,n)=>{if(n<4||Math.abs(r)>=1)return null;const z=Math.atanh(r),se=1/Math.sqrt(n-3);return [Math.tanh(z-1.96*se),Math.tanh(z+1.96*se)];};
 
-  function pearson(pairs){const n=pairs.length;if(n<3)return null;const mx=avg(pairs.map(p=>p[0])),my=avg(pairs.map(p=>p[1]));let sxy=0,sxx=0,syy=0;pairs.forEach(([x,y])=>{sxy+=(x-mx)*(y-my);sxx+=(x-mx)**2;syy+=(y-my)**2;});if(sxx===0||syy===0)return{r:0,p:1,n,ci:null,slope:0,intercept:my};const r=sxy/Math.sqrt(sxx*syy);const rc=Math.max(-0.999999,Math.min(0.999999,r));const z=Math.atanh(rc)*Math.sqrt(n-3);const p=2*(1-normCdf(Math.abs(z)));return{r,p:Math.max(0,Math.min(1,p)),n,ci:fisherCI(r,n),slope:sxy/sxx,intercept:my-(sxy/sxx)*mx};}
+  function pearson(pairs){const n=pairs.length;if(n<3)return null;const mx=avg(pairs.map(p=>p[0])),my=avg(pairs.map(p=>p[1]));let sxy=0,sxx=0,syy=0;pairs.forEach(([x,y])=>{sxy+=(x-mx)*(y-my);sxx+=(x-mx)**2;syy+=(y-my)**2;});if(sxx===0||syy===0)return{err:'const',n};const r=sxy/Math.sqrt(sxx*syy);const rc=Math.max(-0.999999,Math.min(0.999999,r));const z=Math.atanh(rc)*Math.sqrt(n-3);const p=2*(1-normCdf(Math.abs(z)));return{r,p:Math.max(0,Math.min(1,p)),n,ci:fisherCI(r,n),slope:sxy/sxx,intercept:my-(sxy/sxx)*mx};}
   /* Ajuste por mínimos cuadrados sobre los valores crudos. spearman() trabaja con rangos
      y no devuelve pendiente, así que sin esto la recta se calculaba con undefined: daba
      NaN y no se dibujaba nada, mientras la leyenda seguía anunciando "Regresión". */
@@ -2900,10 +2914,10 @@ function renderCurrent(){
     if(sxx===0) return {slope:null,intercept:null};
     const slope=sxy/sxx; return {slope, intercept:my-slope*mx};
   }
-  function spearman(pairs){const n=pairs.length;if(n<3)return null;const rx=ranks(pairs.map(p=>p[0])),ry=ranks(pairs.map(p=>p[1]));const mx=avg(rx),my=avg(ry);let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(rx[i]-mx)*(ry[i]-my);sxx+=(rx[i]-mx)**2;syy+=(ry[i]-my)**2;}if(sxx===0||syy===0)return{rho:0,p:1,n,ci:null};const rho=sxy/Math.sqrt(sxx*syy);const z=Math.abs(rho)*Math.sqrt(n-1);return{rho,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n,ci:fisherCI(rho,n)};}
-  function mannwhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2;if(n1<1||n2<1)return null;const all=g1.map(v=>[v,0]).concat(g2.map(v=>[v,1]));const r=ranks(all.map(a=>a[0]));let R1=0;for(let i=0;i<N;i++)if(all[i][1]===0)R1+=r[i];const U1=R1-n1*(n1+1)/2,U2=n1*n2-U1,U=Math.min(U1,U2),mU=n1*n2/2;const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const sU=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1)||1)));if(sU===0)return{U,p:1,n1,n2};const z=(Math.abs(U-mU)-0.5)/sU;return{U,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n1,n2};}
+  function spearman(pairs){const n=pairs.length;if(n<3)return null;const rx=ranks(pairs.map(p=>p[0])),ry=ranks(pairs.map(p=>p[1]));const mx=avg(rx),my=avg(ry);let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(rx[i]-mx)*(ry[i]-my);sxx+=(rx[i]-mx)**2;syy+=(ry[i]-my)**2;}if(sxx===0||syy===0)return{err:'const',n};const rho=sxy/Math.sqrt(sxx*syy);const z=Math.abs(rho)*Math.sqrt(n-1);return{rho,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n,ci:fisherCI(rho,n)};}
+  function mannwhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2;if(n1<1||n2<1)return null;const all=g1.map(v=>[v,0]).concat(g2.map(v=>[v,1]));const r=ranks(all.map(a=>a[0]));let R1=0;for(let i=0;i<N;i++)if(all[i][1]===0)R1+=r[i];const U1=R1-n1*(n1+1)/2,U2=n1*n2-U1,U=Math.min(U1,U2),mU=n1*n2/2;const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const sU=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1)||1)));if(sU===0)return{err:'const',n1,n2};const z=(Math.abs(U-mU)-0.5)/sU;return{U,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n1,n2};}
   function chi2test(tbl){const R=tbl.length,C=tbl[0].length;const rt=tbl.map(r=>r.reduce((a,b)=>a+b,0)),ct=[];for(let c=0;c<C;c++){let s=0;for(let r=0;r<R;r++)s+=tbl[r][c];ct.push(s);}const N=rt.reduce((a,b)=>a+b,0);if(N===0)return null;let chi2=0,minE=Infinity;for(let r=0;r<R;r++)for(let c=0;c<C;c++){const e=rt[r]*ct[c]/N;if(e>0){minE=Math.min(minE,e);chi2+=(tbl[r][c]-e)**2/e;}}const df=(R-1)*(C-1);if(df<1)return null;return{chi2,p:chi2p(chi2,df),df,N,minE};}
-  function kruskal(gs){gs=gs.filter(g=>g.length>0);if(gs.length<2)return null;const all=[];gs.forEach((g,gi)=>g.forEach(v=>all.push([v,gi])));const N=all.length;if(N<3)return null;const r=ranks(all.map(a=>a[0]));const Rg=new Array(gs.length).fill(0),ng=gs.map(g=>g.length);for(let i=0;i<N;i++)Rg[all[i][1]]+=r[i];let H=0;for(let g=0;g<gs.length;g++)H+=Rg[g]**2/ng[g];H=12/(N*(N+1))*H-3*(N+1);const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const cf=1-tie/(N**3-N);if(cf>0)H/=cf;const df=gs.length-1;return{H,p:chi2p(H,df),N,k:gs.length};}
+  function kruskal(gs){gs=gs.filter(g=>g.length>0);if(gs.length<2)return null;const all=[];gs.forEach((g,gi)=>g.forEach(v=>all.push([v,gi])));const N=all.length;if(N<3)return null;const r=ranks(all.map(a=>a[0]));const Rg=new Array(gs.length).fill(0),ng=gs.map(g=>g.length);for(let i=0;i<N;i++)Rg[all[i][1]]+=r[i];let H=0;for(let g=0;g<gs.length;g++)H+=Rg[g]**2/ng[g];H=12/(N*(N+1))*H-3*(N+1);const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const cf=1-tie/(N**3-N);if(cf===0)return{err:'const',N};if(cf>0)H/=cf;const df=gs.length-1;return{H,p:chi2p(H,df),N,k:gs.length};}
 
   const sigLight=(p,ok)=>p==null?'⚫':(p<0.05?(ok?'🟢':'🟡'):'⚫');
   const pTxt=p=>p==null?'—':(p<0.001?'<0.001':p.toFixed(3));
@@ -2916,7 +2930,9 @@ function renderCurrent(){
     {cat:'Eco+Ergo', lbl:'PSAP ↔ METs', t:'sp', x:PSAP, y:METS},
     {cat:'Eco+Ergo', lbl:'TAPSE ↔ METs', t:'sp', x:TAPSE, y:METS},
     {cat:'Eco+Ergo', lbl:'Vol AI idx ↔ METs', t:'sp', x:LAVI, y:METS},
-    {cat:'Eco+Ergo', lbl:'METs → disfunción diastólica', t:'mw', val:METS, grp:pr=>{const d=DIAST(pr);return d==null?null:(d==='Disfunción'?1:0);}, vl:'METs', gl:'disfunción diastólica'},
+    /* El indeterminado se excluye del contraste binario: no es del grupo con disfunción,
+       pero tampoco del grupo sin ella. Mandarlo a 0 sería el mismo error de antes al revés. */
+    {cat:'Eco+Ergo', lbl:'METs → disfunción diastólica', t:'mw', val:METS, grp:pr=>{const d=DIAST(pr);return (d==null||d==='Indeterminado')?null:(d==='Disfunción'?1:0);}, vl:'METs', gl:'disfunción diastólica'},
     {cat:'Eco+Ergo', lbl:'METs → geometría VI', t:'kw', val:METS, catg:GEOM, vl:'METs'},
     {cat:'Eco+Ergo', lbl:'METs → HTP (PSAP>35)', t:'mw', val:METS, grp:pr=>{const h=HTP(pr);return h==null?null:(h==='HTP'?1:0);}, vl:'METs', gl:'HTP (PSAP>35)'},
     {cat:'Eco+Ergo', lbl:'Ergo positiva → FEVI', t:'mw', val:FEVI, grp:pr=>{const p=POS(pr);return p==null?null:(p?1:0);}, vl:'FEVI', gpos:'Ergo positiva', gneg:'Ergo negativa'},
@@ -3196,7 +3212,8 @@ function renderCurrent(){
   const ORD_CAT = ['Sí','No','Positiva','Negativa','Femenino','Masculino',
                    'FEVI conservada (≥50%)','FEVI levemente reducida (41–49%)','FEVI reducida (≤40%)',
                    'FEVI no reducida','FEVI reducida','sin','Sin disfunción','I','II','III',
-                   'Normal','Remodelado concéntrico','Hipertrofia excéntrica','Hipertrofia concéntrica',
+                   'Normal','Indeterminado','Disfunción',
+                   'Remodelado concéntrico','Hipertrofia excéntrica','Hipertrofia concéntrica',
                    'No significativa','Significativa'];
   const ordCat = (x,y) => { const a=ORD_CAT.indexOf(x), b=ORD_CAT.indexOf(y);
     return (a<0?999:a)-(b<0?999:b) || String(x).localeCompare(String(y)); };
@@ -3207,21 +3224,27 @@ function renderCurrent(){
     if(d.t==='pe'||d.t==='sp'){
       const pairs=[]; ds.forEach(pr=>{const x=d.x(pr),y=d.y(pr);if(x!=null&&y!=null&&!isNaN(x)&&!isNaN(y))pairs.push([x,y]);});
       const r=d.t==='pe'?pearson(pairs):spearman(pairs);
-      if(!r)return {...base,n:pairs.length,method:d.t==='pe'?'Pearson':'Spearman',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+      /* err:'const' = una de las dos variables no varía en esta muestra. Es distinto de
+         "no alcanzaron los datos" y MUY distinto de "no hay asociación": antes salía como
+         ρ=0.00 con p=1 y el N real, que se lee como evidencia de ausencia de relación. */
+      if(!r||r.err)return {...base,n:(r&&r.n!=null)?r.n:pairs.length,method:d.t==='pe'?'Pearson':'Spearman',
+        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
       const coef=d.t==='pe'?r.r:r.rho, ok=r.n>=15;
       return {...base,n:r.n,method:d.t==='pe'?'Pearson':'Spearman',stat:(d.t==='pe'?'r=':'ρ=')+coef.toFixed(2),p:r.p,ci:ciTxt(r.ci),sig:sigLight(r.p,ok),coef,plot:{type:'scatter',pairs,...(r.slope!=null?{slope:r.slope,intercept:r.intercept}:olsFit(pairs)),ci:r.ci,xl:P.izq,yl:P.der,coef}};
     }
     if(d.t==='mw'){
       const g1=[],g2=[]; ds.forEach(pr=>{const v=d.val(pr),gr=d.grp(pr);if(v!=null&&!isNaN(v)&&gr!=null){(gr?g1:g2).push(v);}});
       const r=mannwhitney(g1,g2);
-      if(!r)return {...base,n:g1.length+g2.length,method:'Mann-Whitney U',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+      if(!r||r.err)return {...base,n:g1.length+g2.length,method:'Mann-Whitney U',
+        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
       return {...base,n:r.n1+r.n2,method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:sigLight(r.p,r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:d.gpos||(d.gl?('Con '+d.gl):'Grupo +'),vals:g1},{lbl:d.gneg||(d.gl?('Sin '+d.gl):'Grupo −'),vals:g2}],vl:d.vl||P.izq}};
     }
     if(d.t==='kw'){
       const map=Object.create(null); ds.forEach(pr=>{const v=d.val(pr),c=d.catg(pr);if(v!=null&&!isNaN(v)&&c!=null){(map[c]=map[c]||[]).push(v);}});
       const cats=Object.keys(map), gs=cats.map(c=>map[c]);
       const r=kruskal(gs);
-      if(!r)return {...base,n:gs.reduce((a,g)=>a+g.length,0),method:'Kruskal-Wallis',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
+      if(!r||r.err)return {...base,n:(r&&r.N!=null)?r.N:gs.reduce((a,g)=>a+g.length,0),method:'Kruskal-Wallis',
+        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
       return {...base,n:r.N,method:'Kruskal-Wallis',stat:'H='+r.H.toFixed(2)+' (k='+r.k+')',p:r.p,ci:'—',sig:sigLight(r.p,r.N>=15),coef:null,plot:{type:'strip',groups:cats.map((c,i)=>({lbl:c,vals:gs[i]})),vl:d.vl||P.izq}};
     }
     // chi
@@ -3420,6 +3443,9 @@ function renderCurrent(){
   function lecturaSimple(r){
     const n=r.n, sig=r.p!=null&&r.p<0.05;
     const partes=[];
+    if(r.err==='const') return 'No calculable: en esta muestra una de las dos variables toma el '+
+      'mismo valor en todos los casos, así que no hay variación con la cual medir una asociación. '+
+      '<b>No es lo mismo que haber medido y no encontrar relación.</b>';
     if(r.p==null) return 'No alcanzaron los datos para calcular esta asociación en la población seleccionada.';
 
     if(r.coef===0){
@@ -3462,7 +3488,12 @@ function renderCurrent(){
   }
 
   function detalleHTML(r){
-    if(!r.plot) return '<div style="color:var(--text-2);font-size:12px;">Sin datos suficientes para mostrar el detalle de esta asociación.</div>';
+    /* Con err:'const' sí había datos —y a veces muchos—, lo que faltaba era variación.
+       Decir "sin datos suficientes" ahí sería la misma afirmación falsa, más chica. */
+    if(!r.plot) return '<div style="color:var(--text-2);font-size:12px;">'+
+      (r.err==='const'
+        ? 'No hay detalle para graficar: la variable no varía en esta muestra.'
+        : 'Sin datos suficientes para mostrar el detalle de esta asociación.')+'</div>';
     if(r.plot.type==='bar')   return detChi(r.plot);
     if(r.plot.type==='strip') return detGrupos(r.plot);
     return detScatter(r.plot, r.p!=null && r.p<0.05);
