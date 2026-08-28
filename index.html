@@ -1461,7 +1461,10 @@ const _PDF_MAP = {
   '“':'"','”':'"','„':'"','‘':"'",'’':"'",'…':'...','′':"'",'″':'"',
   'Δ':'D','α':'alfa','β':'beta','σ':'sigma','μ':'micro','κ':'kappa','λ':'lambda','θ':'theta',
   '⚠':'!','✓':'ok','✗':'x','✅':'ok','❌':'x','ℹ':'i','📄':'','📊':'','📥':'','🗑':'',
-  '🟢':'[verde]','🟡':'[amarillo]','🔴':'[rojo]','⚫':'[negro]','🟠':'[naranja]'
+  '🟢':'[verde]','🟡':'[amarillo]','🔴':'[rojo]','⚫':'[negro]','🟠':'[naranja]','⚪':'[blanco]',
+  /* Marcas de las tablas de regresión y de la comparación con guías. Sin mapear caían en
+     la red final de pdfSafe y el PDF de la guía imprimía "una marca (? ? ?)". */
+  '●':'[lleno]','◐':'[medio]','○':'[vacio]'
 };
 /* Envuelve un documento jsPDF para que TODO lo que se escriba pase por pdfSafe. Sanear
    llamada por llamada es lo que produjo este bug: quedaron cinco `doc.text` con guión
@@ -3519,7 +3522,7 @@ const GUIA = [
     err:['Mirar solo el p y no las medianas. Con muchos pacientes, una diferencia de 0,3 mmHg puede dar p<0,001 y no cambiar ninguna conducta.',
          'Usar Kruskal-Wallis y concluir cuál grupo difiere de cuál. La prueba dice que <i>al menos uno</i> difiere; identificar cuál requiere comparaciones adicionales, que a su vez necesitan corrección.',
          'Comparar grupos muy desbalanceados (40 contra 3) y tratar el resultado como sólido.'],
-    app:'Las filas con → comparan una variable entre grupos. Si la variable es numérica (Mann-Whitney o Kruskal-Wallis) vas a ver la mediana, el P25–P75 y el N de cada grupo, que es exactamente lo que hay que reportar; si las dos son categóricas, el test es un Chi² y lo que se despliega es la tabla de contingencia del capítulo siguiente. En <b>Avanzado → Comparación entre subgrupos</b> podés cortar toda la población por HTA, sexo, FA o edad y ver todas las variables a la vez, con diagramas de caja.' },
+    app:'Las filas con → comparan una variable entre grupos. Si la variable es numérica (Mann-Whitney o Kruskal-Wallis) vas a ver la mediana, el P25–P75 y el N de cada grupo, que es exactamente lo que hay que reportar; si las dos son categóricas, el test es un Chi² y lo que se despliega es la tabla de contingencia del capítulo siguiente. En <b>Estadística → Comparación entre subgrupos</b> podés cortar toda la población por HTA, sexo, FA o edad y ver todas las variables a la vez en una tabla, con diagramas de caja de las cinco de menor p.' },
 
   { ic:'🔲', t:'Tablas de contingencia y Chi²',
     p:['Cuando las dos variables son <b>categóricas</b> —tiene o no tiene HTA, grado de disfunción diastólica, sexo— la comparación se hace con una tabla de contingencia: una grilla donde <b>cada celda cuenta los pacientes que tienen esa combinación</b> de características.',
@@ -3561,7 +3564,44 @@ const GUIA = [
     err:['Recorrer subpoblaciones hasta encontrar una donde algo dé significativo, y reportar solo esa. Se llama <b>subgroup shopping</b> y es la forma más común de publicar ruido: si mirás diez subgrupos, esperá encontrar algo "significativo" en varios por puro azar.',
          'Aplicar la corrección dentro de cada análisis y olvidar que se hicieron muchos análisis. El módulo de subpoblaciones corrige dentro de cada subgrupo, pero la multiplicidad entre subgrupos no la corrige nadie.',
          'Descartar un hallazgo solo porque no sobrevive al FDR: puede ser real y faltar potencia. Lo que corresponde es tratarlo como hipótesis y confirmarlo en otra muestra.'],
-    app:'La tabla de asociaciones trae la columna <b>q (FDR)</b> y el semáforo ya la incorpora: <b>🟢 sobrevive a la corrección</b> y <b>🟡 no</b>. O sea que la luz verde de la tabla es confiable en este punto, cosa que no ocurría en versiones anteriores. El informe básico dice además cuántas eran significativas y cuántas sobreviven, y el informe anual en PDF lista únicamente las que superan la corrección. Ojo con la <b>Regresión logística</b> (en Investigación) y la <b>Comparación entre subgrupos</b>: esas no aplican FDR y lo dicen en su pie.' }
+    app:'La tabla de asociaciones trae la columna <b>q (FDR)</b> y el semáforo ya la incorpora: <b>🟢 sobrevive a la corrección</b> y <b>🟡 no</b>. O sea que la luz verde de la tabla es confiable en este punto, cosa que no ocurría en versiones anteriores. El informe básico dice además cuántas eran significativas y cuántas sobreviven, y el informe anual en PDF lista únicamente las que superan la corrección. Ojo con <b>Regresión logística</b>, <b>Regresión multivariada</b> y <b>Curvas ROC</b> —las tres en Investigación— y con <b>Comparación entre subgrupos</b>, en Estadística: ninguna aplica corrección por multiplicidad y todas lo dicen en su pie.' },
+
+  { ic:'🔢', t:'Odds ratio (OR)',
+    p:['El OR compara la <b>odds</b> del desenlace entre dos grupos: cuántas veces mayor es la odds en uno que en el otro. Y la odds no es la probabilidad: es la razón entre las veces que el evento ocurre y las veces que no. Si de 100 pacientes 20 tienen HTP, la probabilidad es 20/100 = 0,20 y la odds es 20/80 = 0,25. «Cuántas veces más probable» describe al riesgo relativo, no al OR — la diferencia es el párrafo de abajo.',
+       '<b>Cómo se lee.</b> Un OR mayor a 1 indica más probabilidad del desenlace; menor a 1, menos; igual a 1, ninguna diferencia. Lo que decide si el hallazgo se sostiene <b>no es el OR sino su intervalo</b>: si el IC 95% <b>cruza el 1</b>, el efecto no se distingue del azar, por más grande que sea el número puntual.',
+       '<b>El OR no es un riesgo relativo.</b> El riesgo relativo compara probabilidades (20% contra 10% = RR 2,0); el OR compara odds, y siempre queda más lejos del 1 que el RR correspondiente. La diferencia es despreciable cuando el desenlace es raro, pero <b>se agranda cuando es frecuente</b>, que es justo el caso de esta app: HTP, FEVI reducida o valvulopatía significativa aparecen en un tercio o más de una serie de derivación. Con 60% contra 40%, el RR es 1,5 y el OR es 2,25 — el mismo dato, un número que suena bastante más impresionante.',
+       '<b>Unidades.</b> Para una variable continua el OR es <b>por cada unidad</b> de esa variable, no por todo su rango: un OR de 1,06 por año de edad no es un efecto chico, porque a los 20 años de diferencia se multiplica (1,06 elevado a 20 ≈ 3,2). Para una binaria es simplemente sí contra no.'],
+    ej:'«E/e&#39; promedio — OR 1,27 (IC 1,07–1,52), p=0,008» se lee: por cada punto que sube el E/e&#39;, la odds de tener HTP se multiplica por 1,27, y el intervalo no toca el 1. Comparalo con «Edad — OR 1,02 (IC 0,97–1,08), p=0,47»: ahí el intervalo cruza el 1, así que con estos datos la edad no aporta al modelo.',
+    err:['<b>Leer el OR como si fuera una probabilidad.</b> Un OR de 3 no significa «300% de probabilidad» ni «tres veces más pacientes»: significa que la <i>odds</i> se triplica. Cuánto sube la probabilidad depende de cuál era antes: partiendo de 5% sube a 14%, pero partiendo de 50% sube a 75%.',
+         'Reportar un OR como si fuera un riesgo relativo cuando el desenlace es frecuente. Es el error más común al leer una regresión y siempre exagera el efecto.',
+         'Celebrar un OR enorme sin mirar el ancho del intervalo. Un OR de 22 con IC de 1,2 a 410 no es un hallazgo: es una muestra demasiado chica. El panel sólo se niega a informar los casos <b>extremos</b> —cuando el intervalo abarca más de tres órdenes de magnitud, o el ajuste directamente no converge— y ahí escribe el motivo en vez del número. Un intervalo ancho pero por debajo de ese umbral, como el del ejemplo, <b>se informa igual y con su marca de significativo</b>: el ancho hay que leerlo.',
+         'Comparar los OR de dos variables continuas medidas en unidades distintas. Un OR de 1,06 por año y uno de 1,36 por mmHg no dicen cuál pesa más: dependen de cuánto varía cada variable en tu población.'],
+    app:'El OR aparece en dos módulos de <b>Investigación</b>. En <b>Regresión logística</b> cada fila es un predictor por separado; en <b>Regresión multivariada</b>, cada OR está ajustado por las otras covariables del modelo. Las dos tablas traen OR, IC 95%, p y una marca (● ◐ ○) — <b>distinta a propósito de los 🟢🟡🟠 de la tabla de asociaciones</b>, porque acá no se aplica corrección por comparaciones múltiples y allá sí. Debajo de cada predictor continuo dice a qué unidad corresponde ese OR. Las marcas: <b>●</b> significativo con muestra suficiente · <b>◐</b> significativo pero con pocos casos · <b>○</b> no significativo. Qué cuenta como «pocos» cambia según la tabla —eventos por grupo en la univariada, eventos por covariable en la multivariada— y el pie de cada una lo dice.' },
+
+  { ic:'🧮', t:'Regresión logística',
+    p:['Es el modelo que se usa cuando el desenlace es <b>binario</b>: lo tiene o no lo tiene. Estima cuánto cambia la odds del desenlace por cada unidad del predictor y devuelve ese cambio como un odds ratio con su intervalo. La <b>univariada</b> ofrece cuatro desenlaces —ergometría positiva, FEVI reducida (≤40%), HTP (PSAP&gt;35) y disfunción diastólica grado 2+—; la <b>multivariada</b> y las <b>curvas ROC</b> agregan además valvulopatía significativa.',
+       '<b>Univariada contra multivariada.</b> La univariada ajusta un modelo por predictor, así que cada OR se lleva también el efecto de todo lo que lo acompaña: si la edad sube el E/e&#39; y además sube la PSAP, el OR univariado del E/e&#39; incluye una parte que en realidad es edad. La multivariada mete varios predictores en un mismo modelo y cada OR queda <b>ajustado</b>: es el efecto de esa variable manteniendo las demás constantes. Por eso un OR ajustado suele quedar <b>más cerca del 1</b> que el crudo: si era mayor que 1 baja, y si era protector —menor que 1— sube. Ese acercamiento es información, no un error.',
+       '<b>Cuántas covariables.</b> La regla habitual pide <b>10 eventos por covariable</b>, contando el grupo más chico: para un modelo de 4 variables hacen falta 40 pacientes con el desenlace y 40 sin él. Por debajo de eso los OR quedan sesgados hacia afuera y los intervalos salen más angostos de lo que corresponde. El panel lo calcula y lo avisa, pero no bloquea: sirve para explorar, no para concluir.',
+       '<b>Cuándo no creerle al resultado.</b> Tres situaciones. <b>Separación:</b> si todos los que tienen el desenlace están de un lado del predictor, el ajuste no converge a nada finito y el OR sale astronómico con un intervalo enorme — el panel se niega a informarlo y escribe el motivo en la fila. <b>Colinealidad:</b> dos covariables que se mueven juntas obligan al modelo a repartir un mismo efecto entre las dos, y pueden salir <b>las dos no significativas aunque juntas expliquen el desenlace</b>. <b>Casos completos:</b> un paciente al que le falta una sola covariable queda fuera del modelo entero, así que agregar una variable poco medida achica la muestra aunque la variable no aporte nada.'],
+    ej:'Con HTP como desenlace, la univariada da E/e&#39; con OR 1,27 por punto y TAPSE con OR 0,88 por milímetro, los dos significativos. Puestos juntos en un modelo multivariado con edad y FEVI, el E/e&#39; baja a 1,12 y el TAPSE sube a 0,95: los dos se acercan al 1 porque buena parte de lo que cada uno parecía explicar por separado lo explicaban entre ellos. Siguen contando, pero bastante menos de lo que sugería la tabla univariada.',
+    err:['<b>Confundir predictor estadístico con causa.</b> Que una variable prediga un desenlace no dice nada del mecanismo. Estos datos son observacionales y transversales —se midieron el mismo día—, así que ni siquiera está establecido qué vino antes. Un modelo puede predecir muy bien y estar leyendo una consecuencia en vez de una causa.',
+         'Elegir las covariables mirando cuáles dieron significativas en la univariada. Eso selecciona sobre los mismos datos con los que después se estima, y produce modelos que no se replican. El panel no hace selección automática justamente por eso: el modelo es exactamente el que elegís.',
+         'Meter en el modelo una variable que forma parte de la definición del desenlace. Regresar PSAP contra «HTP (PSAP&gt;35)» da un OR gigante que sólo repite que 36 es mayor que 35. El panel excluye esos predictores de la lista y dice cuáles sacó y por qué.',
+         'Leer los OR de la univariada como si estuvieran ajustados. Si dos predictores están correlacionados, los dos van a salir significativos aunque uno explique al otro.'],
+    app:'Son dos módulos de <b>Investigación</b>. En <b>Regresión logística</b> elegís el desenlace y la app corre un modelo por cada predictor, con un aviso arriba si el grupo más chico tiene menos de 30 casos. En <b>Regresión multivariada</b> elegís el desenlace y entre 2 y 5 covariables —con una sola el modelo sería idéntico al univariado y la app te lo dice en vez de ajustarlo—; la app avisa si hay menos de 10 eventos por covariable, si dos covariables están muy correlacionadas entre sí (r≥0,80) y cuántos pacientes se perdieron por casos completos, nombrando la variable que faltó. Las filas que no se pudieron estimar dicen el motivo en vez de un número. Ninguno de los dos aplica FDR, y su pie lo aclara.' },
+
+  { ic:'📉', t:'Curvas ROC y AUC',
+    p:['Una curva ROC responde una sola pregunta: si tomo una variable numérica y elijo un punto de corte, ¿cuán bien separa a los que tienen el desenlace de los que no? Cada punto de la curva es <b>un corte posible</b>. En el eje vertical va la <b>sensibilidad</b> —qué proporción de los que tienen el desenlace quedan del lado positivo— y en el horizontal <b>1 − especificidad</b>, o sea qué proporción de los que no lo tienen quedan del lado positivo por error. La diagonal es lo que daría tirar una moneda.',
+       '<b>El AUC</b> resume la curva en un número: la probabilidad de que, tomando al azar un paciente con el desenlace y otro sin él, el primero tenga el valor más extremo. Los cortes que usa el panel: por debajo de <b>0,60 no discrimina</b>; <b>0,60–0,70</b> pobre; <b>0,70–0,80</b> aceptable; <b>0,80–0,90</b> buena; por encima de <b>0,90</b> excelente. Son etiquetas sobre la <b>capacidad de separar dos grupos</b>, no un permiso de uso clínico: una variable con AUC 0,75 separa razonablemente y puede seguir siendo inservible en la práctica si la prevalencia deja el valor predictivo positivo por el piso, o si un falso negativo cuesta demasiado. <b>Y si el IC del AUC incluye el 0,50, no hay evidencia de que separe nada.</b>',
+       '<b>Sensibilidad y especificidad se compran una con la otra.</b> Moverse por la curva es elegir cuál de los dos errores preferís cometer: <b>ampliar</b> el criterio de positivo captura a casi todos los enfermos —sensibilidad alta— al precio de marcar sanos como positivos, y <b>estrecharlo</b> hace lo contrario. Ojo con traducir eso a «subir» o «bajar» el número: depende de la dirección. Con un corte del tipo «≥ c» —PSAP, E/e&#39;— ampliar es <b>bajar</b> c; con uno del tipo «≤ c» —TAPSE, FEVI, METs, donde el desenlace lo marcan los valores bajos— ampliar es <b>subir</b> c. La app dice en cada corrida cuál de las dos reglas usó. No hay un corte correcto en abstracto: depende de qué duele más en esa decisión. Para descartar una enfermedad grave conviene sensibilidad; para indicar un procedimiento con riesgo, especificidad.',
+       '<b>El índice de Youden</b> (sensibilidad + especificidad − 1) elige el corte que maximiza la suma de los dos, o sea que <b>los trata como igual de graves</b>, cosa que casi nunca es cierta en clínica. Y el corte se elige y se evalúa con los mismos datos: no hay validación externa ni partición, así que en otra serie va a rendir peor que acá.'],
+    ej:'TAPSE contra HTP: AUC 0,770 (IC 0,717–0,823), corte óptimo TAPSE ≤ 19 mm, sensibilidad 73,0% y especificidad 66,4%. Se lee así: con ese corte se detecta a 3 de cada 4 pacientes con HTP, pero uno de cada tres sin HTP también queda del lado positivo. Si el objetivo fuera descartar HTP —donde no se puede perder ninguno— habría que ampliar el criterio, o sea <b>subir</b> el corte a ≤21 o ≤22, y aceptar todavía más falsos positivos.',
+    err:['<b>Elegir el corte con la mejor sensibilidad sin mirar la especificidad.</b> Un corte con 100% de sensibilidad siempre existe —basta marcar a todos como positivos— y no sirve para nada, porque la especificidad cae a 0. La sensibilidad sola no dice nada: hay que leer el par.',
+         'Tomar el corte de Youden como un valor de referencia. Es el óptimo <b>de esta muestra</b>, elegido con los mismos pacientes con los que se lo evalúa, y con N chico se corre de un valor a otro con un solo caso.',
+         'Trasladar el VPP y el VPN a otra población. La sensibilidad y la especificidad no dependen de la prevalencia; el VPP y el VPN sí, y la prevalencia de una serie de derivación está inflada respecto de la población general. El panel dice sobre qué prevalencia los calculó.',
+         'Interpretar un AUC alto calculado sobre pocos eventos. Con 6 pacientes con el desenlace, un AUC de 0,86 es ruido con tres decimales.',
+         'Hacer la ROC de una variable que forma parte de la definición del desenlace: da AUC 1,00 y un corte igual al umbral. No mide capacidad diagnóstica, repite el corte. El panel bloquea esas combinaciones.'],
+    app:'En <b>Investigación → Curvas ROC</b> elegís una variable numérica y un desenlace binario. La app dibuja la curva con la diagonal de referencia, marca el punto de Youden, y da el AUC con IC 95% y una tabla con sensibilidad, especificidad, VPP y VPN en ese corte, cada uno explicado con los conteos de tu muestra. <b>Detecta sola la dirección</b>: si los valores bajos son los que acompañan al desenlace —como el TAPSE— el corte sale con ≤ y lo dice. Avisa cuando el grupo más chico tiene menos de 30 pacientes y cuando el intervalo del AUC incluye el 0,50; y cuando la separación es perfecta no informa intervalo, porque la fórmula daría ancho cero y eso se leería como certeza absoluta.' }
 ];
 
 /* {{N}} y {{N5}} se resuelven al pintar, no al definir GUIA: el número de asociaciones
@@ -4834,9 +4874,15 @@ function renderCurrent(){
     const out=AV_OUTCOMES.find(o=>o.k===outKey)||AV_OUTCOMES[0];
     const ds = out.req==='par' ? avPares() : avEcos().map(_pEco);
     const filas=[];
+    /* Los predictores que no entran se NOMBRAN (ver el pie de avLogRender). Se
+       descartaban en silencio: al elegir «Disfunción diastólica grado 2+» desaparecían
+       E/e', volumen AI y PSAP —tres de las variables más relevantes— sin una línea que
+       lo explicara, y eso se lee como que la app se olvidó de calcularlas. Es el mismo
+       cuidado que la multivariada ya tenía. */
+    const fueraCirc=[], fueraErgo=[];
     AV_PREDS.forEach(pd=>{
-      if(out.excluye.indexOf(pd.k)>=0) return;                 // predictor circular
-      if(pd.req==='par' && out.req!=='par') return;            // sin ergometría en este dataset
+      if(out.excluye.indexOf(pd.k)>=0){ fueraCirc.push(pd.lbl); return; }   // predictor circular
+      if(pd.req==='par' && out.req!=='par'){ fueraErgo.push(pd.lbl); return; }  // sin ergometría acá
       const xs=[], ys=[];
       ds.forEach(pr=>{
         let y,x;
@@ -4849,7 +4895,7 @@ function renderCurrent(){
         eventos: ys.reduce((a,b)=>a+b,0), noEventos: ys.length-ys.reduce((a,b)=>a+b,0),
         r});
     });
-    return {out, filas, ds:ds.length};
+    return {out, filas, ds:ds.length, fueraCirc, fueraErgo};
   }
 
   window.avLogRender=function(){
@@ -4857,7 +4903,7 @@ function renderCurrent(){
     const avisoEl=document.getElementById('av-lg-aviso');
     const outKey=(document.getElementById('av-lg-out')||{}).value||'ergo_pos';
     const soloSig=((document.getElementById('av-lg-filtro')||{}).value)==='sig';
-    const {out, filas}=avLogCalcular(outKey);
+    const {out, filas, fueraCirc, fueraErgo}=avLogCalcular(outKey);
 
     // El umbral que importa es el del grupo MÁS CHICO: 40 eventos con 3 no-eventos es
     // tan poco estimable como al revés, y con 1 predictor la regla habitual son 10
@@ -4931,6 +4977,12 @@ function renderCurrent(){
         '<b>Marcas:</b> ● significativo con ≥30 eventos por grupo · ◐ significativo con pocos eventos · '+
         '○ no significativo. <b>Son marcas distintas de los 🟢🟡🟠 de la tabla de asociaciones a propósito</b>, '+
         'porque acá no se aplica FDR y ahí sí.'+
+        (fueraCirc.length?' <b>'+esc(fueraCirc.join(', '))+'</b> '+(fueraCirc.length===1
+            ? 'no aparece en la tabla porque entra en la definición de «'+esc(out.lbl)+'»: regresarlo contra sí mismo'
+            : 'no aparecen en la tabla porque entran en la definición de «'+esc(out.lbl)+'»: regresarlos contra sí mismos')+
+          ' da un OR enorme que sólo repite el corte.':'')+
+        (fueraErgo.length?' <b>'+esc(fueraErgo.join(', '))+'</b> tampoco: requiere ergometría del mismo paciente '+
+          'y este desenlace se calcula sobre los ecocardiogramas.':'')+
         (ocultos?' <b>'+ocultos+' predictor'+(ocultos===1?'':'es')+' no estimable'+(ocultos===1?'':'s')+
           '</b> quedan fuera de este filtro; suelen ser los de efecto más extremo.':''));
   };
@@ -6170,6 +6222,17 @@ function renderCurrent(){
        otro desenlace. */
     document.getElementById('roc-tabla').innerHTML='';
     wrap.style.display='';
+    /* Sin Chart.js quedaba un recuadro de 340 px en blanco encima de la tabla, sin nada
+       que dijera por qué. La app carga Chart.js por CDN con SRI, y un hash viejo lo
+       descarta EN SILENCIO: el hueco se leería como un bug del módulo. El módulo de
+       subgrupos ya avisa en ese caso; acá faltaba. */
+    const _cont=document.getElementById('roc-canvas').parentElement;
+    if(_cont) _cont.style.display = HAS_CHART ? '' : 'none';
+    if(!HAS_CHART){
+      avi.innerHTML='<div style="padding:9px 12px;background:rgba(234,179,8,.12);border-left:3px solid #eab308;'+
+        'border-radius:4px;font-size:12px;line-height:1.5;margin-bottom:10px;">⚠️ La curva no se puede dibujar '+
+        '(no cargó Chart.js). Los números de abajo se calcularon igual y son válidos.</div>';
+    }
     if(HAS_CHART){
       if(_chRoc) _chRoc.destroy();
       const el=document.getElementById('roc-canvas');
