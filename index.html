@@ -3915,13 +3915,16 @@ function renderCurrent(){
     const sel=document.getElementById('est-f-med');
     const antes=sel?sel.value:'all';
     if(typeof estFillMedSelect==='function') estFillMedSelect();
-    if(sel && sel.value!==antes) estInformesLimpiar();
+    if(sel && sel.value!==antes) estChequearFirma();
     computeAll();
     const ci=document.getElementById('est-crossinfo');
     if(ci)ci.innerHTML='<div style="font-size:13px;"><b>Datos cruzados por CI:</b> '+_ecoErgo.length+' pacientes con <b>Eco+Ergo</b> · '+_eeErgo.length+' con <b>EcoEstrés+Ergo</b>. Total estudios: '+((typeof STUDIES!=='undefined')?STUDIES.length:'—')+'.</div>';
     const k=localStorage.getItem('ca_anthropic_key')||'';
     const st=document.getElementById('est-key-status'); if(st)st.textContent=k?('Clave guardada: sk-ant-…'+k.slice(-4)):'Sin clave configurada.';
     estAsocRender(); renderHeatmap();
+    /* Después de computeAll: estBaseStudies() ya refleja el período vigente, así que la
+       firma se compara contra la población nueva y no contra la que se está dejando. */
+    estChequearFirma();
     if(typeof avRefrescarSiVisible==='function') avRefrescarSiVisible();
   };
 
@@ -4462,9 +4465,11 @@ function renderCurrent(){
      huella, cambiar el período entre "Ver asociaciones" y "Exportar" producía un PDF con
      la comparativa recalculada y las asociaciones del corte anterior, en la misma hoja. */
   function avHuellaPoblacion(elegida){
-    const rg=(typeof currentRange==='function')?currentRange():null;
-    const med=(document.getElementById('est-f-med')||{}).value||'all';
-    return [elegida.k, elegida.n, med, rg?rg.label:'', estBase().length].join('|');
+    /* Delegado en estFirmaPoblacion: acá se usaba rg.label sin las fechas, así que mover
+       un rango personalizado no cambiaba la huella, y sólo el conteo de la base, así que
+       re-importar corregido tampoco. Mismo daño: un PDF de subpoblación con la comparativa
+       recalculada y las asociaciones de otro corte. */
+    return [elegida.k, elegida.n, estFirmaPoblacion()].join('|');
   }
 
   /* Corre `fn` sobre una lista de estudios dada y restaura SIEMPRE por snapshot: si se
@@ -4937,20 +4942,92 @@ function renderCurrent(){
           .map(d=>'<option value="'+esc(d.key)+'">'+d.label+' ('+d.n+')</option>').join('');
     if([...sel.options].some(o=>o.value===prev)) sel.value=prev;
   };
-  function estInformesLimpiar(){
-    ['est-informe-basico','est-informe-ia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=''; });
-    /* El encabezado también: estInformePDF lo lee como título aunque esté oculto, y si no
-       se borra el PDF sale titulado "Borrador de abstract" con otro contenido adentro. */
-    const hd=document.getElementById('est-ia-out-h'); if(hd){ hd.textContent=''; hd.style.display='none'; }
+  /* ══ Informes desactualizados ══════════════════════════════════════════════
+     Un informe describe la población que había cuando se generó: declara el período,
+     el N y de qué apps salen los datos. Si después se cambia el período, el filtro por
+     médico o se importan estudios, el texto sigue en pantalla describiendo un conjunto
+     que ya no es el que está debajo — y el botón de PDF lo exporta con ese título.
+     No se borra: un abstract son 300 palabras que el médico puede no haber copiado
+     todavía. Se marca, y la marca se antepone al TEXTO (no a un cartel aparte) para que
+     viaje en el copiado y en el PDF, igual que el aviso de respuesta truncada. */
+  const IA_DIVS = ['est-informe-basico','est-informe-ia'];
+  const AVISO_STALE = '⚠️ TEXTO DESACTUALIZADO — se generó con otra población '+
+    '(otro período, otro filtro por médico, o antes de importar estudios). Las cifras de '+
+    'abajo NO corresponden a lo que muestra el panel ahora. Volvé a generarlo antes de usarlo.';
+  let _iaFirma = null;
+
+  /* Período (con las fechas, no sólo la etiqueta: "Rango personalizado" no cambia al
+     mover el rango), filtro por médico y tamaño de la base, que es lo que detecta una
+     importación o un ↻ Actualizar datos. */
+  function estFirmaPoblacion(){
+    const r = (typeof currentRange==='function') ? currentRange() : null;
+    const med = (document.getElementById('est-f-med')||{}).value || 'all';
+    const base = (typeof estBaseStudies==='function') ? estBaseStudies() : [];
+    const t = d => d ? d.getTime() : '';
+    /* No alcanza con el TAMAÑO de la base: el flujo más común es corregir un dato en
+       EcoSmart, re-exportar los mismos estudios y re-importarlos. Mismo N, mismo período,
+       mismo médico, estadísticos distintos — y el informe viejo, calculado con el dato
+       malo, no se marcaba. Se resume el contenido con un hash determinístico (app, fecha
+       y paciente de cada estudio): determinístico para que «↻ Actualizar datos» sin
+       cambios NO marque, y sensible al reemplazo de un arreglo por otro del mismo largo. */
+    let h = 5381;
+    for(const st of base){
+      const k = st.app + (st.fecha?st.fecha.getTime():'') + (st._pid?st._pid.key:'');
+      for(let i=0;i<k.length;i++) h = ((h*33) ^ k.charCodeAt(i)) >>> 0;
+    }
+    return [r?r.label:'', t(r&&r.from), t(r&&r.to), med, base.length, h].join('|');
   }
+  /* El estado va en cada div y no en un booleano global. Con el global pasaban dos cosas:
+     se marcaba cualquier contenido —incluidos «Configurá tu API key» o «Error de la API»,
+     que no son informes— y al regenerar UNO de los dos divs se reseteaba el flag de ambos,
+     así que el otro recibía un segundo bloque de aviso en el ciclo siguiente. Un aviso
+     repetido, o puesto sobre un mensaje de error, enseña a ignorarlo. */
+  function estMarcarStale(){
+    let marcadoIA=false;
+    IA_DIVS.forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el || el.dataset.informe!=='1' || el.dataset.stale==='1') return;
+      el.textContent = AVISO_STALE+'\n\n'+el.textContent;
+      el.dataset.stale='1';
+      if(id==='est-informe-ia') marcadoIA=true;
+    });
+    /* El encabezado describe SÓLO al div de IA, así que se prefija únicamente cuando ese
+       div se marcó en esta pasada. Con un guard propio se duplicaba: generar el informe
+       básico lo reseteaba, y el básico no es dueño del encabezado. Como el div de IA no
+       puede marcarse dos veces (dataset.stale), esto no puede repetirse. */
+    if(!marcadoIA) return;
+    const hd=document.getElementById('est-ia-out-h');
+    if(hd && hd.textContent.trim()) hd.textContent = '⚠️ DESACTUALIZADO — '+hd.textContent;
+  }
+  /* La firma NO se refresca acá a propósito: si se actualizara en cada render, un segundo
+     cambio de período borraría la evidencia de que el texto ya había quedado viejo. Se
+     fija al generar y se limpia al borrar. */
+  function estChequearFirma(){
+    const f = estFirmaPoblacion();
+    if(_iaFirma !== null && _iaFirma !== f) estMarcarStale();
+  }
+  /* `divId` marca QUÉ div contiene un informe de verdad. `firma` permite adoptar la que
+     regía cuando se armó el pedido y no la del momento de escribir (ver estInformeIA). */
+  function estFijarFirma(divId, firma){
+    _iaFirma = firma || estFirmaPoblacion();
+    if(divId){ const el=document.getElementById(divId);
+      if(el){ el.dataset.informe='1'; delete el.dataset.stale; } }
+  }
+  // Las rutas de error y de estado escriben en el div pero NO son un informe.
+  function estNoEsInforme(divId){ const el=document.getElementById(divId);
+    if(el){ delete el.dataset.informe; delete el.dataset.stale; } }
+
+  /* estInformesLimpiar() se eliminó: ya no queda ningún camino que borre un informe.
+     Cambiar de población lo MARCA y lo conserva, que es la decisión de diseño. */
   window.estMedCambio = function(){
     computeAll(); estAsocRender(); renderHeatmap();
     const pa=document.getElementById('est-panel-porapp');
     if(pa && pa.style.display!=='none' && typeof paRender==='function') paRender();
     if(typeof avRefrescarSiVisible==='function') avRefrescarSiVisible();
-    // Los informes ya generados quedan de la población anterior: se limpian para que
-    // nadie lea un texto que no corresponde al médico que ahora está seleccionado.
-    estInformesLimpiar();
+    // Los informes ya generados quedan de la población anterior. Se marcan y no se
+    // borran, mismo criterio que al cambiar el período: el texto se conserva por si el
+    // médico todavía no lo copió, pero deja de poder confundirse con el actual.
+    estChequearFirma();
   };
 
   // El selector de app se arma desde APPS, así que una 5.ª app aparece sola.
@@ -5144,6 +5221,7 @@ function renderCurrent(){
     const el=document.getElementById('est-informe-basico');
     if(!el){ console.error('[informe] falta #est-informe-basico'); toast('❌ No se pudo mostrar el informe'); return; }
     el.textContent=estInformeTexto(null);
+    estFijarFirma('est-informe-basico');
     toast('✅ Informe generado');
   };
   window.estInformeCopiar=function(id){ const el=document.getElementById(id); if(!el||!el.textContent.trim()){toast('Nada para copiar');return;} navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ Copiado')).catch(()=>toast('No se pudo copiar')); };
@@ -5353,11 +5431,17 @@ function renderCurrent(){
     const hd=document.getElementById('est-ia-out-h');
     if(!cfg){ toast('Modo desconocido'); return; }
     const key=localStorage.getItem('ca_anthropic_key');
-    if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; hd.textContent=''; hd.style.display='none'; toast('Falta la API key'); return; }
+    if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; estNoEsInforme('est-informe-ia'); hd.textContent=''; hd.style.display='none'; toast('Falta la API key'); return; }
     computeAll();
     const payload=ctxIA(modo);
+    /* La firma se congela ACÁ, con el payload. Entre el pedido y la respuesta pasan
+       decenas de segundos y el selector de período queda habilitado: si se registrara al
+       escribir, un texto calculado sobre la población vieja quedaría registrado con la
+       nueva y no se marcaría nunca — al revés, se marcaría al volver a la población que
+       sí le corresponde. */
+    const firmaPedido = estFirmaPoblacion();
     if(!payload.multiplicidad.calculables_en_esta_poblacion){
-      el.textContent='No hay datos suficientes para analizar en la población seleccionada. Revisá el período, el filtro por médico y que estén importados los estudios.';
+      el.textContent='No hay datos suficientes para analizar en la población seleccionada. Revisá el período, el filtro por médico y que estén importados los estudios.'; estNoEsInforme('est-informe-ia');
       hd.textContent=''; hd.style.display='none'; toast('Sin datos para analizar'); return;
     }
     /* Los cuatro modos escriben en el MISMO div, así que se deshabilitan los cuatro:
@@ -5376,7 +5460,7 @@ function renderCurrent(){
         })
       });
       const data=await res.json();
-      if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); }
+      if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); estNoEsInforme('est-informe-ia'); toast('Error de la API'); }
       else {
         const txt=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)';
         /* Un texto cortado a la mitad se lee igual que uno completo, y en el abstract
@@ -5398,9 +5482,12 @@ function renderCurrent(){
         hd.textContent=cfg.lbl+' · '+(payload.contexto.periodo||'sin período')+' · '+
           payload.contexto.poblacion+' · '+payload.contexto.total_estudios+' estudios';
         hd.style.display='block';
+        estFijarFirma('est-informe-ia', firmaPedido);
+        // Si la población cambió mientras se esperaba, se marca en el acto.
+        estChequearFirma();
         toast(cortado ? '⚠️ Respuesta incompleta' : '✅ '+cfg.lbl);
       }
-    }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); }
+    }catch(e){ el.textContent='Error de conexión: '+e.message; estNoEsInforme('est-informe-ia'); toast('Error de conexión'); }
     finally{ btns.forEach(b=>b.disabled=false); sp.style.display='none'; }
   };
 
@@ -5417,6 +5504,7 @@ function renderCurrent(){
       toast('No hay asociaciones significativas para exportar');
       document.getElementById('est-informe-ia').textContent=
         'No hay asociaciones significativas en la población seleccionada, así que no hay nada que exportar como contexto de búsqueda. Probá ampliando el período o quitando el filtro por médico.';
+      estNoEsInforme('est-informe-ia');
       document.getElementById('est-ia-out-h').textContent='';
       document.getElementById('est-ia-out-h').style.display='none';
       return;
@@ -5477,6 +5565,7 @@ function renderCurrent(){
     document.getElementById('est-ia-out-h').textContent='Contexto para EvidenceSmart';
     document.getElementById('est-ia-out-h').style.display='block';
     document.getElementById('est-informe-ia').textContent=texto;
+    estFijarFirma();
   };
 })();
 
