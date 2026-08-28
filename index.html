@@ -453,7 +453,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
     <div class="login-title">CeiboAnalytics</div>
     <div class="login-subtitle">Inteligencia clínica integrada</div>
     <div class="login-stats" aria-hidden="true">
-      <div class="ls-item"><span class="ls-num" data-cont="61">0</span><span class="ls-lbl">asociaciones</span></div>
+      <div class="ls-item"><span class="ls-num" id="ls-asoc" data-cont="61">0</span><span class="ls-lbl">asociaciones</span></div>
       <div class="ls-item"><span class="ls-num" data-cont="4">0</span><span class="ls-lbl">apps</span></div>
       <div class="ls-item"><span class="ls-num" id="ls-estudios" data-cont="0">0</span><span class="ls-lbl">estudios</span></div>
     </div>
@@ -590,6 +590,12 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
   function animarContadores(){
     const el = document.getElementById('ls-estudios');
     if(el) el.dataset.cont = String(contarEstudios());
+    /* El contador de asociaciones también sale del motor y no de un número escrito a
+       mano: el literal del HTML quedaba viejo cada vez que se sumaba una fila a ASSOC,
+       y es el primer dato que la app muestra de sí misma. Acá ASSOC_N ya está definido
+       porque esto corre diferido, después de parsear todo el script. */
+    const ea = document.getElementById('ls-asoc');
+    if(ea && typeof window.ASSOC_N === 'number') ea.dataset.cont = String(window.ASSOC_N);
     document.querySelectorAll('.ls-num').forEach(n => {
       const fin = parseInt(n.dataset.cont, 10) || 0;
       /* Con la pestaña en segundo plano el navegador congela requestAnimationFrame, así
@@ -775,6 +781,23 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           #view-estadistica table.est-tbl td{padding:6px 8px;border-bottom:1px solid var(--border);}
           #view-estadistica table.est-tbl tbody tr{cursor:pointer;}
           #view-estadistica table.est-tbl tbody tr:hover{background:var(--surface-3);}
+          /* ── Módulo de IA: cada acción es su propia tarjeta con la descripción a la
+               vista ANTES de tocarla. El botón único no dejaba saber qué se iba a
+               mandar a la API ni qué se iba a recibir hasta después de gastarlo. ── */
+          #view-estadistica .ia-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+          @media(max-width:820px){#view-estadistica .ia-grid{grid-template-columns:1fr;}}
+          #view-estadistica .ia-card{display:flex;flex-direction:column;align-items:flex-start;gap:5px;
+            text-align:left;padding:13px 15px;border:1px solid var(--border);border-radius:10px;
+            background:var(--surface-2);cursor:pointer;font-family:inherit;transition:all .18s;width:100%;}
+          #view-estadistica .ia-card:hover:not(:disabled){border-color:var(--accent);background:var(--surface-3);}
+          #view-estadistica .ia-card:disabled{opacity:.5;cursor:not-allowed;}
+          #view-estadistica .ia-card .ia-t{font-size:14px;font-weight:700;color:var(--text-1);}
+          #view-estadistica .ia-card .ia-d{font-size:12px;line-height:1.45;color:var(--text-2);font-weight:400;}
+          #view-estadistica .ia-aviso{margin-bottom:14px;padding:12px 15px;background:var(--surface-2);
+            border-left:3px solid var(--warning);border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.55;color:var(--text-1);}
+          #view-estadistica .ia-aviso b{color:var(--warning);}
+          #view-estadistica .ia-out-h{font-size:12px;font-weight:700;color:var(--accent);
+            text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:none;}
         </style>
         <h2 class="section">Estadística avanzada</h2>
         <div id="est-crossinfo" class="card" style="margin-bottom:14px;"></div>
@@ -947,14 +970,46 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div id="est-informe-basico" style="white-space:pre-wrap;font-size:13px;line-height:1.55;margin-top:12px;"></div>
           </div>
           <div class="card">
-            <h3 class="section" style="font-size:15px;">Informe avanzado (con Claude)</h3>
-            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Análisis clínico-estadístico generado por Claude (claude-sonnet-4-6) a partir del resumen de asociaciones. Requiere API key configurada.</div>
+            <h3 class="section" style="font-size:15px;">Análisis con Claude</h3>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:12px;">Cuatro análisis independientes sobre las asociaciones ya calculadas (claude-sonnet-4-6). Cada uno manda a la API sólo estadísticos agregados, nunca datos de pacientes. Requiere API key configurada.</div>
+
+            <div class="ia-aviso">
+              <b>⚠️ Los resultados estadísticos de CeiboAnalytics requieren verificación e interpretación clínica por parte del médico.</b>
+              Esta herramienta es de apoyo a la investigación, no reemplaza el juicio clínico ni el asesoramiento de un bioestadístico.
+            </div>
+
+            <div class="ia-grid">
+              <button class="ia-card ia-accion" data-ia="interpretar" onclick="estInformeIA('interpretar')">
+                <span class="ia-t">🔍 Interpretar mis resultados</span>
+                <span class="ia-d">Claude explica en lenguaje clínico qué significan tus asociaciones significativas.</span>
+              </button>
+              <button class="ia-card ia-accion" data-ia="literatura" onclick="estInformeIA('literatura')">
+                <span class="ia-t">📚 Comparar con literatura</span>
+                <span class="ia-d">Claude compara tus hallazgos con lo publicado internacionalmente.</span>
+              </button>
+              <button class="ia-card ia-accion" data-ia="hipotesis" onclick="estInformeIA('hipotesis')">
+                <span class="ia-t">💡 Proponer hipótesis</span>
+                <span class="ia-d">Claude analiza tus datos y sugiere 3-5 preguntas de investigación.</span>
+              </button>
+              <button class="ia-card ia-accion" data-ia="abstract" onclick="estInformeIA('abstract')">
+                <span class="ia-t">📝 Generar borrador de abstract</span>
+                <span class="ia-d">Claude redacta un abstract IMRAD listo para adaptar a una presentación o publicación.</span>
+              </button>
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+              <button class="btn" id="est-ia-evidence"
+                      title="Pegá este texto en EvidenceSmart como «Contexto de investigación» para buscar papers relacionados con tus hallazgos"
+                      onclick="estExportarEvidenceSmart()">📤 Exportar a EvidenceSmart</button>
+              <span class="hint" style="font-size:11.5px;">No usa la API: arma el resumen acá y lo copia al portapapeles.</span>
+            </div>
+
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <button class="btn" id="est-ia-btn" onclick="estInformeAvanzado()">Generar informe avanzado (IA)</button>
               <button class="btn" onclick="estInformeCopiar('est-informe-ia')">Copiar texto</button>
-              <button class="btn" onclick="estInformePDF('est-informe-ia','Informe avanzado (IA)')">Exportar a PDF</button>
+              <button class="btn" onclick="estInformePDF('est-informe-ia',document.getElementById('est-ia-out-h').textContent||'Análisis IA')">Exportar a PDF</button>
               <span id="est-ia-spinner" style="display:none;font-size:13px;color:var(--accent,#2dd4bf);">⏳ Consultando a Claude…</span>
             </div>
+            <div class="ia-out-h" id="est-ia-out-h"></div>
             <div id="est-informe-ia" style="white-space:pre-wrap;font-size:13px;line-height:1.55;margin-top:12px;"></div>
           </div>
         </div>
@@ -4621,6 +4676,9 @@ function renderCurrent(){
   };
   function estInformesLimpiar(){
     ['est-informe-basico','est-informe-ia'].forEach(id=>{ const el=document.getElementById(id); if(el) el.textContent=''; });
+    /* El encabezado también: estInformePDF lo lee como título aunque esté oculto, y si no
+       se borra el PDF sale titulado "Borrador de abstract" con otro contenido adentro. */
+    const hd=document.getElementById('est-ia-out-h'); if(hd){ hd.textContent=''; hd.style.display='none'; }
   }
   window.estMedCambio = function(){
     computeAll(); estAsocRender(); renderHeatmap();
@@ -4846,8 +4904,13 @@ function renderCurrent(){
       return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); };
     const base=(typeof estBaseStudies==='function')?estBaseStudies():[];
     const nApp={}; base.forEach(s=>{ const a=(APPS[s.app]||{}).label||s.app; nApp[a]=(nApp[a]||0)+1; });
+    /* Umbral n>=5, no n>=2. Con n=2 la media y el DS con corrección de Bessel
+       determinan los dos valores exactamente (x = media ± ds/√2), así que suprimir
+       min/max no suprimía nada: se estaban mandando las dos mediciones literales de
+       dos pacientes a una API externa. Con n=3 o 4 no es exacto pero queda cerca.
+       El mismo 5 que ya se usaba para min/max. */
     const desc=(typeof paFilas==='function')?paFilas()
-      .filter(f=>f[2]>=2)
+      .filter(f=>f[2]>=5)
       .map(f=>{ const d={app:f[0], variable:f[1], n:f[2], media:f[3], ds:f[4], mediana:f[5]};
         if(f[2]>=5){ d.p25=f[6]; d.p75=f[7]; d.min=f[8]; d.max=f[9]; }
         return d; }):[];
@@ -4859,6 +4922,12 @@ function renderCurrent(){
         periodo: rg ? (rg.label+(rg.from||rg.to ? (' ('+(fmt(rg.from)||'inicio')+' a '+(fmt(rg.to)||'hoy')+')') : '')) : null,
         estudios_por_app: nApp,
         total_estudios: base.length,
+        /* Las asociaciones intra-app usan UN estudio por paciente (ver rebuildCross), así
+           que el N de los contrastes no es el número de estudios. Sin este campo el
+           abstract escribe "se analizaron N estudios" y el lector lo lee como pacientes. */
+        pacientes_unicos_por_app: (function(){ const o={}; Object.keys(_intra||{}).forEach(a=>{
+          if(_intra[a] && _intra[a].length) o[(APPS[a]||{}).label||a]=_intra[a].length; }); return o; })(),
+        nota_n: 'El total de estudios NO es el total de pacientes: un paciente puede tener varios estudios en el período y las asociaciones intra-app conservan sólo el más reciente.',
         pacientes_cruzados_eco_ergo: R.ecoErgo,
         pacientes_cruzados_ecoestres_ergo: R.eeErgo,
         nota_filtro_medico: medTxt ? 'Con filtro por profesional, un par cruzado entra sólo si ambos estudios son suyos; por eso el N cruzado es menor que el del servicio.' : null
@@ -4868,7 +4937,10 @@ function renderCurrent(){
         ambito: SCOPE_LBL[r.sc]||r.sc,
         asociacion: r.lbl, categoria: r.cat, metodo: r.method,
         estadistico: r.stat, n: r.n, p: r.p,
-        q_fdr: r.q!=null ? +r.q.toFixed(4) : null,
+        /* toPrecision y no toFixed(4): un q de 1e-6 se redondeaba a 0, y "q=0" es una
+           afirmación de precisión que ningún test puede sostener. Va al payload de la
+           API y de ahí al abstract. */
+        q_fdr: r.q!=null ? +r.q.toPrecision(3) : null,
         ic95: (r.ci&&r.ci!=='—') ? r.ci : null,
         significativa: r.p!=null && r.p<0.05,
         sobrevive_fdr: sobreviveFDR(r),
@@ -4878,51 +4950,265 @@ function renderCurrent(){
     };
   }
 
-  const SYS_IA = [
-    'Sos cardiólogo con formación en bioestadística clínica y trabajás con un servicio de cardiología del interior de Uruguay.',
-    'Recibís los resultados estadísticos agregados de su propia base de estudios (ecocardiograma, ergometría, eco-estrés) y producís un informe profesional en español rioplatense.',
-    '',
-    'Estructurá la respuesta en estas cinco secciones, con esos títulos:',
-    '1. INTERPRETACIÓN CLÍNICA — qué significan los hallazgos en la práctica, priorizando los que sobreviven a la corrección por FDR (campo sobrevive_fdr).',
-    '2. COMPARACIÓN CON LA LITERATURA — contrastá con guías y series internacionales (ESC, AHA/ACC, ASE/EACVI y estudios de referencia), diciendo explícitamente si el hallazgo concuerda, discrepa o no tiene comparador claro. Nombrá guía y año cuando lo sepas; si no estás seguro de una cita, decilo en vez de inventarla.',
-    '3. HIPÓTESIS DE INVESTIGACIÓN — dos a cuatro hipótesis contrastables que esta base podría responder, con el diseño y las variables que harían falta.',
-    '4. RECOMENDACIONES PARA EL SERVICIO — accionables y concretas: qué campos conviene completar mejor, qué sesgos corregir, qué subgrupos ampliar.',
-    '5. BORRADOR DE RESUMEN (IMRAD) — introducción, métodos, resultados y conclusión, en un resumen de 250 a 300 palabras listo para enviar a un congreso.',
-    '',
+  /* ── Reglas comunes a los cuatro modos ──────────────────────────────────
+     Van en TODOS los system prompts porque son las que evitan que la respuesta
+     suene más segura de lo que los datos permiten. Separarlas por modo llevaría
+     a que el modo "abstract" —el único cuyo texto se publica— quede sin ellas. */
+  const IA_REGLAS = [
     'Reglas que no podés romper:',
     '- No inventes datos ni cifras que no estén en el JSON. Si algo falta, decí que falta.',
     '- Respetá los N: si una asociación se apoya en pocos casos, decilo al interpretarla, no después.',
     '- Distinguí asociación de causalidad. Los datos son observacionales y transversales.',
+    '- El campo q_fdr es el p ajustado por comparaciones múltiples y sobrevive_fdr dice si el hallazgo aguanta ese ajuste. Un hallazgo con p<0,05 que NO sobrevive al FDR se menciona como preliminar, nunca como establecido.',
     '- Tené en cuenta el campo reserva: un Chi² con frecuencias esperadas menores a 5 no se arregla con más pacientes sino con test exacto.',
-    '- Son datos de un solo servicio: no generalices a la población uruguaya.'
+    '- Son datos de un solo servicio del interior de Uruguay: no generalices a la población nacional.',
+    '- No cites literatura, autores, guías, revistas ni años salvo que se te pida explícitamente compararlos. Si citás, no inventes: si no estás seguro de una referencia, decilo. Una cita inventada en un borrador que después se publica es un problema serio para quien lo firma.',
+    '- Cuando el estadístico sea U (Mann-Whitney), H (Kruskal-Wallis) o χ² (Chi²), el JSON NO trae la dirección ni el tamaño del efecto. Decí que hay diferencia entre los grupos y nada más: no afirmes cuál grupo tiene el valor más alto ni en qué sentido va la asociación, porque no lo sabés y el sentido clínico esperable puede ser el contrario al de estos datos.',
+    '- El total de estudios no es el total de pacientes: para el N usá pacientes_unicos_por_app y aclará la diferencia.',
+    '- Escribí en español rioplatense, registro médico formal.'
   ].join('\n');
 
-  window.estInformeAvanzado=async function(){
-    const key=localStorage.getItem('ca_anthropic_key');
-    const el=document.getElementById('est-informe-ia');
-    if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; toast('Falta la API key'); return; }
-    computeAll();
-    const payload=estContextoIA();
-    if(!payload.asociaciones.some(a=>a.calculable)){
-      el.textContent='No hay datos suficientes para analizar en la población seleccionada. Revisá el período, el filtro por médico y que estén importados los estudios.';
-      toast('Sin datos para analizar'); return;
+  /* Los cuatro modos. Cada uno tiene su propio rol, su propia salida y su propio
+     recorte del contexto: mandar el JSON entero a los cuatro haría que "interpretar"
+     terminara proponiendo hipótesis y "abstract" arrastrara la discusión completa. */
+  const IA_MODOS = {
+    interpretar: {
+      lbl:'Interpretación clínica',
+      max:2500,
+      sys:[
+        'Sos cardiólogo clínico y le estás explicando a un colega los resultados estadísticos de la base de su propio servicio.',
+        'Tu única tarea es EXPLICAR QUÉ SIGNIFICAN los hallazgos que te pasan. No propongas estudios nuevos, no compares con la literatura y no redactes un resumen: eso lo hacen otras funciones de la app.',
+        '',
+        'Para cada asociación relevante decí, en lenguaje llano:',
+        '- qué se midió y en cuántos pacientes;',
+        '- qué quiere decir el resultado en la práctica del consultorio;',
+        '- cuánta confianza merece, mirando el N, el q_fdr y el campo reserva.',
+        '',
+        'Cerrá con un párrafo breve de dos o tres líneas: qué es lo que esta base parece estar mostrando en conjunto.',
+        'Si un hallazgo es estadísticamente significativo pero clínicamente trivial, decilo.',
+        '',
+        IA_REGLAS
+      ].join('\n')
+    },
+    literatura: {
+      lbl:'Comparación con la literatura',
+      max:3000,
+      sys:[
+        'Sos revisor de evidencia cardiovascular. Recibís los hallazgos estadísticos de un servicio y los contrastás con la literatura publicada que conocés hasta tu fecha de corte.',
+        'Tu única tarea es COMPARAR. No interpretes de nuevo los resultados ni propongas hipótesis.',
+        '',
+        'Para cada hallazgo con N suficiente decí explícitamente si CONCUERDA, DISCREPA o NO TIENE COMPARADOR CLARO en la literatura, y por qué.',
+        'Nombrá guía, cohorte o estudio con su año cuando lo sepas (ESC, AHA/ACC, ASE/EACVI, MESA, Framingham, ARIC y similares).',
+        '',
+        'Sobre las citas, que en este modo sí tenés que dar:',
+        '- Si no estás seguro de una referencia, decí "no tengo una cita confiable para esto" en vez de aproximarla.',
+        '- Tenés fecha de corte de entrenamiento: avisá que la comparación puede estar desactualizada y que hay que verificar contra la fuente antes de citarla.',
+        '',
+        'Cerrá indicando en qué punto los datos del servicio se apartan más de lo publicado, que es donde conviene mirar primero.',
+        '',
+        IA_REGLAS
+      ].join('\n')
+    },
+    hipotesis: {
+      lbl:'Hipótesis de investigación',
+      max:2500,
+      sys:[
+        'Sos investigador clínico en cardiología y estás ayudando a un servicio a decidir qué preguntas vale la pena investigar con la base que ya tiene.',
+        'Tu única tarea es PROPONER entre 3 y 5 preguntas de investigación. No interpretes los resultados en detalle ni redactes un resumen.',
+        '',
+        'Para cada hipótesis dame:',
+        '- la pregunta, formulada de modo contrastable;',
+        '- si es DERIVADA DE LOS DATOS (hay una señal concreta en el JSON que la sostiene, citá cuál) o EXPLORATORIA (es plausible pero estos datos todavía no la apoyan). Marcá cada una con una de esas dos etiquetas, sin excepción;',
+        '- el diseño mínimo que haría falta y las variables que hoy NO se están registrando y habría que empezar a cargar;',
+        '- una estimación cualitativa de si el N actual alcanza o si hay que esperar a acumular más casos.',
+        '',
+        'Ordenalas de la más factible con los datos actuales a la más ambiciosa.',
+        'No propongas hipótesis que la base no pueda responder ni siquiera en principio: es un registro observacional y transversal, sin seguimiento ni desenlaces duros.',
+        '',
+        IA_REGLAS
+      ].join('\n')
+    },
+    abstract: {
+      lbl:'Borrador de abstract (IMRAD)',
+      max:2000,
+      sys:[
+        'Sos editor científico y redactás el borrador de un abstract estructurado para un congreso de cardiología.',
+        'Tu única tarea es REDACTAR EL ABSTRACT. No agregues discusión, interpretación extendida ni recomendaciones.',
+        '',
+        'Formato exacto, con estos cuatro títulos y en este orden:',
+        'INTRODUCCIÓN — dos líneas: el contexto y el objetivo del análisis.',
+        'MÉTODOS — el N total, el período analizado, qué aplicaciones aportaron datos y qué pruebas estadísticas se usaron. Aclará que es un registro observacional retrospectivo de un solo centro y que se aplicó corrección por comparaciones múltiples (FDR de Benjamini-Hochberg).',
+        'RESULTADOS — los hallazgos principales con su estadístico, su N y su p. Priorizá los que sobreviven al FDR; si incluís alguno que no sobrevive, marcalo como preliminar en el propio texto.',
+        'CONCLUSIONES — dos líneas, sin exagerar el alcance y sin afirmar causalidad.',
+        '',
+        'Extensión total: entre 250 y 300 palabras. Sin viñetas: prosa corrida dentro de cada sección.',
+        'Terminá con una línea aparte: "Borrador generado por IA a partir de los datos del servicio. Requiere verificación de todas las cifras contra la tabla de asociaciones antes de enviarse."',
+        '',
+        IA_REGLAS
+      ].join('\n')
     }
-    const btn=document.getElementById('est-ia-btn'), sp=document.getElementById('est-ia-spinner');
-    btn.disabled=true; sp.style.display='inline'; el.textContent='';
+  };
+
+  /* Recorte del contexto por modo. SÓLO quita campos del payload que ya arma
+     estContextoIA(), nunca agrega: la garantía de que no salen datos de pacientes
+     se sostiene en esa función y no hay que replicarla acá.
+     El bloque `multiplicidad` va SIEMPRE, incluso cuando se mandan sólo las
+     significativas: cinco hallazgos sobre cinco tests y cinco sobre sesenta y ocho
+     son cosas distintas, y sin el denominador la respuesta sobreinterpreta. */
+  function ctxIA(modo){
+    const full = estContextoIA();
+    const calculables = full.asociaciones.filter(a=>a.calculable);
+    const sig = calculables.filter(a=>a.significativa);
+    const multiplicidad = {
+      asociaciones_en_el_motor: full.asociaciones.length,
+      calculables_en_esta_poblacion: calculables.length,
+      significativas_sin_corregir: sig.length,
+      significativas_que_sobreviven_fdr: sig.filter(a=>a.sobrevive_fdr).length,
+      nota:'Las significativas se seleccionaron de entre las calculables. Interpretalas contra ese denominador.'
+    };
+    const base = {contexto:full.contexto, multiplicidad};
+    if(modo==='interpretar') return {...base, asociaciones_significativas:sig};
+    if(modo==='literatura')  return {...base, asociaciones_significativas:sig};
+    // Hipótesis necesita ver también lo que NO dio: un contraste calculado y negativo
+    // orienta tanto como uno positivo, y sin él propone estudiar lo ya descartado.
+    if(modo==='hipotesis')   return {...base, descriptivas:full.descriptivas, asociaciones_calculables:calculables};
+    return {...base, descriptivas:full.descriptivas, asociaciones_significativas:sig};   // abstract
+  }
+
+  /* Incluye el de EvidenceSmart: escribe en el mismo div que los cuatro modos, así que
+     si queda activo durante un pedido pisa el resultado que está por llegar. */
+  function iaBotones(){ return [...document.querySelectorAll('#view-estadistica .ia-accion, #est-ia-evidence')]; }
+
+  window.estInformeIA=async function(modo){
+    const cfg=IA_MODOS[modo];
+    const el=document.getElementById('est-informe-ia');
+    const hd=document.getElementById('est-ia-out-h');
+    if(!cfg){ toast('Modo desconocido'); return; }
+    const key=localStorage.getItem('ca_anthropic_key');
+    if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; hd.textContent=''; hd.style.display='none'; toast('Falta la API key'); return; }
+    computeAll();
+    const payload=ctxIA(modo);
+    if(!payload.multiplicidad.calculables_en_esta_poblacion){
+      el.textContent='No hay datos suficientes para analizar en la población seleccionada. Revisá el período, el filtro por médico y que estén importados los estudios.';
+      hd.textContent=''; hd.style.display='none'; toast('Sin datos para analizar'); return;
+    }
+    /* Los cuatro modos escriben en el MISMO div, así que se deshabilitan los cuatro:
+       con dos pedidos en vuelo, el que vuelve segundo pisa al primero y el
+       encabezado queda anunciando un análisis que ya no es el que está abajo. */
+    const btns=iaBotones(); btns.forEach(b=>b.disabled=true);
+    const sp=document.getElementById('est-ia-spinner');
+    sp.style.display='inline'; el.textContent=''; hd.textContent=''; hd.style.display='none';
     try{
       const res=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-6', max_tokens:4000, system:SYS_IA,
+          model:'claude-sonnet-4-6', max_tokens:cfg.max, system:cfg.sys,
           messages:[{role:'user',content:'Contexto estadístico del servicio (agregados, sin datos de pacientes):\n'+JSON.stringify(payload,null,2)}]
         })
       });
       const data=await res.json();
       if(!res.ok){ el.textContent='Error de la API: '+((data&&data.error&&data.error.message)||('HTTP '+res.status)); toast('Error de la API'); }
-      else { el.textContent=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)'; toast('✅ Informe generado'); }
+      else {
+        const txt=(data.content&&data.content[0]&&data.content[0].text)||'(respuesta vacía)';
+        /* Un texto cortado a la mitad se lee igual que uno completo, y en el abstract
+           eso significa conclusiones ausentes sin que nada lo indique. */
+        const cortado = data.stop_reason==='max_tokens';
+        /* La marca de "generado por IA" la pone el código, no el prompt. Si se la pedimos
+           al modelo es opcional por definición: es lo último que escribe, o sea lo primero
+           que se pierde al truncarse, y basta que parafrasee el formato para que no salga.
+           El texto se copia y se exporta a PDF tal cual, así que sin esta línea lo que se
+           pega en el portal de envío no dice en ningún lado que lo escribió una máquina. */
+        const MARCA_IA='— Borrador generado por IA a partir de los datos del servicio. '+
+          'Requiere verificación de todas las cifras contra la tabla de asociaciones antes de enviarse.';
+        let out = txt;
+        if(out.indexOf('Borrador generado por IA')<0) out += '\n\n'+MARCA_IA;
+        el.textContent = out + (cortado ? '\n\n⚠️ La respuesta se cortó por longitud: falta el final. Volvé a generarla o reducí el período analizado.' : '');
+        /* El encabezado lleva la población: si después se cambia el período o el filtro por
+           médico, el texto de abajo queda viejo y sin esto no hay forma de darse cuenta.
+           También es el título con el que sale el PDF. */
+        hd.textContent=cfg.lbl+' · '+(payload.contexto.periodo||'sin período')+' · '+
+          payload.contexto.poblacion+' · '+payload.contexto.total_estudios+' estudios';
+        hd.style.display='block';
+        toast(cortado ? '⚠️ Respuesta incompleta' : '✅ '+cfg.lbl);
+      }
     }catch(e){ el.textContent='Error de conexión: '+e.message; toast('Error de conexión'); }
-    finally{ btn.disabled=false; sp.style.display='none'; }
+    finally{ btns.forEach(b=>b.disabled=false); sp.style.display='none'; }
+  };
+
+  /* ── Exportar a EvidenceSmart ────────────────────────────────────────────
+     No pasa por la API: arma el resumen con los mismos resultados que ya están
+     en pantalla y lo deja en el portapapeles para pegarlo como contexto de
+     búsqueda en EvidenceSmart. Sin datos de pacientes, igual que el payload de IA. */
+  window.estExportarEvidenceSmart=function(){
+    computeAll();
+    const ctx=estContextoIA();
+    const sig=ctx.asociaciones.filter(a=>a.calculable && a.significativa)
+      .sort((a,b)=>((a.p==null?1:a.p)-(b.p==null?1:b.p)) || (b.n-a.n));
+    if(!sig.length){
+      toast('No hay asociaciones significativas para exportar');
+      document.getElementById('est-informe-ia').textContent=
+        'No hay asociaciones significativas en la población seleccionada, así que no hay nada que exportar como contexto de búsqueda. Probá ampliando el período o quitando el filtro por médico.';
+      document.getElementById('est-ia-out-h').textContent='';
+      document.getElementById('est-ia-out-h').style.display='none';
+      return;
+    }
+    const top=sig.slice(0,5);
+    const nApp=Object.entries(ctx.contexto.estudios_por_app||{}).map(([a,n])=>a+': '+n).join(' · ');
+    const L=[];
+    L.push('CONTEXTO DE INVESTIGACIÓN — CeiboAnalytics');
+    L.push('');
+    L.push('Período analizado: '+(ctx.contexto.periodo||'sin período declarado'));
+    L.push('Población: '+ctx.contexto.poblacion+' — '+ctx.contexto.total_estudios+' estudios');
+    L.push('N por aplicación: '+(nApp||'sin datos'));
+    L.push('');
+    L.push('Asociaciones más significativas ('+top.length+' de '+sig.length+' significativas sobre '+
+           ctx.asociaciones.filter(a=>a.calculable).length+' contrastes calculados):');
+    top.forEach((a,i)=>{
+      L.push((i+1)+'. '+a.asociacion+' — '+a.metodo+' '+a.estadistico+
+             ', N='+a.n+', p='+(a.p!=null?(a.p<0.001?'<0.001':a.p.toFixed(3)):'—')+
+             (a.q_fdr!=null?(', q(FDR)='+(a.q_fdr<0.0001?'<0.0001':a.q_fdr)):'')+
+             (a.sobrevive_fdr?' [sobrevive FDR]':' [no sobrevive FDR — preliminar]')+
+             (a.reserva?('\n   '+a.reserva):''));
+    });
+    L.push('');
+    /* La frase resumen nombra el hallazgo principal y su reserva. Si el más
+       significativo no sobrevive al FDR conviene que se lea acá y no sólo en la lista:
+       este texto se pega en otra app y viaja solo. */
+    /* Se prefiere uno que sobreviva al FDR antes que el de p más chico: ordenar sólo por p
+       puede coronar como "hallazgo principal" una correlación con N=9 mientras un contraste
+       con N=180 queda tercero. */
+    const p1=top.find(a=>a.sobrevive_fdr)||top[0];
+    L.push('Resumen: en '+ctx.contexto.total_estudios+' estudios del período, el hallazgo principal es '+
+           p1.asociacion+' ('+p1.metodo+' '+p1.estadistico+', N='+p1.n+')'+
+           (p1.sobrevive_fdr
+              ? ', que se mantiene tras corregir por comparaciones múltiples.'
+              : ', que NO se mantiene tras corregir por comparaciones múltiples y debe tomarse como preliminar.')+
+           /* La reserva va en la MISMA frase y no sólo en la lista: este texto se pega en
+              otra app y se lee suelto, así que la salvedad tiene que viajar con la afirmación. */
+           (p1.reserva?(' '+p1.reserva):'')+
+           ' Se buscan publicaciones que hayan evaluado relaciones equivalentes en poblaciones comparables.');
+    L.push('');
+    L.push('Datos observacionales, retrospectivos, de un solo centro. Requieren verificación clínica.');
+    const texto=L.join('\n');
+
+    const ok=()=>toast('✅ Copiado — pegalo en EvidenceSmart como «Contexto de investigación»');
+    const fallback=()=>{
+      try{
+        const ta=document.createElement('textarea');
+        ta.value=texto; ta.setAttribute('readonly',''); ta.style.cssText='position:fixed;top:-1000px;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        const hecho=document.execCommand('copy'); document.body.removeChild(ta);
+        if(hecho) ok(); else toast('No se pudo copiar — el texto quedó abajo para copiarlo a mano');
+      }catch(e){ toast('No se pudo copiar — el texto quedó abajo para copiarlo a mano'); }
+    };
+    if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(texto).then(ok).catch(fallback);
+    else fallback();
+
+    // Se muestra igual en pantalla: si el portapapeles falla, el trabajo no se pierde.
+    document.getElementById('est-ia-out-h').textContent='Contexto para EvidenceSmart';
+    document.getElementById('est-ia-out-h').style.display='block';
+    document.getElementById('est-informe-ia').textContent=texto;
   };
 })();
 
