@@ -840,6 +840,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div>
               <h3 class="sub" style="margin-top:0">📥 Importar datos de las apps</h3>
               <p class="hint" style="margin-top:0">Cada app corre en su propio subdominio, por lo que Analytics no puede leer su <code>localStorage</code> directamente. Exportá el JSON desde cada app (menú ⋯ → “Exportar para Analytics”) y cargalo acá. Los datos quedan guardados en este navegador.</p>
+              <p class="hint" style="margin-top:6px"><b>Importar suma, no reemplaza.</b> Los estudios que ya tenías se conservan; los que vengan repetidos —mismo documento y misma fecha— se actualizan con la versión del archivo nuevo. Podés exportar la app entera cada vez sin perder lo anterior. Para empezar de cero está <b>🗑️ Limpiar</b>.</p>
 
             </div>
             <!-- Se arma en JS: el botón de limpiar lleva el conteo y su estado depende de
@@ -847,7 +848,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div class="imp-botones" id="imp-botones"></div>
           </div>
           <input type="file" id="caImportFile" accept="application/json,.json" style="display:none">
-          <div class="hint" id="caImportStatus" style="margin-top:8px"></div>
+          <!-- pre-line: el resumen de importación lleva las salvedades en líneas
+               aparte, y con textContent los saltos se colapsarían a un párrafo único. -->
+          <div class="hint" id="caImportStatus" style="margin-top:8px;white-space:pre-line;line-height:1.5;"></div>
         </div>
         <div id="dashAppFilter" class="app-filter"></div>
         <div id="dashKpis" class="dash-apps"></div>
@@ -1959,14 +1962,27 @@ function readCardioSalud(){
 const CA_KEYS   = {eco:'ca_datos_ecosmart', ergo:'ca_datos_ergosmart', ecoestres:'ca_datos_ecoestres', cardio:'ca_datos_cardiosalud'};
 const CA_BYNAME = {ecosmart:'ca_datos_ecosmart', ergosmart:'ca_datos_ergosmart', ecoestres:'ca_datos_ecoestres', cardiosalud:'ca_datos_cardiosalud'};
 const CA_LABELS = {ecosmart:'EcoSmart', ergosmart:'ErgoSmart', ecoestres:'EcoEstrés', cardiosalud:'CardioSalud'};
-function readImported(app){
-  try{
-    const raw=localStorage.getItem(CA_KEYS[app]); if(!raw) return null;
-    const v=JSON.parse(raw);
-    const arr=Array.isArray(v)?v:(v&&Array.isArray(v.estudios)?v.estudios:(v&&Array.isArray(v.informes)?v.informes:null));
-    return Array.isArray(arr)?arr:null;
-  }catch(e){ console.warn('No se pudo leer datos importados de',app,e); return null; }
+/* `null` significaba tres cosas opuestas: no hay clave, la clave está pero no parsea, y
+   parseó pero no es lo que esperábamos. Mientras importar REEMPLAZABA daba igual; ahora
+   que fusiona, confundir "no hay nada" con "no lo pude leer" hace que la importación
+   pise 850 estudios recuperables con los 120 del archivo nuevo, informando
+   "0 estudios sin cambios" — y el botón de limpiar, que usa el mismo lector, aparece
+   deshabilitado con "no hay estudios importados" mientras el dato sigue ahí.
+   `readImportedEstado` distingue los casos; `readImported` mantiene la firma vieja para
+   los llamadores a los que sólo les importa si hay algo utilizable. */
+function readImportedEstado(app){
+  let raw;
+  try{ raw=localStorage.getItem(CA_KEYS[app]); }
+  catch(e){ console.warn('No se pudo acceder a localStorage para',app,e); return {estado:'error', arr:null}; }
+  if(!raw) return {estado:'vacio', arr:null};
+  let v;
+  try{ v=JSON.parse(raw); }
+  catch(e){ console.warn('Datos importados ilegibles de',app,e); return {estado:'error', arr:null}; }
+  const arr=Array.isArray(v)?v:(v&&Array.isArray(v.estudios)?v.estudios:(v&&Array.isArray(v.informes)?v.informes:null));
+  if(!Array.isArray(arr)) return {estado:'error', arr:null};
+  return {estado:'ok', arr};
 }
+function readImported(app){ return readImportedEstado(app).arr; }
 function readAppRaw(app){
   const imp=readImported(app);
   if(imp) return imp;
@@ -2004,6 +2020,18 @@ function caRenderLimpiar(){
         '🗑️ Limpiar '+lbl+' ('+c+' estudio'+(c===1?'':'s')+')</button>'+
     '</div>';
   }).join('');
+  /* Si loadData tuvo que saltear registros ilegibles, hay que decirlo: son estudios que
+     están guardados y NO entran en ningún conteo ni en ninguna estadística, así que sin
+     este cartel la única señal sería un N más bajo de lo esperado. */
+  if(_loadDataSalteados>0){
+    host.innerHTML += '<div style="flex-basis:100%;margin-top:8px;padding:9px 12px;background:rgba(234,179,8,.12);'+
+      'border-left:3px solid #eab308;border-radius:4px;font-size:12px;line-height:1.5;">⚠️ <b>'+
+      (_loadDataSalteados===1
+        ? '1 registro guardado no se pudo leer</b> y quedó'
+        : _loadDataSalteados+' registros guardados no se pudieron leer</b> y quedaron')+
+      ' fuera de todos los cálculos (ver la consola). Volvé a exportar desde la app de origen e importá de nuevo; '+
+      'si persiste, limpiá esa app y reimportá.</div>';
+  }
 }
 
 function caLimpiarApp(nombre){
@@ -2022,7 +2050,7 @@ function caLimpiarApp(nombre){
          conteo del dashboard parezca no haber cambiado. */
       const enPantalla=(typeof STUDIES!=='undefined')?STUDIES.filter(x=>x.app===CA_APPKEY[nombre]).length:0;
       if(enPantalla>0) caStatus('Se eliminaron los '+c+' estudios importados de '+lbl+'. Siguen '+
-        'apareciendo '+enPantalla+' que la app lee del almacenamiento local de este navegador.',false);
+        'apareciendo '+enPantalla+' que la app lee del almacenamiento local de este navegador.','warn');
     }catch(e){
       console.error('[limpiar] falló al recargar tras borrar',nombre,e);
       caStatus('Se borraron los datos de '+lbl+', pero falló la recarga. Actualizá la página.',true);
@@ -2034,13 +2062,196 @@ function caLimpiarApp(nombre){
   else seguir();
 }
 
+/* ── Importación incremental ──
+   Importar ya no reemplaza: fusiona con lo que había.
+
+   ── Identidad de un estudio, en orden de preferencia ──
+   1. `id`. Es la identidad que ya usa toda la suite: EcoSmart lo asigna al guardar y lo
+      CONSERVA al sobreescribir una edición (`{...nuevo, id: idEditando}`), ErgoSmart
+      hace lo mismo, CardioSalud sintetiza `crd_<inst>_<pac>_<consulta>`, y las capas de
+      almacenamiento de EcoSmart y EcoEstrés deduplican por `d.id`. Además resuelve el
+      caso que documento+fecha no puede: dos estudios del MISMO paciente el MISMO día
+      —pre y post cardioversión, un repeat por ventana mala, un ETT de mañana y otro de
+      tarde en CTI— que con doc+fecha se colapsan a uno y el otro se pierde en silencio.
+      Cuando el médico elige "guardar como nuevo" en vez de sobreescribir, la app de
+      origen le da un id distinto, así que acá entra como estudio aparte, que es
+      exactamente lo que pidió.
+   2. Documento + fecha, que es lo pedido, para los exports que no traen id.
+   3. El contenido completo, cuando no hay ni id ni documento+fecha.
+
+   La clave se deriva con normalizeStudy() y NO leyendo raw.ci/raw.fecha_estudio a mano,
+   porque esos nombres sólo existen en EcoSmart: ErgoSmart guarda el documento en
+   `documento`/`doc` y el formulario en raw.form, y EcoEstrés no tiene ni `campos` ni
+   `ci` —usa raw.vals['p-hc'] y raw.vals['p-fecha']—. Leyendo los campos literales,
+   todos los estudios de esas dos apps darían la MISMA clave vacía y la importación las
+   colapsaría a un solo estudio, borrando el archivo entero menos una fila, en silencio.
+
+   La fecha se compara por día calendario ya parseado, así que '2026-01-05' y
+   '05/01/2026' son el mismo estudio y no dos. */
+
+/* Serialización CANÓNICA: mismas claves, mismo string, sin importar en qué orden las
+   escribió la app de origen. JSON.stringify conserva el orden de inserción, que en un
+   objeto salido de JSON.parse es el orden textual del archivo. Con el stringify crudo,
+   un refactor en el `guardar()` de EcoSmart que moviera un campo de lugar —sin cambiar
+   ni un valor— hacía que los 850 estudios salieran como "actualizados", y en el camino
+   por contenido (los que no tienen id ni documento) cambiaba la CLAVE: dejaban de
+   coincidir y se duplicaban, justo después de que el aviso prometiera lo contrario. */
+function caCanon(v){
+  return JSON.stringify(v, (k, val)=>
+    (val && typeof val==='object' && !Array.isArray(val))
+      ? Object.keys(val).sort().reduce((o,kk)=>{ o[kk]=val[kk]; return o; },{})
+      : val);
+}
+
+function caClaveEstudio(raw, app){
+  let s;
+  try{ s=normalizeStudy(raw, app); }catch(e){ s=null; }
+  if(s && s.id!=null && String(s.id).trim()!=='') return {k:'ID:'+String(s.id).trim(), fuerte:true};
+  const ci = s ? normTxt(s.ci) : '';
+  if(ci && s.fecha){
+    const f = s.fecha.getFullYear()+'-'+String(s.fecha.getMonth()+1).padStart(2,'0')+'-'+String(s.fecha.getDate()).padStart(2,'0');
+    return {k:'DOC:'+normTxt(s.doc_tipo)+':'+ci+'|'+f, fuerte:true, porDoc:true};
+  }
+  /* Sin id y sin documento+fecha no se puede afirmar que dos estudios sean el mismo. Se
+     cae al contenido canónico: reimportar el mismo archivo no los duplica, y dos
+     estudios anónimos distintos —que con doc+fecha se pisarían entre sí— siguen siendo
+     dos. Lo que no detecta es el mismo estudio con una edición mínima, que entra como
+     uno nuevo; es el error seguro de los dos. */
+  return {k:'CONT:'+caCanon(raw), fuerte:false};
+}
+
+/* Marca temporal de guardado, para detectar que el archivo entrante es MÁS VIEJO que lo
+   que ya está cargado. normalizeStudy no la expone, así que se lee del crudo con los
+   mismos nombres que él mira. */
+function caSelloGuardado(raw){
+  const v = raw && (raw.fecha_guardado || raw.fechaGuardado || raw.ts);
+  if(v==null) return null;
+  const d = (typeof v==='number') ? new Date(v) : parseDate(v);
+  return (d && !isNaN(d)) ? d.getTime() : null;
+}
+
+/* Devuelve el arreglo fusionado y el desglose. No escribe nada: el llamador decide. */
+function caFusionar(existentes, entrantes, app){
+  const out = Array.isArray(existentes) ? existentes.slice() : [];
+  const idx = new Map();
+  let dupPrevios = 0;
+  out.forEach((raw,i)=>{
+    const {k} = caClaveEstudio(raw, app);
+    /* Se indexa la PRIMERA aparición. Si el almacenamiento ya traía duplicados —posible
+       en datos guardados antes de este cambio— sólo se actualiza esa, y las copias
+       viejas quedarían con valores distintos bajo la misma identidad: se cuentan para
+       poder decirlo. */
+    if(idx.has(k)) dupPrevios++; else idx.set(k, i);
+  });
+  const previos = out.length;
+  /* La foto del valor previo se toma PEREZOSAMENTE, justo antes de pisar cada uno.
+     Serializar el store entero por adelantado costaba un JSON.stringify por estudio
+     guardado —y una copia del store en memoria— para consultar después unos pocos
+     índices; con miles de estudios eso es un bloqueo del hilo principal en una tablet. */
+  const antes = new Map();
+  let nuevos=0, sinDoc=0, dupEnArchivo=0, masViejos=0;
+  const vistas = new Set();
+  const tocados = new Set();                     // índices previos que el archivo pisó
+  (entrantes||[]).forEach(raw=>{
+    const {k, fuerte} = caClaveEstudio(raw, app);
+    if(!fuerte) sinDoc++;
+    // Dos filas del MISMO archivo con la misma clave: gana la última.
+    if(vistas.has(k)) dupEnArchivo++;
+    vistas.add(k);
+    if(idx.has(k)){
+      const i = idx.get(k);
+      if(i < previos && !antes.has(i)) antes.set(i, caCanon(out[i]));
+      /* Reimportar un backup viejo "por las dudas" revierte estudios que después se
+         completaron, y como el total no cambia y el mensaje dice "actualizado" —que se
+         lee como "mejorado"— no queda ninguna señal. Gana el último importado, que es
+         el comportamiento pedido, pero se cuenta para poder avisarlo. */
+      const sNuevo = caSelloGuardado(raw), sViejo = caSelloGuardado(out[i]);
+      if(sNuevo!=null && sViejo!=null && sNuevo < sViejo) masViejos++;
+      out[i] = raw;
+      // Los agregados en ESTA importación quedaron en índices ≥ previos: pisar uno de
+      // esos es el duplicado interno del archivo, ya contado aparte.
+      if(i < previos) tocados.add(i);
+    }else{
+      idx.set(k, out.length); out.push(raw); nuevos++;
+    }
+  });
+  /* Estudios guardados que el archivo NO trae. El export de cada app es un snapshot
+     completo, así que un estudio ausente suele ser uno que se borró en la app de origen
+     —un paciente de prueba, uno cargado con la CI equivocada—. La fusión no propaga
+     borrados, y sin este conteo Analytics se queda con registros que ya no existen en
+     ninguna fuente, inflando el N y todos los denominadores sin que nada lo indique. */
+  let ausentes = 0;
+  for(let i=0;i<previos;i++){
+    const {k} = caClaveEstudio(out[i], app);
+    if(!vistas.has(k)) ausentes++;
+  }
+  /* Los contadores se sacan del ESTADO FINAL y no incrementando dentro del bucle. Con
+     un contador por vuelta, un estudio previo que el archivo trae dos veces se sumaba
+     dos veces a `actualizados`: "2 estudios actualizados" cuando cambió uno, y como
+     `sinCambios` se calculaba restando, salía 0 aunque hubiera un estudio intacto — y
+     sobre almacenamiento vacío llegaba a dar "-1 estudios sin cambios". Contando sobre
+     el resultado, cada estudio previo cae en exactamente una categoría. */
+  let actualizados=0, identicos=0;
+  tocados.forEach(i=>{ if(antes.get(i)===caCanon(out[i])) identicos++; else actualizados++; });
+  return {out, nuevos, actualizados, identicos, sinDoc, dupEnArchivo, dupPrevios, masViejos,
+          ausentes, previos, sinCambios: previos - tocados.size, total: out.length};
+}
+
 let _caImportApp=null;
 function caImportPick(appName){ _caImportApp=appName; const f=$('#caImportFile'); if(f){ f.value=''; f.click(); } }
-function caStatus(msg,isErr){ const el=$('#caImportStatus'); if(el){ el.textContent=msg; el.style.color=isErr?'var(--danger,#e5534b)':'var(--ok,#1baf7a)'; } }
+/* Tres estados y no dos: `true` error, `'warn'` completado con salvedades, y falso
+   éxito limpio. Sin el intermedio, un bloque que dice "3 estudios que ya tenías no
+   vienen en este archivo" salía en el mismo verde que una importación sin novedades. */
+function caStatus(msg,tipo){
+  const el=$('#caImportStatus'); if(!el) return;
+  el.textContent=msg;
+  el.style.color = tipo===true ? 'var(--danger,#e5534b)'
+                 : tipo==='warn' ? 'var(--warning,#b7770d)'
+                 : 'var(--ok,#1baf7a)';
+}
+/* Los botones de importar viven en un contenedor que se rearma entero en cada render,
+   así que se buscan en el momento y no se guarda la referencia. */
+function caImportBloquear(on){
+  document.querySelectorAll('#imp-botones button[data-importar]').forEach(b=>{ b.disabled=!!on; });
+}
+/* ¿Estas filas son de otra app? Cada una deja una huella determinista en el registro
+   crudo: ErgoSmart guarda el formulario en `form`, EcoEstrés en `vals`, EcoSmart en
+   `campos`. Se mira una muestra y sólo se rechaza cuando TODAS las filas con huella
+   apuntan a otra app: un empate o la ausencia de huella no alcanzan para acusar. */
+const CA_HUELLA = {ergo:'form', ecoestres:'vals', eco:'campos'};
+function caFormaAjena(filas, app){
+  const marcas = {};
+  filas.slice(0,20).forEach(r=>{
+    if(!r || typeof r!=='object') return;
+    for(const a in CA_HUELLA){ if(r[CA_HUELLA[a]] && typeof r[CA_HUELLA[a]]==='object') marcas[a]=(marcas[a]||0)+1; }
+  });
+  const conHuella = Object.keys(marcas);
+  if(!conHuella.length) return '';                       // sin huella no se puede afirmar nada
+  if(marcas[app]) return '';                             // alguna coincide con el destino
+  if(!CA_HUELLA[app]) return '';                         // CardioSalud no tiene huella propia
+  const otra = conHuella.sort((a,b)=>marcas[b]-marcas[a])[0];
+  return 'Los estudios de este archivo tienen la forma de '+(CA_LABELS[Object.keys(CA_APPKEY).find(n=>CA_APPKEY[n]===otra)]||otra)+
+         ', no la de '+CA_LABELS[Object.keys(CA_APPKEY).find(n=>CA_APPKEY[n]===app)]+'.';
+}
 function caHandleFile(file){
   const appName=_caImportApp; if(!file||!appName) return;
   const reader=new FileReader();
+  /* Estado "leyendo" y botones bloqueados. Sin esto: (a) durante los segundos que tarda
+     un archivo grande el panel muestra el ✅ de la importación ANTERIOR, así que no hay
+     ningún instante en que la pantalla diga la verdad; y (b) se puede lanzar una segunda
+     importación antes de que termine la primera, y como los dos resúmenes escriben en el
+     mismo nodo, el segundo pisa al primero — incluido un ❌ de cuota, que se pierde y
+     deja al médico creyendo que las dos entraron. */
+  caStatus('⏳ Leyendo el archivo…', false);
+  caImportBloquear(true);
+  const listo = ()=>caImportBloquear(false);
+  /* Un archivo que desapareció del disco entre el selector y la lectura, un volumen
+     desmontado o un permiso denegado en iPadOS caían en la nada: sin onerror no pasaba
+     absolutamente nada y quedaba el ✅ viejo en verde. */
+  reader.onerror = ()=>{ listo(); caStatus('❌ No se pudo leer el archivo. Puede haberse movido o borrado; volvé a elegirlo.', true); };
+  reader.onabort = reader.onerror;
   reader.onload=e=>{
+    listo();
     let data;
     try{ data=JSON.parse(e.target.result); }
     catch(err){ caStatus('❌ El archivo no es un JSON válido.',true); return; }
@@ -2054,20 +2265,143 @@ function caHandleFile(file){
     if(appField && normTxt(String(appField))!==normTxt(appName)){
       caStatus('❌ Este archivo parece ser de "'+appField+'", no de '+CA_LABELS[appName]+'. Verificá el botón usado.',true); return;
     }
-    try{ localStorage.setItem(CA_BYNAME[appName], JSON.stringify(estudios)); }
-    catch(err){ caStatus('❌ No se pudo guardar (¿almacenamiento lleno?).',true); return; }
-    CeiboRead.hidratar().then(()=>{ loadData(); renderCurrent(); });
-    const msg='✅ '+estudios.length+' estudios importados de '+CA_LABELS[appName];
-    caStatus(msg,false); if(typeof toast==='function') toast(msg);
+    const app = CA_APPKEY[appName];
+    /* Un archivo sin el campo `app` no se verificaba de ninguna forma. Mientras importar
+       reemplazaba, equivocarse de botón se arreglaba reimportando el archivo correcto;
+       ahora las filas equivocadas quedan MEZCLADAS con las buenas y el único remedio es
+       limpiar la app entera. La forma del registro delata su origen y está siempre. */
+    if(!appField){
+      const mal = caFormaAjena(estudios, app);
+      if(mal){ caStatus('❌ '+mal+' Este archivo no trae el campo "app", así que no se puede confirmar su origen: '+
+        'exportalo de nuevo desde la app o usá el botón que corresponde.', true); return; }
+    }
+    /* Filas que no son objetos. Un `null` dentro de `estudios` —que produce cualquier
+       export que filtre con map y devuelva undefined, o un hueco en el arreglo— se
+       guardaba tal cual, y a partir de ahí `loadData()` lanzaba en cada arranque: la app
+       quedaba a medias, SIN los botones de importar y limpiar (los pinta renderCurrent,
+       que ya no llegaba a correr), o sea sin ninguna forma de recuperarse desde la UI.
+       Los primitivos no lanzan pero son peores: entran como estudios fantasma con
+       identidad al azar y suman al denominador para siempre. */
+    const filas = estudios.filter(v=>v && typeof v==='object' && !Array.isArray(v));
+    const descartadas = estudios.length - filas.length;
+    if(!filas.length){
+      caStatus(descartadas
+        ? ('❌ El archivo trae '+descartadas+' fila'+(descartadas===1?'':'s')+' que no '+(descartadas===1?'es':'son')+
+           ' un estudio (vacías o mal formadas) y ninguna válida. No se cambió nada.')
+        : ('ℹ️ El archivo no contiene estudios. No se cambió nada: tus datos quedaron como estaban.'),
+        descartadas?true:'warn');   // ámbar: no falló, pero tampoco hizo lo que el médico esperaba
+      return;
+    }
+
+    /* Se fusiona contra los datos IMPORTADOS, que es lo único que esta clave posee. Si
+       la app dejó datos nativos en este mismo origen no se tocan: readAppRaw() deja de
+       mirarlos en cuanto existe la clave importada, que ya era así antes. */
+    const prev = readImportedEstado(app);
+    if(prev.estado==='error'){
+      caStatus('❌ Los datos de '+CA_LABELS[appName]+' que ya estaban guardados no se pueden leer (quedaron '+
+        'corruptos o incompletos). La importación se detuvo para no reemplazarlos por lo que traiga este '+
+        'archivo: todavía se pueden rescatar. Si no te interesan, usá «🗑️ Limpiar '+CA_LABELS[appName]+'» y '+
+        'volvé a importar.', true);
+      return;
+    }
+    const r = caFusionar(prev.arr, filas, app);
+    try{ localStorage.setItem(CA_BYNAME[appName], JSON.stringify(r.out)); }
+    catch(err){
+      /* La importación ahora ACUMULA, así que llenar la cuota pasó de improbable a
+         cuestión de tiempo. setItem no deja el valor a medias: si lanza, lo que había
+         sigue intacto, y conviene decirlo para que nadie asuma que perdió todo.
+         El total se suma sobre las cuatro apps: informar sólo el bucket de destino daba
+         "los 0 estudios que ya tenías siguen intactos" en un mensaje rojo cuando el
+         problema lo causaban las otras tres. */
+      const guardados = Object.keys(CA_APPKEY).reduce((n,x)=>n+caConteo(x),0);
+      const cuota = err && (err.name==='QuotaExceededError' || err.name==='NS_ERROR_DOM_QUOTA_REACHED');
+      caStatus(cuota
+        ? ('❌ No se pudo guardar: el almacenamiento del navegador está lleno. Los '+guardados+' estudios que ya '+
+           'tenías (sumando las cuatro apps) siguen intactos; lo que no entró es este archivo. Usá «🗑️ Limpiar» '+
+           'sobre alguna app para hacer lugar y volvé a importar.')
+        : ('❌ No se pudo guardar en este navegador ('+((err&&err.name)||'error desconocido')+'). Los '+guardados+
+           ' estudios que ya tenías siguen intactos. Si estás en una ventana privada, el almacenamiento puede '+
+           'estar bloqueado: probá en una ventana normal.'), true);
+      return;
+    }
+
+    const pl=(n,s1,p1)=>n+' '+(n===1?s1:p1);
+    let msg='✅ Importación completada: '+pl(r.nuevos,'estudio nuevo agregado','estudios nuevos agregados')+
+      ' · '+pl(r.actualizados,'estudio actualizado','estudios actualizados');
+    /* "Idénticos" va aparte de "actualizados": reimportar el mismo archivo por las dudas
+       es lo más común que va a pasar, y anunciar "850 actualizados" cuando no cambió ni
+       un dato se lee como que algo se sobrescribió. */
+    if(r.identicos) msg+=' · '+pl(r.identicos,'estudio ya estaba idéntico','estudios ya estaban idénticos');
+    msg+=' · '+pl(r.sinCambios,'estudio sin cambios','estudios sin cambios')+
+      ' · Total: '+pl(r.total,'estudio','estudios');
+
+    /* Las salvedades se acumulan aparte y NO se mezclan con el resumen: son casos en los
+       que el conteo de arriba no cuenta toda la historia. */
+    const avisos=[];
+    if(descartadas) avisos.push('⚠️ Se descartaron '+pl(descartadas,'fila del archivo que no era un estudio',
+      'filas del archivo que no eran estudios')+' (vacías o mal formadas). El resto se importó normalmente.');
+    if(r.ausentes) avisos.push('⚠️ '+(r.ausentes===1
+      ? '1 estudio que ya tenías no viene en este archivo y se conservó. Si lo borraste'
+      : r.ausentes+' estudios que ya tenías no vienen en este archivo y se conservaron. Si los borraste')+
+      ' en '+CA_LABELS[appName]+', acá '+(r.ausentes===1?'sigue':'siguen')+' contando: importar suma y no propaga '+
+      'borrados. Para que Analytics sea un espejo exacto de la app, limpiá esta app y volvé a importar.');
+    if(r.masViejos) avisos.push('⚠️ '+pl(r.masViejos,'estudio del archivo era anterior','estudios del archivo eran anteriores')+
+      ' a la versión que ya tenías guardada, y la pisó igual. Si importaste un backup viejo, revisá: puede haber '+
+      'revertido datos que ya estaban completos.');
+    if(r.dupEnArchivo) avisos.push('⚠️ '+pl(r.dupEnArchivo,'fila del archivo compartía','filas del archivo compartían')+
+      ' identidad con otra del mismo archivo, así que de cada grupo quedó sólo la última.');
+    if(r.sinDoc) avisos.push('ℹ️ '+pl(r.sinDoc,'estudio venía','estudios venían')+' sin identificador y sin documento+fecha. '+
+      'Esos no se pueden reconocer entre importaciones: se comparan por su contenido, así que reimportar el mismo '+
+      'archivo no los duplica, pero si alguno se editó en la app de origen va a entrar como un estudio aparte.');
+    if(r.dupPrevios) avisos.push('⚠️ Ya había '+pl(r.dupPrevios,'estudio repetido','estudios repetidos')+
+      ' con la misma identidad entre los datos guardados de antes. La actualización alcanza a uno solo de cada '+
+      'grupo; conviene limpiar esta app y reimportar desde cero.');
+
+    /* El color lo decide si hay salvedades. Pintar de verde un texto que dice "perdiste
+       tres estudios" o "tenés duplicados en el denominador" es peor que no decirlo: el
+       color se lee antes que la letra. */
+    caStatus(avisos.length ? (msg+'\n\n'+avisos.join('\n')) : msg, avisos.length?'warn':false);
+
+    /* Mismo patrón que caLimpiarApp: .then(f,f) —no .then(f).catch(f), que ejecutaría f
+       dos veces si f lanza— y el cuerpo en try/catch. Sin esto, si loadData() lanzaba,
+       renderCurrent() y caRenderLimpiar() no corrían y quedaban en pantalla el ✅ verde,
+       el KPI con el número viejo y el botón de limpiar con el conteo anterior: tres
+       cifras que se contradicen, las tres presentadas como estado normal. */
+    const refrescar=()=>{
+      try{ loadData(); renderCurrent(); caRenderLimpiar(); }
+      catch(e2){
+        console.error('[importar] falló la recarga tras importar',appName,e2);
+        caStatus('⚠️ Los datos se guardaron, pero la pantalla no se pudo actualizar. Recargá la página para verlos.', true);
+        return;
+      }
+      if(typeof toast==='function'){
+        const noOp = !r.nuevos && !r.actualizados;
+        toast(noOp ? ('✅ '+CA_LABELS[appName]+': ya estaba todo importado')
+                   : ('✅ '+CA_LABELS[appName]+': +'+r.nuevos+' nuevos, '+r.actualizados+' actualizados'));
+      }
+    };
+    if(window.CeiboRead && typeof CeiboRead.hidratar==='function') CeiboRead.hidratar().then(refrescar,refrescar);
+    else refrescar();
   };
   reader.readAsText(file);
 }
 
+let _loadDataSalteados = 0;
 function loadData(){
   STUDIES=[]; PATIENTS=new Map();
+  _loadDataSalteados = 0;
   for(const app in APPS){
     const arr = readAppRaw(app);
-    for(const raw of arr){ STUDIES.push(normalizeStudy(raw, app)); }
+    /* Un registro malo NO puede impedir el arranque. Antes, un `null` guardado dentro de
+       los datos importados hacía lanzar a normalizeStudy acá, y como init() llama a
+       loadData() sin protección, se caían aplicarModo, renderAppFilterBar, setupMobileNav
+       y switchView: la app quedaba mostrando el dashboard vacío y SIN los botones de
+       importar y limpiar —los pinta renderCurrent, que nunca llegaba a correr—, o sea sin
+       ninguna forma de arreglarlo desde la interfaz. Ahora se saltea y se cuenta. */
+    for(const raw of (Array.isArray(arr)?arr:[])){
+      try{ STUDIES.push(normalizeStudy(raw, app)); }
+      catch(e){ _loadDataSalteados++; console.error('[loadData] estudio ilegible salteado en',app,e); }
+    }
   }
   // indexar pacientes
   for(const s of STUDIES){
