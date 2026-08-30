@@ -344,6 +344,29 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 /* ══ Dashboard: panel de importación y tarjetas por app ═════════════════════ */
 .imp-wrap{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start;}
 @media(max-width:760px){.imp-wrap{grid-template-columns:1fr;}}
+/* Botón de descarga bajo cada gráfica: discreto, no compite con la figura. */
+.png-fila{display:flex;justify-content:flex-end;margin-top:8px;}
+.btn-png{font-size:11.5px;padding:5px 12px;color:var(--text-2);}
+.btn-png:hover{color:var(--accent);border-color:var(--accent);}
+/* ── Desplegables Importar ▾ / Limpiar ▾ de Plataforma ── */
+.ca-io{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;}
+.ca-io-wrap{position:relative;display:inline-block;}
+.ca-io-btn{display:inline-flex;align-items:center;gap:5px;min-height:36px;}
+.ca-io-chev{font-size:.62rem;transition:transform .15s;}
+.ca-io-btn[aria-expanded="true"] .ca-io-chev{transform:rotate(180deg);}
+.ca-io-menu{display:none;position:absolute;top:calc(100% + 5px);left:0;z-index:260;width:270px;
+  max-width:calc(100vw - 24px);background:var(--card,#fff);border:1px solid var(--border,#d9dee5);
+  border-radius:9px;padding:5px;box-shadow:0 10px 28px rgba(0,0,0,.22);}
+.ca-io-menu.open{display:block;}
+.ca-io-op{display:block;width:100%;text-align:left;background:none;border:none;color:var(--text-1,#111);
+  font-family:inherit;font-size:12.5px;font-weight:600;padding:9px 10px;border-radius:6px;cursor:pointer;line-height:1.3;}
+.ca-io-op:hover:not(:disabled){background:var(--bg-2,rgba(0,0,0,.05));}
+.ca-io-op:disabled{opacity:.45;cursor:not-allowed;}
+.ca-io-op small{display:block;color:var(--text-2);font-size:11px;font-weight:400;margin-top:2px;}
+.ca-io-op.peligro:hover:not(:disabled){color:var(--critical);}
+/* Capa invisible que cierra al tocar afuera. */
+#ca-io-ov{display:none;position:fixed;inset:0;z-index:259;background:transparent;}
+#ca-io-ov.open{display:block;}
 .imp-botones{display:flex;flex-direction:column;gap:10px;min-width:260px;}
 .imp-par{display:flex;flex-direction:column;gap:4px;}
 .imp-botones .btn{width:100%;justify-content:flex-start;text-align:left;}
@@ -847,6 +870,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <!-- Se arma en JS: el botón de limpiar lleva el conteo y su estado depende de
                  si hay datos, así que tiene que rearmarse en cada render. -->
             <div class="imp-botones" id="imp-botones"></div>
+            <div id="ca-io-ov"></div>
           </div>
           <input type="file" id="caImportFile" accept="application/json,.json" style="display:none">
           <!-- pre-line: el resumen de importación lleva las salvedades en líneas
@@ -868,11 +892,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
       <section class="view" id="view-poblacion">
         <div id="popKpis" class="grid g4"></div>
         <div class="grid g2" style="margin-top:14px;">
-          <div class="card"><h3 class="sub" style="margin-top:0">Distribución de FEVI (EcoSmart)</h3><div class="chartbox"><canvas id="chFevi"></canvas></div><div class="hint" id="feviHint"></div></div>
+          <div class="card"><h3 class="sub" style="margin-top:0">Distribución de FEVI (EcoSmart)</h3><div class="chartbox"><canvas id="chFevi"></canvas></div><div class="hint" id="feviHint"></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="chFevi" data-pngbase="Histograma_FEVI">📥 Descargar PNG (300 DPI)</button></div></div>
           <div class="card"><h3 class="sub" style="margin-top:0">Distribución por sexo</h3><div class="chartbox"><canvas id="chSexo"></canvas></div></div>
         </div>
         <div class="grid g2" style="margin-top:14px;">
-          <div class="card"><h3 class="sub" style="margin-top:0">Distribución etaria</h3><div class="chartbox"><canvas id="chEdad"></canvas></div></div>
+          <div class="card"><h3 class="sub" style="margin-top:0">Distribución etaria</h3><div class="chartbox"><canvas id="chEdad"></canvas></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="chEdad" data-pngbase="Histograma_Edad">📥 Descargar PNG (300 DPI)</button></div></div>
           <div class="card"><h3 class="sub" style="margin-top:0">METs promedio por mes (ErgoSmart)</h3><div class="chartbox"><canvas id="chMets"></canvas></div><div class="hint" id="metsHint"></div></div>
         </div>
         <h3 class="sub">Factores de riesgo y hallazgos prevalentes</h3>
@@ -1061,7 +1085,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           <div id="est-scatter-wrap" class="card" style="display:none;margin-bottom:16px;position:relative;">
             <button onclick="estCloseScatter()" title="Cerrar" style="position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text-2);font-size:18px;cursor:pointer;">✕</button>
             <div id="est-scatter-title" style="font-weight:600;margin-bottom:10px;"></div>
-            <div style="position:relative;height:340px;"><canvas id="est-scatter"></canvas></div>
+            <div style="position:relative;height:340px;"><canvas id="est-scatter"></canvas></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="est-scatter" data-pngbase="Dispersion">📥 Descargar PNG (300 DPI)</button></div>
           </div>
           <div class="card" style="margin-bottom:16px;">
             <h3 class="section" style="font-size:15px;display:flex;align-items:center;gap:6px;">
@@ -1093,7 +1117,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
               </dl>
               <div class="resultado" id="expl-forest-res">Todavía sin datos para resumir.</div>
             </div>
-            <div style="position:relative;height:360px;"><canvas id="est-forest"></canvas></div>
+            <div style="position:relative;height:360px;"><canvas id="est-forest"></canvas></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="est-forest" data-pngbase="ForestPlot">📥 Descargar PNG (300 DPI)</button></div>
           </div>
           <div class="card">
             <h3 class="section" style="font-size:15px;display:flex;align-items:center;gap:6px;">
@@ -1127,7 +1151,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
               <div class="resultado" id="expl-heat-res">Todavía sin datos para resumir.</div>
             </div>
             <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">FEVI · E/e' · PSAP · TAPSE · Vol AI · METs — azul (−) → tono del fondo (0) → rojo (+).</div>
-            <div style="position:relative;height:360px;"><canvas id="est-heatmap"></canvas></div>
+            <div style="position:relative;height:360px;"><canvas id="est-heatmap"></canvas></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="est-heatmap" data-pngbase="Heatmap">📥 Descargar PNG (300 DPI)</button></div>
           </div>
         </div>
 
@@ -1323,7 +1347,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             </div>
             <div id="roc-aviso"></div>
             <div id="roc-wrap" style="display:none;">
-              <div style="position:relative;height:340px;max-width:420px;margin:6px auto 0;"><canvas id="roc-canvas"></canvas></div>
+              <div style="position:relative;height:340px;max-width:420px;margin:6px auto 0;"><canvas id="roc-canvas"></canvas></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="roc-canvas" data-pngbase="ROC">📥 Descargar PNG (300 DPI)</button></div>
               <div id="roc-tabla" style="margin-top:14px;"></div>
             </div>
           </div>
@@ -1426,7 +1450,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div style="margin-top:16px;">
               <div class="hint" style="margin-bottom:4px;"><b>Curva de poder</b> — cómo crece la probabilidad
                 de detectar el efecto a medida que sumás pacientes.</div>
-              <div style="position:relative;height:320px;max-width:560px;"><canvas id="pw-canvas"></canvas></div>
+              <div style="position:relative;height:320px;max-width:560px;"><canvas id="pw-canvas"></canvas></div><div class="png-fila"><button type="button" class="btn btn-ghost btn-png" data-png="pw-canvas" data-pngbase="PoderEstadistico">📥 Descargar PNG (300 DPI)</button></div>
             </div>
           </div>
         </div>
@@ -2188,20 +2212,64 @@ function caConteo(nombre){
   return Array.isArray(arr) ? arr.length : 0;
 }
 
-/* Importar y limpiar, apareados por app. El de limpiar muestra el conteo y queda
-   deshabilitado —no oculto— cuando no hay datos: si desapareciera, la columna cambiaría
-   de altura al importar y no se vería que la acción existe. */
+/* Dos desplegables en lugar de los ocho botones que había (importar y limpiar por cada
+   una de las cuatro apps). El conteo sale de localStorage en cada render, así que el
+   número del menú, el del confirm y lo que desaparece son siempre el mismo.
+   Las apps sin estudios quedan DESHABILITADAS en Limpiar —no ocultas—: si desaparecieran,
+   la lista cambiaría de largo al importar y no se vería que la acción existe. */
+/* Bandera de importación en curso. Vive fuera de caRenderLimpiar porque esa función
+   reconstruye el disparador en cada render: sin recordar el estado, un render disparado
+   por cualquier otra cosa —un cambio de filtro, el refresco de datos— devolvía el botón
+   habilitado en medio de una importación y se podía arrancar una segunda encima. */
+let _caImportando=false;
+
 function caRenderLimpiar(){
   const host=$('#imp-botones'); if(!host) return;
-  host.innerHTML = Object.keys(CA_BYNAME).map(n=>{
-    const c=caConteo(n), lbl=esc(CA_LABELS[n]);
-    return '<div class="imp-par">'+
-      '<button type="button" class="btn" data-importar="'+esc(n)+'">📥 Importar '+lbl+'</button>'+
-      '<button type="button" class="btn btn-limpiar" data-limpiar="'+esc(n)+'"'+
-        (c?'':' disabled title="No hay estudios importados de '+lbl+'"')+'>'+
-        '🗑️ Limpiar '+lbl+' ('+c+' estudio'+(c===1?'':'s')+')</button>'+
-    '</div>';
+  /* Se cierran los desplegables ANTES de reescribir el contenedor. El overlay
+     (#ca-io-ov) vive FUERA de #imp-botones, así que sobrevivía al innerHTML: el menú
+     desaparecía y quedaba una capa invisible a pantalla completa con z-index 259
+     comiéndose todos los clics de la aplicación. Se veía como que la app se colgó, y
+     alcanzaba con dejar un menú abierto y que ocurriera cualquier re-render. */
+  if(typeof caIOCerrar==='function') caIOCerrar();
+  const apps=Object.keys(CA_BYNAME);
+  const conteos={}; apps.forEach(n=>conteos[n]=caConteo(n));
+  const total=apps.reduce((a,n)=>a+conteos[n],0);
+  const plural=c=>c+' estudio'+(c===1?'':'s');
+
+  const opImportar=apps.map(n=>{
+    const lbl=esc(CA_LABELS[n]), c=conteos[n];
+    // Deshabilitadas también durante una importación: hoy el disparador ya está
+    // bloqueado y no se puede abrir el menú, pero si mañana se abre por otra vía las
+    // opciones no deben quedar activas a mitad de una importación en curso.
+    return '<button type="button" class="ca-io-op" data-importar="'+esc(n)+'"'+
+      (_caImportando?' disabled':'')+'>'+lbl+
+      '<small>'+(c?'ya hay '+plural(c)+' — se fusiona con lo importado':'sin datos importados todavía')+'</small></button>';
   }).join('');
+  const opLimpiar=apps.map(n=>{
+    const lbl=esc(CA_LABELS[n]), c=conteos[n];
+    return '<button type="button" class="ca-io-op peligro" data-limpiar="'+esc(n)+'"'+
+      (c?'':' disabled title="No hay estudios importados de '+lbl+'"')+'>'+lbl+
+      '<small>'+(c?plural(c)+' — se borran del navegador':'nada para borrar')+'</small></button>';
+  }).join('');
+
+  host.innerHTML=
+    '<div class="ca-io">'+
+      '<div class="ca-io-wrap">'+
+        '<button type="button" class="btn ca-io-btn" id="ca-io-btn-imp" aria-haspopup="true" aria-expanded="false" '+
+          'aria-controls="ca-io-menu-imp" data-caio="imp"'+
+          (_caImportando?' disabled title="Importación en curso…"':'')+
+          '>📥 Importar <span class="ca-io-chev">▾</span></button>'+
+        '<div class="ca-io-menu" id="ca-io-menu-imp" role="menu">'+opImportar+'</div>'+
+      '</div>'+
+      '<div class="ca-io-wrap">'+
+        '<button type="button" class="btn ca-io-btn" id="ca-io-btn-lim" aria-haspopup="true" aria-expanded="false" '+
+          'aria-controls="ca-io-menu-lim" data-caio="lim"'+(total?'':' disabled title="No hay nada importado"')+
+          '>🗑️ Limpiar <span class="ca-io-chev">▾</span></button>'+
+        '<div class="ca-io-menu" id="ca-io-menu-lim" role="menu">'+opLimpiar+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11.5px;color:var(--text-2);margin-top:8px;">'+
+      (total?plural(total)+' importados en total':'Todavía no importaste ningún estudio')+'</div>';
   /* Si loadData tuvo que saltear registros ilegibles, hay que decirlo: son estudios que
      están guardados y NO entran en ningún conteo ni en ninguna estadística, así que sin
      este cartel la única señal sería un N más bajo de lo esperado. */
@@ -2214,6 +2282,36 @@ function caRenderLimpiar(){
       ' fuera de todos los cálculos (ver la consola). Volvé a exportar desde la app de origen e importá de nuevo; '+
       'si persiste, limpiá esa app y reimportá.</div>';
   }
+}
+
+/* ── Apertura y cierre de los dos desplegables ── */
+function caIOCerrar(){
+  ['imp','lim'].forEach(k=>{
+    const m=document.getElementById('ca-io-menu-'+k), b=document.getElementById('ca-io-btn-'+k);
+    if(m){ m.classList.remove('open'); m.style.transform=''; }
+    if(b) b.setAttribute('aria-expanded','false');
+  });
+  const o=document.getElementById('ca-io-ov'); if(o) o.classList.remove('open');
+}
+function caIOToggle(cual){
+  const m=document.getElementById('ca-io-menu-'+cual); if(!m) return;
+  const abrir=!m.classList.contains('open');
+  caIOCerrar();
+  if(!abrir) return;
+  m.classList.add('open');
+  const b=document.getElementById('ca-io-btn-'+cual); if(b) b.setAttribute('aria-expanded','true');
+  const o=document.getElementById('ca-io-ov'); if(o) o.classList.add('open');
+  /* Se encuadra MIDIENDO: el panel cuelga a la izquierda del botón, y en pantallas
+     angostas —o con la columna de importación corrida a la derecha— se salía del
+     viewport. Deslizarlo lo justo siempre tiene solución mientras sea más angosto que
+     la ventana, que es lo que garantiza el max-width del CSS. */
+  m.style.transform='';
+  const M=8, W=document.documentElement.clientWidth||window.innerWidth;
+  const r=m.getBoundingClientRect();
+  let dx=0;
+  if(r.left<M) dx=M-r.left;
+  else if(r.right>W-M) dx=(W-M)-r.right;
+  if(dx) m.style.transform='translateX('+Math.round(dx)+'px)';
 }
 
 function caLimpiarApp(nombre){
@@ -2394,7 +2492,16 @@ function caStatus(msg,tipo){
 /* Los botones de importar viven en un contenedor que se rearma entero en cada render,
    así que se buscan en el momento y no se guarda la referencia. */
 function caImportBloquear(on){
+  /* El estado se GUARDA además de aplicarse: caRenderLimpiar reconstruye el disparador
+     en cada render y sin la bandera lo devolvía habilitado en plena importación. */
+  _caImportando=!!on;
   document.querySelectorAll('#imp-botones button[data-importar]').forEach(b=>{ b.disabled=!!on; });
+  /* También el disparador del desplegable, y se cierra si estaba abierto: con sólo las
+     opciones deshabilitadas, el menú seguía abriéndose durante una importación en curso
+     y mostraba cuatro apps grises sin decir por qué. */
+  const t=document.getElementById('ca-io-btn-imp');
+  if(t){ t.disabled=!!on; t.title=on?'Importación en curso…':''; }
+  if(on && typeof caIOCerrar==='function') caIOCerrar();
 }
 /* ¿Estas filas son de otra app? Cada una deja una huella determinista en el registro
    crudo: ErgoSmart guarda el formulario en `form`, EcoEstrés en `vals`, EcoSmart en
@@ -2684,6 +2791,153 @@ function makeChart(id,cfg){
   charts[id]=new Chart(el.getContext('2d'),cfg);return charts[id];
 }
 function seriesColors(){return ['--series-1','--series-2','--series-3','--series-4','--series-5','--series-6','--series-7','--series-8'].map(cssv);}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   EXPORTAR GRÁFICAS A PNG DE ALTA RESOLUCIÓN
+
+   NO se reescala el canvas de pantalla. Ampliar ×3 con drawImage no agrega ni un
+   detalle: interpola los mismos píxeles y el texto sale borroso, que es lo contrario
+   de "las fuentes y las líneas escalan proporcionalmente". Lo que se hace es
+   RE-DIBUJAR a mayor resolución: se le sube el devicePixelRatio a la instancia de
+   Chart.js y se le pide un resize, con lo cual agranda el búfer y escala la
+   transformación del contexto — tipografías y trazos se rasterizan de nuevo al triple
+   de puntos. Después se restaura, para no dejar la pantalla con un canvas tres veces
+   más pesado. Verificado: un canvas de 300×280 CSS pasa de un búfer de 600×560 a uno
+   de 900×840 y vuelve a 600×560 al terminar.
+
+   "300 DPI" no es una etiqueta: un PNG no tiene DPI, tiene píxeles. Se le escribe el
+   chunk pHYs con la densidad, que es lo que hace que Word o InDesign lo coloquen al
+   tamaño físico correcto en vez de tratarlo como 96 DPI y mostrarlo gigante.
+   ══════════════════════════════════════════════════════════════════════════════ */
+const CA_PNG_ESC = 3, CA_PNG_DPI = 300;
+
+function _caCRC32(buf){
+  let c, t=_caCRC32.t;
+  if(!t){ t=_caCRC32.t=new Uint32Array(256);
+    for(let n=0;n<256;n++){ c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; } }
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<buf.length;i++) crc=t[(crc^buf[i])&0xFF]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+/* Inserta el chunk pHYs después del IHDR. Si lo que llega no es un PNG conforme se
+   devuelve intacto: escribir a ciegas en el offset 33 daría un archivo corrupto que
+   igual se descarga. */
+function caPngConDPI(bytes,dpi){
+  if(bytes.length<45) return bytes;
+  const firma=[137,80,78,71,13,10,26,10];
+  for(let i=0;i<8;i++) if(bytes[i]!==firma[i]) return bytes;
+  const dvIn=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(dvIn.getUint32(8)!==13) return bytes;
+  if(String.fromCharCode(bytes[12],bytes[13],bytes[14],bytes[15])!=='IHDR') return bytes;
+  const ppm=Math.round(dpi/0.0254);                 // píxeles por metro
+  const datos=new Uint8Array(13);
+  datos.set([0x70,0x48,0x59,0x73],0);               // "pHYs"
+  const dv=new DataView(datos.buffer);
+  dv.setUint32(4,ppm); dv.setUint32(8,ppm); datos[12]=1;   // unidad 1 = metro
+  const chunk=new Uint8Array(21);
+  const dv2=new DataView(chunk.buffer);
+  dv2.setUint32(0,9);
+  chunk.set(datos,4);
+  dv2.setUint32(17,_caCRC32(datos));
+  const out=new Uint8Array(bytes.length+chunk.length);
+  out.set(bytes.subarray(0,33),0);
+  out.set(chunk,33);
+  out.set(bytes.subarray(33),33+chunk.length);
+  return out;
+}
+
+const _caLimpiaNom = s => String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40);
+
+/* Partes variables del nombre, leídas de los propios controles: una carpeta con cuatro
+   "CeiboAnalytics_ROC.png" no se puede desarmar tres meses después. */
+function caPngExtras(canvasId){
+  const txtSel=id=>{ const s=document.getElementById(id);
+    return (s&&s.selectedOptions&&s.selectedOptions[0])?s.selectedOptions[0].textContent:''; };
+  switch(canvasId){
+    case 'roc-canvas':  return [txtSel('roc-var'), txtSel('roc-out')];
+    case 'est-scatter': return [(document.getElementById('est-scatter-title')||{}).textContent||''];
+    default: return [];
+  }
+}
+function caPngNombre(base,canvasId){
+  return ['CeiboAnalytics',_caLimpiaNom(base)]
+    .concat(caPngExtras(canvasId).map(_caLimpiaNom).filter(Boolean))
+    .filter(Boolean).join('_')+'.png';
+}
+
+async function caDescargarPNG(canvasId,base){
+  const el=document.getElementById(canvasId);
+  const ch=(typeof Chart!=='undefined'&&Chart.getChart)?Chart.getChart(el):null;
+  if(!ch){ toast('Esa gráfica todavía no está dibujada'); return; }
+  /* Los colores de texto, ejes y grilla salen de variables CSS que se resuelven CUANDO
+     se construye la gráfica (baseOpts lee --text-2, --muted, --grid). En modo noche son
+     claros, así que sobre fondo blanco el PNG sale con los números y los ejes
+     invisibles: se ve bien en miniatura y aparece vacío al pegarlo en el documento. Un
+     mapa de bits ya dibujado no se puede recolorear, así que se avisa en lugar de
+     entregar una figura ilegible. */
+  if(document.documentElement.getAttribute('data-theme')==='dark'){
+    toast('Pasá a ☀ modo día antes de descargar: en modo noche el texto de la gráfica es claro y sobre fondo blanco no se lee');
+    return;
+  }
+  const dprPrev=ch.options.devicePixelRatio;
+  let off=null;
+  try{
+    /* stop() ANTES del resize. Chart.js aplaza el redimensionado mientras su animador
+       está corriendo y aplica el pendiente recién en el cuadro siguiente, que depende de
+       requestAnimationFrame. Sin parar la animación, el búfer no se agrandaba y se
+       capturaba el bitmap anterior: el PNG salía perfecto en todo lo demás —fondo
+       blanco, pHYs de 300, nombre correcto— pero al DOBLE del tamaño CSS en vez del
+       triple. O sea, un archivo de 200 DPI etiquetado como de 300, que no se nota hasta
+       imprimirlo. Con stop() primero, resize() es sincrónico. */
+    ch.stop();
+    ch.options.devicePixelRatio=CA_PNG_ESC;
+    ch.resize();
+    ch.render();
+    /* Red de contención por si alguna versión de Chart.js igual lo difiere. Se sondea con
+       setTimeout y NO con requestAnimationFrame: rAF no corre con la pestaña en segundo
+       plano, y ahí la descarga se quedaba colgada sin decir nada. */
+    const espera=Math.round(el.clientWidth*CA_PNG_ESC);
+    for(let i=0;i<25&&el.width!==espera;i++) await new Promise(r=>setTimeout(r,30));
+    if(el.width!==espera){
+      console.warn('[png] el búfer quedó en',el.width,'y se esperaba',espera);
+      toast('No se pudo re-dibujar la gráfica en alta resolución; probá de nuevo');
+      return;
+    }
+    /* La composición sobre blanco se hace ACÁ, mientras el búfer todavía está en alta
+       resolución, copiando el canvas directamente con drawImage. Antes se pasaba por
+       toBase64Image() y se volvía a cargar en un Image: además de ida y vuelta inútil
+       —el canvas se puede dibujar sobre otro canvas sin serializar—, el onload de una
+       imagen creada desde un data URL no se dispara si la pestaña no está pintando, y
+       ahí la descarga se quedaba colgada sin toast ni error. */
+    off=document.createElement('canvas');
+    off.width=el.width; off.height=el.height;
+    const octx=off.getContext('2d');
+    // Fondo blanco OPACO: Chart.js dibuja sobre transparente y un PNG con alfa deja el
+    // texto negro invisible sobre el fondo oscuro de una presentación; además varias
+    // revistas rechazan el canal alfa.
+    octx.fillStyle='#ffffff'; octx.fillRect(0,0,off.width,off.height);
+    octx.drawImage(el,0,0);
+  }catch(e){
+    console.warn('[png]',e); toast('No se pudo generar el PNG (ver consola)'); return;
+  }finally{
+    // Se restaura SIEMPRE, incluso si falló: si no, la pantalla queda con un búfer tres
+    // veces más grande por cada gráfica exportada y el resto de la sesión va más lento.
+    try{ ch.stop(); ch.options.devicePixelRatio=dprPrev; ch.resize(); ch.render(); }
+    catch(e){ console.warn('[png] no se pudo restaurar la resolución de pantalla',e); }
+  }
+  if(!off){ toast('No se pudo capturar la gráfica'); return; }
+  off.toBlob(async function(blob){
+    if(!blob){ toast('El navegador no pudo generar el PNG'); return; }
+    const png=caPngConDPI(new Uint8Array(await blob.arrayBuffer()),CA_PNG_DPI);
+    const u=URL.createObjectURL(new Blob([png],{type:'image/png'}));
+    const a=document.createElement('a');
+    a.href=u; a.download=caPngNombre(base,canvasId); a.click();
+    setTimeout(()=>URL.revokeObjectURL(u),1000);
+    const mm=(off.width/CA_PNG_DPI*25.4).toFixed(0)+' × '+(off.height/CA_PNG_DPI*25.4).toFixed(0)+' mm';
+    toast('PNG descargado — '+off.width+'×'+off.height+' px ('+mm+' a 300 DPI)');
+  },'image/png');
+}
 
 /* ============================================================
    MÓDULO 1 · DASHBOARD
@@ -8673,11 +8927,19 @@ function bindEvents(){
   /* Delegado sobre el contenedor: caRenderLimpiar reescribe el innerHTML en cada render,
      así que un listener por botón se perdería con el primer import. */
   { const cl=$('#imp-botones'); if(cl) cl.addEventListener('click',e=>{
+      const tg=e.target.closest('button[data-caio]');
+      if(tg){ if(!tg.disabled) caIOToggle(tg.dataset.caio); return; }
       const imp=e.target.closest('button[data-importar]');
-      if(imp){ caImportPick(imp.dataset.importar); return; }
+      // Se cierra el menú ANTES de abrir el selector de archivo: si no, queda flotando
+      // sobre el diálogo del sistema y sigue ahí al volver.
+      if(imp && !imp.disabled){ caIOCerrar(); caImportPick(imp.dataset.importar); return; }
       const b=e.target.closest('button[data-limpiar]');
-      if(b && !b.disabled) caLimpiarApp(b.dataset.limpiar);
+      if(b && !b.disabled){ caIOCerrar(); caLimpiarApp(b.dataset.limpiar); }
     }); }
+  { const ov=$('#ca-io-ov'); if(ov) ov.addEventListener('click',caIOCerrar); }
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') caIOCerrar(); });
+  // Rotar el celular deja el translateX calculado para el ancho anterior.
+  window.addEventListener('resize',()=>{ if(document.querySelector('.ca-io-menu.open')) caIOCerrar(); });
   $('#dashAppFilter').addEventListener('change',e=>{const cb=e.target.closest('input[data-app]');if(!cb)return;dashAppFilter[cb.dataset.app]=cb.checked;const lbl=cb.closest('.app-toggle');if(lbl){lbl.classList.toggle('on',cb.checked);lbl.classList.toggle('off',!cb.checked);}renderCurrent();});  // renderCurrent: rearma títulos y resúmenes
   $('#themeBtn').addEventListener('click',toggleTheme);
   // renderCurrent() y no renderMedico(): es donde se rearman los títulos y resúmenes.
@@ -8691,6 +8953,13 @@ function bindEvents(){
       const cb=e.target.closest('input[data-cov]'); if(!cb) return;
       mvToggleCov(cb.dataset.cov, cb.checked);
     }); }
+  /* Delegado en document: los botones de PNG viven en markup estático, pero algunas
+     tarjetas se ocultan y se muestran, y el de dispersión aparece recién al elegir un
+     par. Un listener por botón habría que reengancharlo en cada render. */
+  document.addEventListener('click',function(e){
+    const b=e.target.closest('button[data-png]');
+    if(b) caDescargarPNG(b.dataset.png, b.dataset.pngbase||'Grafica');
+  });
   $('#rptYear').addEventListener('change',renderReportPreview);
   $('#rptLogo').addEventListener('change',e=>{if(e.target.files[0])loadLogo(e.target.files[0]);});
   $('#genPdf').addEventListener('click',generatePDF);
