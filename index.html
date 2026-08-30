@@ -1464,13 +1464,43 @@ const _PDF_MAP = {
   '🟢':'[verde]','🟡':'[amarillo]','🔴':'[rojo]','⚫':'[negro]','🟠':'[naranja]','⚪':'[blanco]',
   /* Marcas de las tablas de regresión y de la comparación con guías. Sin mapear caían en
      la red final de pdfSafe y el PDF de la guía imprimía "una marca (? ? ?)". */
-  '●':'[lleno]','◐':'[medio]','○':'[vacio]'
+  '●':'[lleno]','◐':'[medio]','○':'[vacio]',
+  /* Espacios raros que llegan pegados a las cifras al copiar de la web o de una respuesta
+     del modelo: sin mapear salían como '?' en medio de un número ("IC 95 ? %"). */
+  /* U+202F y U+2007 son no-separables por definición: son el separador de miles y el
+     que va entre cifra y unidad ("IC 95 %", "12 345"). Pasarlos a espacio normal les
+     saca esa propiedad y splitTextToSize parte ahí: la línea termina en "IC 95" y la
+     siguiente arranca con "%". Van a U+00A0, que es Latin-1 y jsPDF dibuja. */
+  '\u2009':'\u00a0','\u202f':'\u00a0','\u2007':'\u00a0','\u2008':' ','\u200a':' ',
+  /* ° es Latin-1: convertir ℃ en "C" pelado tira el grado de una unidad clínica.
+     ‹ › son COMILLAS, no operadores: pasarlas a < > en un texto lleno de "p<0,05"
+     hace que una frase entrecomillada parezca una comparación. */
+  '€':'EUR','‹':'«','›':'»','⁄':'/','№':'No.','™':'(TM)','℃':'°C','℉':'°F'
 };
-/* Envuelve un documento jsPDF para que TODO lo que se escriba pase por pdfSafe. Sanear
-   llamada por llamada es lo que produjo este bug: quedaron cinco `doc.text` con guión
-   largo —que jsPDF descarta en silencio, verificado en el content stream— y basta olvidar
-   uno para que el informe salga con el texto mutilado. Con el documento envuelto, un
-   exportador nuevo queda cubierto sin que nadie tenga que acordarse. */
+/* Recorta una celda midiendo el ancho REAL del texto ya saneado. Los exportadores de
+   tabla cortaban con `substring(0, ancho/1.7)` sobre el texto CRUDO: se contaba el largo
+   antes de que pdfSafe expandiera —μ→"micro" (×5), 🟡→"[amarillo]" (×10), ↔→"<->"— así
+   que el presupuesto se calculaba sobre el texto corto y se dibujaba el largo. Como las
+   columnas se posicionan con un x absoluto, el sobrante no se recorta: se escribe ENCIMA
+   del valor de la columna siguiente, y en una tabla de Media | DS | Mediana eso son dos
+   cifras superpuestas. El informe anual ya lo hacía bien con celdaTxt; esto es lo mismo
+   para los otros dos. */
+function pdfCelda(doc, txt, ancho){
+  let t = pdfSafe(txt);
+  if(doc.getTextWidth(t) <= ancho-2) return t;
+  // '...' y no '…': el wrapper convierte el carácter al dibujar, así que medir con uno
+  // y pintar el otro rompería la garantía de que la celda no invade la siguiente.
+  while(t.length>1 && doc.getTextWidth(t+'...') > ancho-2) t = t.slice(0,-1);
+  return t+'...';
+}
+const _PDF_KEYS = Object.keys(_PDF_MAP);   // izado: se recorría en cada llamada
+/* Envuelve un documento jsPDF para que TODO lo que se escriba pase por pdfSafe: sanear
+   llamada por llamada dejaba exportadores sin cubrir y bastaba olvidar uno para que el
+   informe saliera con el texto mutilado. Con el documento envuelto, un exportador nuevo
+   queda cubierto sin que nadie tenga que acordarse.
+   Ojo: cubre lo que se DIBUJA, no lo que se mide antes de dibujar. Un `substring` sobre
+   el texto crudo sigue contando caracteres que pdfSafe va a expandir — para eso está
+   pdfCelda(). */
 function pdfDoc(opts){
   _pdfCaidos = [];   // se reinicia por documento
   const doc = new window.jspdf.jsPDF(opts);
@@ -1481,9 +1511,19 @@ function pdfDoc(opts){
   doc.save = (...a) => {
     const r = save0(...a);
     const unicos = [...new Set(_pdfCaidos)];
+    /* setTimeout y no directo: los cinco exportadores llaman a toast('✅ PDF exportado')
+       en el mismo tick, justo después de save(), y como #toast es un ÚNICO nodo el tilde
+       verde pisaba este aviso antes del primer repaint. Quien firma veía sólo el ✅.
+       Las marcas combinantes se listan como U+XXXX: sueltas se aplican al carácter
+       anterior del propio mensaje y salían como acentos flotando sobre un paréntesis.
+       Y se distingue lo REEMPLAZADO por '?' de lo que se transcribió o se perdió. */
     if(unicos.length && typeof toast==='function'){
-      toast('⚠️ El PDF tiene ' + unicos.length + ' símbolo' + (unicos.length===1?'':'s') +
-            ' que no se pudieron representar (' + unicos.join(' ') + ')');
+      const legible = unicos.map(c => /[\u0300-\u036F]/.test(c)
+        ? ('U+'+c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0'))
+        : c).join(' ');
+      setTimeout(()=>toast('⚠️ El PDF: ' + unicos.length + ' símbolo' + (unicos.length===1?'':'s') +
+            ' sin equivalente, transcrito' + (unicos.length===1?'':'s') + ' o perdido' +
+            (unicos.length===1?'':'s') + ' (' + legible + ')'), 0);
     }
     return r;
   };
@@ -1499,22 +1539,62 @@ function pdfDoc(opts){
 }
 
 let _pdfCaidos=[];   // caracteres sin equivalente vistos en la exportación en curso
+
+/* Marcas combinantes que SOBREVIVEN a NFC, o sea las que no tienen forma precompuesta.
+   Después de normalizar, las tildes del español (á é í ó ú ü ñ ç) ya se compusieron en un
+   único carácter Latin-1 y NUNCA llegan acá. Lo único que llega es notación estadística:
+
+     x̄ = media · x̃ = mediana · β̂ p̂ ρ̂ σ̂ = ESTIMADOR · 0,3̅ = periódico
+
+   Borrarlas en silencio —que fue el primer intento— convierte «estimador beta^ = 0,42» en
+   «beta = 0,42»: el coeficiente estimado pasa a leerse como el poblacional, en un PDF que
+   sale limpio y que alguien firma. Verificado en el content stream. Por eso se traducen a
+   notación ASCII en vez de desaparecer. */
+const _PDF_MARCA = {
+  '\u0302':'^', '\u0306':'^',                    // circunflejo / breve -> estimador
+  '\u0303':'~',                                   // tilde -> mediana
+  '\u0304':'-barra', '\u0305':'-barra',           // macron / overline -> media, periodico
+  '\u0307':'', '\u0308':'', '\u030A':'', '\u0327':'',
+};
+
 function pdfSafe(t){
   if(t==null){ console.warn('[pdfSafe] se intentó escribir un texto nulo o indefinido'); return ''; }
   if(typeof t!=='string' && typeof t!=='number'){
     console.warn('[pdfSafe] tipo inesperado, se imprimiría mal:',t);
   }
   let out=String(t);
-  Object.keys(_PDF_MAP).forEach(k=>{ if(out.indexOf(k)>=0) out=out.split(k).join(_PDF_MAP[k]); });
-  // Selectores de variación y espacios de ancho cero: '⚠️' es U+26A0 + U+FE0F, y sin
-  // sacar el segundo la advertencia salía como '!?'.
+  /* 1. Selectores de variación y anchos cero, ANTES de normalizar. Tienen clase
+     combinante 0, así que BLOQUEAN la composición: 'e' + U+200B + U+0301 —texto copiado
+     de la web o extraído de un PDF— no se compone si el ZWSP sigue en el medio, y la
+     tilde termina perdiéndose. Además '⚠️' es U+26A0 + U+FE0F y sin sacar el segundo la
+     advertencia salía como '!?'. */
   out = out.replace(/[\uFE0E\uFE0F\u200B-\u200D\u2060]/g,'');
-  /* Red final con flag `u`: sin él, un emoji no mapeado matchea sus dos unidades
-     suplentes por separado y sale '??' con dos avisos de codepoints inservibles.
-     Se marca con '?' en vez de borrar: una "β = 0,3" borrada saldría como " = 0,3",
-     que parece un dato y no lo es. */
+  /* 2. NFC. Un texto en forma DESCOMPUESTA escribe "é" como "e" + U+0301, y esa marca no
+     es Latin-1: caía en la red final y el PDF imprimía "Asociacio?n significativa", con un
+     signo de pregunta pegado a cada vocal acentuada. Llega así desde las respuestas de la
+     API, desde JSON exportado por otras apps y desde texto copiado en macOS.
+     NFC y NO NFKC: la de compatibilidad convertiría "Chi²" en "Chi2" y "½" en "1⁄2". */
+  try{ out = out.normalize('NFC'); }
+  catch(e){ console.warn('[pdfSafe] no se pudo normalizar a NFC',e); }
+  /* 3. Las marcas que quedaron, mientras cada una TODAVÍA está pegada a su base. Si esto
+     corriera después del mapa, la marca de 'ρ̂' quedaría colgando de la 'o' de "rho". */
+  out = out.replace(/[\u0300-\u036F]/g, c => {
+    _pdfCaidos.push(c);
+    return _PDF_MARCA[c] != null ? _PDF_MARCA[c] : '';
+  });
+  // 4. Reemplazos por tabla.
+  _PDF_KEYS.forEach(k=>{ if(out.indexOf(k)>=0) out=out.split(k).join(_PDF_MAP[k]); });
+  /* 5. Red final. Antes de rendirse a un '?', se prueba descomponer y quedarse con la
+     letra base: NFC compone 'C'+U+030C en 'Č', que NO es Latin-1, así que sin este paso
+     se perdía la LETRA y no sólo el diacrítico —"Čech" salía "?ech"—. Se pierde la tilde,
+     nunca el carácter.
+     El '?' se reserva para lo que no tiene base imprimible: una "β = 0,3" borrada saldría
+     como " = 0,3", que parece un dato y no lo es. El flag `u` es necesario para que un
+     emoji no mapeado no matchee sus dos unidades suplentes por separado. */
   return out.replace(/[^\x00-\xFF]/gu, c => {
     _pdfCaidos.push(c);
+    const base = c.normalize('NFD').replace(/[\u0300-\u036F]/g,'');
+    if(base && !/[^\x00-\xFF]/u.test(base)) return base;
     console.warn('[pdfSafe] sin equivalente Latin-1:', c, 'U+'+c.codePointAt(0).toString(16).toUpperCase());
     return '?';
   });
@@ -5522,7 +5602,7 @@ function renderCurrent(){
       const cel=st=>!st.n?'—':(st.n<5?('n='+st.n+' (pocos)'):(f1(st.mean)+' +/- '+f1(st.sd)+' (n='+st.n+')'));
       const vals=[(dif?'* ':'')+f.v.lbl, cel(f.stA), cel(f.stG),
         f.insuficiente?'—':pTxt(f.p), f.insuficiente?'—':pTxt(f.q)];
-      let x=mL; vals.forEach((v,i)=>{ doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.6)),x,y); x+=cols[i][1]; });
+      let x=mL; vals.forEach((v,i)=>{ doc.text(pdfCelda(doc,v,cols[i][1]),x,y); x+=cols[i][1]; });
       y+=5;
     });
     y+=3; doc.setTextColor(90,90,90); doc.setFont('helvetica','normal');
@@ -6670,7 +6750,7 @@ function renderCurrent(){
   window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} /* La columna q y el "sobrevive FDR" van en el archivo: esta planilla se manda a un
        coautor y "Significativo: Sí" sin el q ajustado se lee como hallazgo establecido. */
     const H=['Categoría','Asociación','N','Método','Estadístico','p','q (FDR)','Sobrevive FDR','IC 95%','Semáforo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.q!=null?pTxt(r.q):'—',r.p!=null?((r.q!=null&&r.q<0.05)?'Sí':'No'):'—',r.ci,SIG_TXT(r)])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
-  window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. SI=sobrevive FDR / si (no FDR)=sig. sin corregir / si (N bajo)=N insuficiente / no=no sig.',mL,y);y+=7; const cols=[['Asociacion',60],['N',11],['Metodo',30],['Estadistico',36],['p',16],['q (FDR)',16],['IC 95%',30],['Sig',18]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=SIG_PDF(r); const vals=[r.lbl,String(r.n),r.method,r.stat,pTxt(r.p),pTxt(r.q),r.ci,sg].map(pdfSafe); let x=mL; vals.forEach((v,i)=>{doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
+  window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. SI=sobrevive FDR / si (no FDR)=sig. sin corregir / si (N bajo)=N insuficiente / no=no sig.',mL,y);y+=7; const cols=[['Asociacion',60],['N',11],['Metodo',30],['Estadistico',36],['p',16],['q (FDR)',16],['IC 95%',30],['Sig',18]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=SIG_PDF(r); const vals=[r.lbl,String(r.n),r.method,r.stat,pTxt(r.p),pTxt(r.q),r.ci,sg]; let x=mL; vals.forEach((v,i)=>{doc.text(pdfCelda(doc,v,cols[i][1]),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
 
   // ── Análisis IA ──
   window.estGuardarKey=function(){ const inp=document.getElementById('est-api-key'); const k=(inp.value||'').trim(); if(!k){toast('Ingresá una clave');return;} localStorage.setItem('ca_anthropic_key',k); inp.value=''; document.getElementById('est-key-status').textContent='Clave guardada: sk-ant-…'+k.slice(-4); toast('✅ Clave guardada (solo en este navegador)'); };
@@ -7414,7 +7494,7 @@ window.paExportPDF=function(){
   const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;};
   head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30);
   filas.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);}
-    let x=mL; r.forEach((v,i)=>{ doc.text(String(v).substring(0,Math.floor(cols[i][1]/1.7)),x,y); x+=cols[i][1]; }); y+=5; });
+    let x=mL; r.forEach((v,i)=>{ doc.text(pdfCelda(doc,v,cols[i][1]),x,y); x+=cols[i][1]; }); y+=5; });
   doc.save('ceiboanalytics_por_app.pdf'); toast('✅ PDF exportado');
 };
 
