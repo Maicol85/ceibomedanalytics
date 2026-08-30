@@ -788,6 +788,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         <button class="navbtn" data-dest="logistica"><span class="ic">📐</span>Regresión logística</button>
         <button class="navbtn" data-dest="multivar"><span class="ic">🧮</span>Regresión multivariada</button>
         <button class="navbtn" data-dest="roc"><span class="ic">📉</span>Curvas ROC</button>
+        <button class="navbtn" data-dest="poder"><span class="ic">⚡</span>Poder estadístico</button>
         <button class="navbtn" data-dest="guiasref"><span class="ic">📕</span>Comparación con guías</button>
       </nav>
     </div>
@@ -1007,6 +1008,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
             <div style="margin-left:auto;display:flex;gap:8px;align-items:flex-end;">
               <button class="btn" onclick="estExportPDF()">📄 Exportar tabla → PDF</button>
               <button class="btn" onclick="estExportXLSX()">📊 Exportar tabla → Excel</button>
+              <button class="btn" onclick="estExportR()" title="Una fila por paciente, encabezados sin espacios ni acentos y categóricas codificadas: importable directo en R, SPSS o Stata">📊 Exportar para R/SPSS</button>
             </div>
           </div>
           <details class="explica" style="margin:12px 0 0;">
@@ -1046,7 +1048,16 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
               observacionales y transversales.</div>
             </div>
           </details>
-          <div class="card" style="margin:12px 0 16px;overflow-x:auto;"><div id="est-asoc-tabla"></div></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 0;">
+            <label class="hint" for="asoc-pw-ref">Columna «Poder» — efecto de referencia:</label>
+            <select id="asoc-pw-ref" onchange="estAsocRender()">
+              <option value="peq">Pequeño</option>
+              <option value="med" selected>Mediano</option>
+              <option value="gra">Grande</option>
+              <option value="off">Ocultar columna</option>
+            </select>
+          </div>
+          <div class="card" style="margin:8px 0 16px;overflow-x:auto;"><div id="est-asoc-tabla"></div></div>
           <div id="est-scatter-wrap" class="card" style="display:none;margin-bottom:16px;position:relative;">
             <button onclick="estCloseScatter()" title="Cerrar" style="position:absolute;top:8px;right:10px;background:none;border:none;color:var(--text-2);font-size:18px;cursor:pointer;">✕</button>
             <div id="est-scatter-title" style="font-weight:600;margin-bottom:10px;"></div>
@@ -1329,6 +1340,94 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
                  de 375 el que se corría era el DOCUMENTO entero —encabezado incluido—
                  para llegar al semáforo. Así se mueve sólo la tabla. -->
             <div id="guias-tabla" style="overflow-x:auto;"></div>
+          </div>
+        </div>
+
+        <!-- ── Poder estadístico ── -->
+        <div id="est-panel-poder" style="display:none;">
+          <div class="card" style="margin-bottom:16px;">
+            <div class="card-hdr">⚡ Poder estadístico
+              <span class="hint" style="font-weight:400;">— cuántos pacientes hacen falta</span>
+              <button type="button" class="ayuda-ico" id="btn-expl-poder" aria-expanded="false" aria-controls="expl-poder"
+                      aria-label="¿Qué es el poder estadístico?" title="¿Qué es el poder estadístico?"
+                      onclick="grafExplicaToggle('expl-poder',this)">ℹ️</button>
+            </div>
+            <div class="explica-panel" id="expl-poder" hidden>
+              <p style="margin:0 0 6px;"><b>Qué es.</b> El poder es la probabilidad de <b>encontrar</b> un efecto
+                que realmente existe. Un estudio con 80% de poder tiene, si el efecto es del tamaño que
+                supusiste, un 80% de chances de terminar con un p&lt;0,05 — y un 20% de no verlo y concluir
+                que no hay nada. Ese 20% es el <b>error tipo II</b>. El cálculo une cuatro números: N, tamaño
+                del efecto, α y poder; fijados tres, el cuarto queda determinado.</p>
+              <p style="margin:0 0 6px;"><b>El tamaño del efecto no sale de tus datos.</b> Es una decisión
+                clínica y previa: qué diferencia te importaría encontrar. Las convenciones de Cohen
+                (pequeño / mediano / grande) son un default para cuando no hay nada mejor, y él mismo advirtió
+                que son arbitrarias. Si tenés un estudio previo con un efecto medido, usá ese número — pero
+                sabiendo que los efectos publicados están inflados por sesgo de publicación, así que planificar
+                con ellos deja el estudio corto.</p>
+              <p style="margin:0 0 6px;"><b>Un N insuficiente no es un detalle de método.</b> Con poco poder no
+                sólo se pierden efectos reales: los pocos resultados que <i>sí</i> dan significativos están
+                sobreestimados, porque para cruzar el umbral con N chico el efecto observado tiene que haber
+                salido grande por azar. Por eso una serie chica con un hallazgo espectacular es sospechosa,
+                no convincente.</p>
+              <div style="padding:9px 12px;background:rgba(234,179,8,.12);border-left:3px solid #eab308;border-radius:4px;margin:0 0 6px;">
+                <b>⚠️ El poder se calcula ANTES, no después.</b> Calcular el poder usando el efecto que ya
+                observaste —lo que se llama <i>poder observado</i> o <i>post-hoc</i>— no agrega
+                información: es una transformación del propio valor p, así que todo resultado no significativo
+                da poder bajo <b>por construcción</b>. La frase «no dio significativo porque el estudio estaba
+                falto de poder», sostenida con ese número, es circular (Hoenig y Heisey, 2001). Esta pantalla
+                no lo calcula. Para leer un resultado negativo, mirá el <b>intervalo de confianza</b>: si es
+                angosto y pegado al cero, tus datos <i>sí</i> descartan un efecto grande; si es ancho, el
+                estudio no alcanzó para pronunciarse en ninguna dirección.
+              </div>
+              <p style="margin:0;"><b>Lo que este cálculo no cubre.</b> Es el N de pacientes
+                <b>con las dos variables medidas</b>, no el de pacientes reclutados: hay que sumarle las pérdidas
+                y los datos faltantes. Y vale para <b>una</b> comparación; si vas a mirar veinte, el α efectivo
+                de cada una es menor y el N necesario sube.</p>
+            </div>
+
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:10px 0 4px;">
+              <div><label class="hint">Tipo de análisis</label><br>
+                <select id="pw-tipo" onchange="pwRender()">
+                  <option value="corr">Correlación (Pearson / Spearman)</option>
+                  <option value="dos">Comparación de dos grupos (Mann-Whitney)</option>
+                  <option value="chi">Proporciones / tabla de contingencia (Chi²)</option>
+                </select></div>
+              <div><label class="hint">Tamaño de efecto esperado</label><br>
+                <select id="pw-efecto" onchange="pwRender()">
+                  <option value="peq">Pequeño</option>
+                  <option value="med" selected>Mediano</option>
+                  <option value="gra">Grande</option>
+                </select></div>
+              <div id="pw-df-wrap" style="display:none;"><label class="hint">Grados de libertad</label><br>
+                <select id="pw-df" onchange="pwRender()">
+                  <option value="1" selected>1 — tabla 2×2</option>
+                  <option value="2">2 — 2×3 o 3×2</option>
+                  <option value="3">3 — 2×4 o 4×2</option>
+                  <option value="4">4 — 3×3</option>
+                  <option value="6">6 — 3×4</option>
+                </select></div>
+              <div><label class="hint">Poder deseado</label><br>
+                <select id="pw-pot" onchange="pwRender()">
+                  <option value="0.80" selected>80%</option>
+                  <option value="0.90">90%</option>
+                </select></div>
+              <div><label class="hint">Nivel de significación (α)</label><br>
+                <select id="pw-alfa" onchange="pwRender()">
+                  <option value="0.05" selected>0,05 (bilateral)</option>
+                  <option value="0.01">0,01 (bilateral)</option>
+                </select></div>
+            </div>
+            <div id="pw-efecto-nota" class="hint" style="margin:0 0 12px;"></div>
+
+            <div id="pw-resultado"></div>
+
+            <div id="pw-actual" style="margin-top:14px;"></div>
+
+            <div style="margin-top:16px;">
+              <div class="hint" style="margin-bottom:4px;"><b>Curva de poder</b> — cómo crece la probabilidad
+                de detectar el efecto a medida que sumás pacientes.</div>
+              <div style="position:relative;height:320px;max-width:560px;"><canvas id="pw-canvas"></canvas></div>
+            </div>
           </div>
         </div>
       </section>
@@ -3420,6 +3519,8 @@ const DEST={
              h:'Varios predictores en un mismo modelo, así que cada OR queda ajustado por los demás. Pide más pacientes que la univariada.'},
   roc:      {v:'estadistica',p:'roc',      t:'Curvas ROC',
              h:'Mide cuán bien una variable numérica separa a los que tienen un desenlace de los que no, y propone un punto de corte.'},
+  poder:    {v:'estadistica',p:'poder',    t:'Cálculo de poder estadístico',
+             h:'Cuántos pacientes hacen falta para detectar un efecto de un tamaño dado. Se planifica ANTES de recoger los datos: calcularlo después, con el efecto que ya observaste, no agrega información.'},
   guiasref: {v:'estadistica',p:'guiasref', t:'Comparación con guías ASE/ESC',
              h:'Contrasta los valores de tu laboratorio con los rangos de referencia publicados. Es una comparación descriptiva, no una validación del equipo ni del operador.'},
   informe:  {v:'informe',   t:'Informe anual exportable'},
@@ -3895,7 +3996,12 @@ function renderCurrent(){
   const FEVIrep=pr=>eeF(pr.ecoestres,'fevi_basal',['fevi_basal','fevi_reposo']);
   const FEVIstr=pr=>eeF(pr.ecoestres,'fevi_pico',['fevi_pico','fevi_estres','fevi_max']);
   const RESERVA=pr=>{ const r=eeF(pr.ecoestres,'reserva_contractil'); if(r!=null)return r; const a=FEVIrep(pr), b=FEVIstr(pr); return (a!=null&&b!=null)?b-a:null; };
-  const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d; const b=eeF(pr.ecoestres,'psap_pico',['psap_pico','psap_estres','psap_max']); const a=eeF(pr.ecoestres,'psap_basal',['psap_basal','psap_reposo','psap']); return (b!=null&&a!=null)?b-a:b; };
+  /* El fallback terminaba en `: b` — o sea, sin PSAP basal devolvía la PSAP ABSOLUTA del
+   pico como si fuera el incremento. Verificado: un estudio con pico 62 y basal vacía (lo
+   habitual cuando en reposo no hay jet de IT medible) exportaba delta_psap_mmhg = 62 bajo
+   la etiqueta "Incremento de PSAP con el esfuerzo". Magnitud creíble, unidad correcta y
+   ninguna forma de detectarlo desde el archivo. Sin las dos medidas no hay delta: null. */
+const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d; const b=eeF(pr.ecoestres,'psap_pico',['psap_pico','psap_estres','psap_max']); const a=eeF(pr.ecoestres,'psap_basal',['psap_basal','psap_reposo','psap']); return (b!=null&&a!=null)?b-a:null; };
   const METSee=pr=>metsOf(pr.ergo);
 
   // ── distribuciones ──
@@ -4184,7 +4290,13 @@ function renderCurrent(){
   const ANT = (s,re) => { const a=_antArr(s); if(a==null) return null; return a.some(x=>re.test(x))?'Sí':'No'; };
   const RE_HTA=/\bhta\b|hipertensi/i, RE_DM=/\bdm\b|diabet/i, RE_FA=/\bfa\b|flutter|fibrilaci/i,
         RE_TAB=/tabaqu|fumador/i, RE_DLP=/dislipem|dislipid/i,
-        RE_CV=/iam|isqu[eé]mic|by-?pass|crm|stent|atc|ic previa|acv|ait|mch|valvulopat/i;
+        /* "Cirugía cardíaca previa" y "Prótesis valvular" son casillas reales de EcoSmart
+           (ant-chk) y no matcheaban: un paciente revascularizado o con prótesis salía
+           codificado como SIN antecedente cardiovascular, porque el checklist existía y
+           _rAnt devolvía false en vez de null. Peor, ErgoSmart sí ofrece "CRM / By-pass" y
+           "ATC / Stent", que sí matcheaban: la sensibilidad de la variable dependía de qué
+           apps tuviera el paciente, o sea quedaba correlacionada con tiene_ergo. */
+        RE_CV=/iam|isqu[eé]mic|by-?pass|crm|stent|atc|ic previa|acv|ait|mch|valvulopat|cirug[ií]a card|pr[oó]tesis valvular|revasculariz/i;
 
   // EcoSmart: derivadas clínicas
   /* Mismo criterio que el gráfico de Panorama: "mujer" empieza con m, así que un
@@ -4303,14 +4415,14 @@ function renderCurrent(){
       if(!r||r.err)return {...base,n:(r&&r.n!=null)?r.n:pairs.length,method:d.t==='pe'?'Pearson':'Spearman',
         stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
       const coef=d.t==='pe'?r.r:r.rho, ok=r.n>=15;
-      return {...base,n:r.n,method:d.t==='pe'?'Pearson':'Spearman',stat:(d.t==='pe'?'r=':'ρ=')+coef.toFixed(2),p:r.p,ci:ciTxt(r.ci),sig:'⚫',nOk:ok,coef,plot:{type:'scatter',pairs,...(r.slope!=null?{slope:r.slope,intercept:r.intercept}:olsFit(pairs)),ci:r.ci,xl:P.izq,yl:P.der,coef}};
+      return {...base,n:r.n,pw:{tipo:'corr',n:r.n},method:d.t==='pe'?'Pearson':'Spearman',stat:(d.t==='pe'?'r=':'ρ=')+coef.toFixed(2),p:r.p,ci:ciTxt(r.ci),sig:'⚫',nOk:ok,coef,plot:{type:'scatter',pairs,...(r.slope!=null?{slope:r.slope,intercept:r.intercept}:olsFit(pairs)),ci:r.ci,xl:P.izq,yl:P.der,coef}};
     }
     if(d.t==='mw'){
       const g1=[],g2=[]; ds.forEach(pr=>{const v=d.val(pr),gr=d.grp(pr);if(v!=null&&!isNaN(v)&&gr!=null){(gr?g1:g2).push(v);}});
       const r=mannwhitney(g1,g2);
       if(!r||r.err)return {...base,n:g1.length+g2.length,method:'Mann-Whitney U',
         stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
-      return {...base,n:r.n1+r.n2,method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:'⚫',nOk:(r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:d.gpos||(d.gl?('Con '+d.gl):'Grupo +'),vals:g1},{lbl:d.gneg||(d.gl?('Sin '+d.gl):'Grupo −'),vals:g2}],vl:d.vl||P.izq}};
+      return {...base,n:r.n1+r.n2,pw:{tipo:'dos',n1:r.n1,n2:r.n2},method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:'⚫',nOk:(r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:d.gpos||(d.gl?('Con '+d.gl):'Grupo +'),vals:g1},{lbl:d.gneg||(d.gl?('Sin '+d.gl):'Grupo −'),vals:g2}],vl:d.vl||P.izq}};
     }
     if(d.t==='kw'){
       const map=Object.create(null); ds.forEach(pr=>{const v=d.val(pr),c=d.catg(pr);if(v!=null&&!isNaN(v)&&c!=null){(map[c]=map[c]||[]).push(v);}});
@@ -4327,7 +4439,7 @@ function renderCurrent(){
     const tbl=aV.map(a=>bV.map(b=>data.filter(x=>x[0]===a&&x[1]===b).length));
     const r=chi2test(tbl);
     if(!r)return {...base,n:data.length,method:'Chi²',stat:'—',p:null,ci:'—',sig:'⚫',coef:null};
-    return {...base,n:r.N,method:'Chi²',stat:'χ²='+r.chi2.toFixed(2)+(r.minE<5?' ⚠fe<5':''),p:r.p,ci:'—',sig:'⚫',nOk:(r.N>=20&&r.minE>=5),coef:null,plot:{type:'bar',aV,bV,tbl,al:P.izq,bl:P.der,minE:r.minE}};
+    return {...base,n:r.N,pw:{tipo:'chi',n:r.N,df:r.df},method:'Chi²',stat:'χ²='+r.chi2.toFixed(2)+(r.minE<5?' ⚠fe<5':''),p:r.p,ci:'—',sig:'⚫',nOk:(r.N>=20&&r.minE>=5),coef:null,plot:{type:'bar',aV,bV,tbl,al:P.izq,bl:P.der,minE:r.minE}};
   }
 
   window.ASSOC_N = ASSOC.length;   // lo consume la Guía estadística
@@ -4610,7 +4722,13 @@ function renderCurrent(){
     // abría con el click de la fila.
     const ampliar = r.plot ? '<div style="margin-top:8px;"><button class="btn btn-ghost" style="font-size:11px;" '+
       'data-ampliar>Ver el gráfico en grande ↗</button></div>' : '';
-    det.innerHTML='<td colspan="7" style="padding:12px 16px;">'+
+    /* colspan contado del encabezado real y no cableado: estaba en 7 sobre una tabla de 8
+       columnas, así que el detalle nunca llegaba al borde derecho, y la columna «Poder»
+       lo habría dejado dos cortos. Un número fijo acá se desincroniza sin avisar cada vez
+       que la tabla cambia. */
+    const nCols=(tr.closest('table')||{}).querySelectorAll
+      ? tr.closest('table').querySelectorAll('thead th').length : 8;
+    det.innerHTML='<td colspan="'+(nCols||8)+'" style="padding:12px 16px;">'+
       '<div style="margin:0 0 12px;padding:10px 12px;background:var(--surface-1);border:1px solid var(--border);'+
       'border-left:3px solid var(--series-3);border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.6;">'+
       '<div style="font-weight:700;color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Qué dice este resultado</div>'+
@@ -4748,10 +4866,53 @@ function renderCurrent(){
     const eh = document.getElementById('est-asoc-estado');
     if(eh) eh.innerHTML = est.banner;
     if(est.bloquea || !rows.length){ host.innerHTML = est.vacio; renderForest(); return; }
+    /* Columna «Poder»: ANÁLISIS DE SENSIBILIDAD, no poder observado.
+       Responde «con este N, ¿habría detectado un efecto de tamaño X?» usando un efecto de
+       REFERENCIA que elige el médico — nunca el efecto que la fila observó. El poder
+       calculado sobre el efecto observado (post-hoc) es una función monótona del propio p:
+       toda fila no significativa da poder bajo por construcción, y sirve para respaldar
+       «no dio porque faltó poder», que es circular (Hoenig y Heisey, 2001). Con un efecto
+       de referencia fijo la columna sí informa algo que el p no dice: distingue el negativo
+       informativo —N grande, poder alto, el efecto de ese tamaño no está— del no
+       concluyente, que es el que hay que repetir con más pacientes.
+       Kruskal-Wallis queda en «—»: k grupos no está cubierto por el motor y estimarlo
+       con la fórmula de dos sería inventar un número. */
+    const refSel=document.getElementById('asoc-pw-ref');
+    const ref=refSel?refSel.value:'med';
+    const verPw = ref!=='off';
+    const pwCel = r=>{
+      if(!r.pw || r.p==null) return '<td style="text-align:right;color:var(--text-2);" title="'+
+        (r.p==null?'La asociación no se pudo calcular en este corte':
+         'El motor de poder no cubre Kruskal-Wallis con k grupos: estimarlo con la fórmula de dos grupos sería un número inventado')+'">—</td>';
+      /* α fijo en 0,05 A PROPÓSITO, y dicho en el encabezado: es el mismo α con el que se
+         calcularon el p y el q de esta tabla. Colgarlo del selector de la pestaña Poder
+         haría que una columna cambie de valor por algo que el médico tocó en otra pantalla
+         y que acá no se ve. Lo que sí había que arreglar era el texto del panel, que
+         prometía que la columna mostraba "lo mismo fila por fila": con α=0,01 el panel
+         decía 8% y la columna 22% para la misma asociación. */
+      const v=pwDeFila(r, ref, 0.05);
+      if(v==null) return '<td style="text-align:right;color:var(--text-2);">—</td>';
+      const es=PW_EFECTOS[r.pw.tipo][ref];
+      return '<td style="text-align:right;color:'+pwColor(v)+';" title="'+esc('Con N='+r.n+
+        ', probabilidad de haber detectado un efecto '+PW_ETIQ[ref]+' ('+PW_EFECTOS[r.pw.tipo].lbl+'='+
+        String(es).replace('.',',')+'). No es el poder del efecto que esta fila observó.')+'">'+pwPct(v)+'</td>';
+    };
     let body='';
     rows.forEach((r,idx)=>{ body+='<tr class="asoc-fila" data-ri="'+idx+'" tabindex="0" aria-expanded="false" style="cursor:pointer;">'+
-      '<td><span class="asoc-chev" style="display:inline-block;width:12px;color:var(--text-2);">▸</span> '+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td style="text-align:right;">'+pTxt(r.q)+'</td><td>'+r.ci+'</td><td style="text-align:center;font-size:15px;" title="'+esc(SIG_TIT(r))+'">'+r.sig+'</td></tr>'; });
-    host.innerHTML='<table class="est-tbl"><thead><tr><th>Asociación</th><th>N</th><th>Método</th><th>Estadístico</th><th>p</th><th title="p ajustado por comparaciones múltiples (Benjamini-Hochberg)">q (FDR)</th><th>IC 95%</th><th>Sig.</th></tr></thead><tbody>'+body+'</tbody></table>';
+      '<td><span class="asoc-chev" style="display:inline-block;width:12px;color:var(--text-2);">▸</span> '+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td style="text-align:right;">'+pTxt(r.q)+'</td><td>'+r.ci+'</td>'+(verPw?pwCel(r):'')+'<td style="text-align:center;font-size:15px;" title="'+esc(SIG_TIT(r))+'">'+r.sig+'</td></tr>'; });
+    host.innerHTML='<table class="est-tbl"><thead><tr><th>Asociación</th><th>N</th><th>Método</th><th>Estadístico</th><th>p</th><th title="p ajustado por comparaciones múltiples (Benjamini-Hochberg)">q (FDR)</th><th>IC 95%</th>'+
+      (verPw?'<th title="'+esc('Análisis de sensibilidad: con el N de esa fila, probabilidad de detectar un efecto de referencia '+PW_ETIQ[ref]+
+        '. NO es el poder del efecto observado, que sería una función del propio p y no agregaría información.')+
+        '">Poder<br><span style="font-weight:400;font-size:9px;text-transform:none;">ef. '+PW_ETIQ[ref]+' · α 0,05</span></th>':'')+
+      '<th>Sig.</th></tr></thead><tbody>'+body+'</tbody></table>'+
+      (verPw?'<div class="hint" style="margin-top:6px;padding:8px 10px;background:var(--surface-3);border-radius:6px;">'+
+        '<b>Cómo leer la columna «Poder».</b> Es la probabilidad de que ese N hubiera detectado un efecto '+
+        PW_ETIQ[ref]+' <i>si existiera</i> — no el poder del efecto que esa fila observó. Sirve para separar '+
+        'dos negativos que se ven iguales: <b>poder alto y p no significativo</b> es un negativo informativo '+
+        '(un efecto de ese tamaño probablemente no está); <b>poder bajo y p no significativo</b> no dice nada '+
+        'en ninguna dirección. En las filas <b>significativas</b> la columna no cambia la lectura del p. '+
+        'Está calculada a <b>α=0,05 sin corregir</b> por comparaciones múltiples: el poder para que una fila '+
+        'sobreviva además al FDR de la columna q es menor que el que muestra acá.</div>':'');
     host.querySelectorAll('tbody tr.asoc-fila').forEach(tr=>{
       const idx=parseInt(tr.dataset.ri,10);
       tr.addEventListener('click',()=>asocToggle(tr,idx));
@@ -5776,6 +5937,438 @@ function renderCurrent(){
   };
 
   /* ══════════════════════════════════════════════════════════════════════
+     PODER ESTADÍSTICO
+     Todo se apoya en normCdf/chi2p/gammaP, que ya viven en este módulo.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Inversa de la normal estándar (Acklam). Hace falta para despejar el N: la potencia se
+     calcula hacia adelante con normCdf, pero el tamaño de muestra necesita z_{α/2} y z_β. */
+  function pwZ(pp){
+    if(!(pp>0 && pp<1)) return NaN;
+    const a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+    const b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+    const c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+    const d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+    const pl=0.02425;
+    let q,r;
+    if(pp<pl){ q=Math.sqrt(-2*Math.log(pp));
+      return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+    if(pp>1-pl){ q=Math.sqrt(-2*Math.log(1-pp));
+      return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+    q=pp-0.5; r=q*q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+  }
+
+  /* ── Correlación ──
+     Transformación z de Fisher: z = atanh(r)·√(n−3) ~ N(atanh(ρ)·√(n−3), 1). La potencia
+     suma las DOS colas: con un efecto chico y un N chico, la cola contraria aporta lo
+     suficiente como para que ignorarla subestime. */
+  function pwCorr(r, n, alpha){
+    if(!(n>3) || !(Math.abs(r)>0) || Math.abs(r)>=1) return null;
+    const zc=pwZ(1-alpha/2), lam=Math.atanh(Math.abs(r))*Math.sqrt(n-3);
+    return Math.min(1, Math.max(0, (1-normCdf(zc-lam)) + normCdf(-zc-lam)));
+  }
+  function pwCorrN(r, pot, alpha){
+    if(!(Math.abs(r)>0) || Math.abs(r)>=1) return null;
+    const n=Math.ceil(3 + Math.pow((pwZ(1-alpha/2)+pwZ(pot))/Math.atanh(Math.abs(r)), 2));
+    return pwAjustar(n, x=>pwCorr(r,x,alpha), pot);
+  }
+
+  /* ── Dos grupos ──
+     Se calcula sobre el t de dos muestras y se corrige por la eficiencia asintótica
+     relativa de Mann-Whitney frente al t con datos normales (3/π ≈ 0,955): la app compara
+     con Mann-Whitney, así que informar la potencia del t sería optimista. Con
+     distribuciones muy asimétricas —lo habitual en PSAP o EROA— Mann-Whitney puede ser MÁS
+     potente que el t, así que este número es el conservador de los dos. */
+  const PW_ARE = 3/Math.PI;
+  function pwDos(d, n1, n2, alpha){
+    if(!(n1>1 && n2>1) || !(Math.abs(d)>0)) return null;
+    const nEf = PW_ARE * 2/(1/n1 + 1/n2);          // media armónica, corregida por ARE
+    const zc=pwZ(1-alpha/2), lam=Math.abs(d)*Math.sqrt(nEf/2);
+    return Math.min(1, Math.max(0, (1-normCdf(zc-lam)) + normCdf(-zc-lam)));
+  }
+  function pwDosN(d, pot, alpha){    // N POR GRUPO
+    if(!(Math.abs(d)>0)) return null;
+    /* El +z²/4 es la corrección clásica por usar la normal donde va la t: sin ella el N
+       sale corto porque el valor crítico de la t es mayor que el de la z con pocos grados
+       de libertad, y el error crece justo con las muestras chicas, que es donde este
+       módulo se consulta. */
+    const zc=pwZ(1-alpha/2);
+    const n=Math.ceil(2*Math.pow((zc+pwZ(pot))/Math.abs(d), 2)/PW_ARE + zc*zc/4);
+    return pwAjustar(n, x=>pwDos(d,x,x,alpha), pot, true);
+  }
+
+  /* ── Chi² ──
+     Potencia de una chi-cuadrado NO CENTRAL con λ = N·w², resuelta con la aproximación de
+     dos momentos de Patnaik: χ'²(df,λ) ≈ c·χ²(h). Es la vía estándar cuando no hay una
+     noncentral exacta, y gammaP ya acepta grados de libertad no enteros. */
+  function pwChi(w, N, df, alpha){
+    if(!(N>0) || !(w>0) || !(df>=1)) return null;
+    const lam=N*w*w;
+    const crit=pwChiCrit(df, alpha);
+    if(crit==null) return null;
+    /* Chi-cuadrado no central EXACTA, como mezcla de centrales pesada por Poisson:
+         P(χ'²(df,λ) > x) = Σ_k e^{-λ/2}(λ/2)^k/k! · P(χ²(df+2k) > x)
+       La aproximación de dos momentos de Patnaik, que es la vía corta, daba N=85 donde las
+       tablas de Cohen piden 87 y 761 donde piden 785: un 3% de menos, o sea planificar un
+       estudio con menos pacientes de los que hacen falta. En una herramienta que sirve
+       para decidir cuántos pacientes reclutar, el error tiene que caer del lado seguro.
+       La serie converge rápido y se corta cuando la cola de Poisson deja de aportar. */
+    const m=lam/2;
+    if(!(m>0)) return alpha;
+    /* La serie se recorre desde la MODA de la Poisson hacia los dos lados y con los pesos
+       en logaritmo. Arrancando en k=0 con Math.exp(-λ/2), un λ grande —el N de prueba del
+       despeje llega a 200.000— hace underflow a 0 y toda la suma daba cero: la potencia
+       salía 0 para cualquier N y el módulo devolvía null en vez de un tamaño de muestra. */
+    const k0=Math.max(0, Math.floor(m));
+    const peso=k=>Math.exp(-m + k*Math.log(m) - gln(k+1));
+    let suma=0;
+    for(let k=k0;k<k0+5000;k++){
+      const w=peso(k); if(!isFinite(w)) break;
+      suma+=w*chi2p(crit, df+2*k);
+      if(k>m && w<1e-15) break;
+    }
+    for(let k=k0-1;k>=0;k--){
+      const w=peso(k); if(!isFinite(w)) break;
+      suma+=w*chi2p(crit, df+2*k);
+      if(w<1e-15) break;
+    }
+    return Math.min(1, Math.max(0, suma));
+  }
+  // χ² crítico por bisección sobre chi2p, que es monótona decreciente.
+  function pwChiCrit(df, alpha){
+    let lo=0, hi=Math.max(50, df*10+50);
+    for(let i=0;i<200;i++){ const m=(lo+hi)/2; if(chi2p(m,df)>alpha) lo=m; else hi=m; }
+    return (lo+hi)/2;
+  }
+  function pwChiN(w, pot, df, alpha){
+    if(!(w>0)) return null;
+    let lo=4, hi=200000;
+    if(pwChi(w,hi,df,alpha)<pot) return null;
+    for(let i=0;i<60 && hi-lo>1;i++){ const m=Math.floor((lo+hi)/2); if(pwChi(w,m,df,alpha)>=pot) hi=m; else lo=m; }
+    return hi;
+  }
+
+  /* La fórmula cerrada del N es una aproximación; se corrige subiendo o bajando de a uno
+     hasta el mínimo que realmente alcanza la potencia pedida. Sin esto el panel decía
+     "necesitás N=120" y la curva de al lado mostraba 119 cruzando el 80%: dos números que
+     salen del mismo código y no coinciden. */
+  function pwAjustar(n0, fn, pot, soloSubir){
+    let n=Math.max(4, n0);
+    let guard=0;
+    while(guard++<5000 && (fn(n)||0) < pot) n++;
+    if(soloSubir) return n;   // el piso ya trae la corrección por t: bajar la desharía
+    guard=0;
+    while(guard++<5000 && n>4 && (fn(n-1)||0) >= pot) n--;
+    return n;
+  }
+
+  /* Convenciones de Cohen. Son etiquetas de referencia, no umbrales clínicos: un r de 0,10
+     puede ser irrelevante o decisivo según la variable. */
+  /* ─────────────────────────────────────────────────────────────────────────
+     Poder estadístico — pantalla
+     ───────────────────────────────────────────────────────────────────────── */
+  const PW_EFECTOS = {
+    corr: { peq:0.10, med:0.30, gra:0.50, lbl:'r / ρ' },
+    dos:  { peq:0.20, med:0.50, gra:0.80, lbl:"d de Cohen" },
+    chi:  { peq:0.10, med:0.30, gra:0.50, lbl:'w de Cohen' },
+  };
+
+  const PW_ETIQ={peq:'pequeño',med:'mediano',gra:'grande'};
+  const PW_TIPO_LBL={corr:'correlación',dos:'comparación de dos grupos',chi:'tabla de contingencia'};
+  /* La nota explica QUÉ significa el número que el médico acaba de elegir. Sin esto,
+     "mediano" es una palabra sin unidad: en correlación son 0,30 y en dos grupos 0,50,
+     y son escalas distintas que no se comparan entre sí. */
+  const PW_EJEMPLO={
+    corr:{peq:'una nube de puntos donde apenas se insinúa una tendencia',
+          med:'una tendencia que se ve a simple vista en el gráfico de dispersión',
+          gra:'una relación clara, del orden de FEVI contra volumen sistólico'},
+    dos:{peq:'los dos grupos se superponen casi por completo; la diferencia es como un quinto de la dispersión',
+         med:'las medianas se separan pero las cajas todavía se pisan',
+         gra:'los grupos se distinguen a ojo en el gráfico'},
+    chi:{peq:'una diferencia de proporciones de unos pocos puntos porcentuales',
+         med:'algo como 35% contra 65%',
+         gra:'algo como 25% contra 75% o más'}
+  };
+  let _chPw=null;
+
+  function pwLeer(){
+    const g=id=>{const n=document.getElementById(id);return n?n.value:null;};
+    const tipo=g('pw-tipo')||'corr', ef=g('pw-efecto')||'med';
+    return {tipo, ef, es:PW_EFECTOS[tipo][ef],
+            df:parseInt(g('pw-df')||'1',10),
+            pot:parseFloat(g('pw-pot')||'0.80'),
+            alfa:parseFloat(g('pw-alfa')||'0.05')};
+  }
+
+  /* Un solo punto decide N y poder para cada tipo, así que la pantalla, la columna de la
+     tabla y la curva no pueden discrepar. Devuelve el N POR GRUPO en 'dos' y el total en
+     los otros dos: la diferencia se dice explícita en el texto, porque confundirlas es
+     reclutar la mitad de los pacientes que hacen falta. */
+  function pwCalc(c){
+    if(c.tipo==='corr') return {n:pwCorrN(c.es,c.pot,c.alfa), pot:n=>pwCorr(c.es,n,c.alfa), porGrupo:false};
+    if(c.tipo==='dos')  return {n:pwDosN(c.es,c.pot,c.alfa),  pot:n=>pwDos(c.es,n,n,c.alfa), porGrupo:true};
+    return {n:pwChiN(c.es,c.pot,c.df,c.alfa), pot:n=>pwChi(c.es,n,c.df,c.alfa), porGrupo:false};
+  }
+
+  /* Poder de UNA asociación ya calculada, para el efecto de referencia elegido.
+     No usa el efecto observado: ver el comentario de pwColumna. */
+  function pwDeFila(r, ef, alfa){
+    const w=r&&r.pw; if(!w) return null;
+    if(w.tipo==='corr') return pwCorr(PW_EFECTOS.corr[ef], w.n, alfa);
+    if(w.tipo==='dos')  return pwDos(PW_EFECTOS.dos[ef], w.n1, w.n2, alfa);
+    if(w.tipo==='chi')  return pwChi(PW_EFECTOS.chi[ef], w.n, w.df||1, alfa);
+    return null;
+  }
+
+  /* Trunca en vez de redondear: con toFixed(0) un poder de 0,7951 se imprimía "80%" al
+     lado de "para llegar al 80% te faltan 12 pacientes", y en la tabla el mismo "80%"
+     salía pintado de amarillo porque el color sí compara contra 0,80. El número que se
+     lee y el umbral que decide tienen que ser el mismo. */
+  function pwPct(x){ return x==null ? '—' : Math.floor(x*100)+'%'; }
+  function pwColor(x){ return x==null?'var(--text-2)':(x>=0.80?'#22c55e':(x>=0.50?'#eab308':'#ef4444')); }
+
+  window.pwRender=function(){
+    const host=document.getElementById('pw-resultado'); if(!host) return;
+    const c=pwLeer();
+    const wrapDf=document.getElementById('pw-df-wrap');
+    if(wrapDf) wrapDf.style.display = (c.tipo==='chi') ? '' : 'none';
+
+    const nota=document.getElementById('pw-efecto-nota');
+    if(nota) nota.innerHTML='Efecto '+PW_ETIQ[c.ef]+' para una '+PW_TIPO_LBL[c.tipo]+' es <b>'+
+      PW_EFECTOS[c.tipo].lbl+' = '+String(c.es).replace('.',',')+'</b> — '+esc(PW_EJEMPLO[c.tipo][c.ef])+
+      '. Son las convenciones de Cohen (1988), un default para cuando no hay un efecto medido previo; '+
+      'no son un umbral de relevancia clínica.';
+
+    const m=pwCalc(c);
+    if(m.n==null){
+      host.innerHTML='<div class="empty" style="padding:14px;">No se pudo calcular con estos parámetros.</div>';
+      pwCurva(null,null,null); pwActual(c,null); return;
+    }
+    const total = m.porGrupo ? m.n*2 : m.n;
+    const logrado = m.pot(m.n);
+    host.innerHTML=
+      '<div style="padding:14px 16px;background:var(--surface-3);border-radius:8px;border-left:4px solid var(--accent);">'+
+        '<div style="font-size:13px;color:var(--text-2);margin-bottom:4px;">Tamaño de muestra mínimo</div>'+
+        '<div style="font-size:30px;font-weight:700;line-height:1.1;">'+m.n+
+          '<span style="font-size:15px;font-weight:400;color:var(--text-2);"> '+
+          (m.porGrupo?'pacientes <b>por grupo</b> ('+total+' en total)':'pacientes')+'</span></div>'+
+        '<div style="font-size:12px;color:var(--text-2);margin-top:6px;">para alcanzar '+
+          Math.round(c.pot*100)+'% de poder con un efecto '+PW_ETIQ[c.ef]+' ('+PW_EFECTOS[c.tipo].lbl+'='+
+          String(c.es).replace('.',',')+') y α='+String(c.alfa).replace('.',',')+' bilateral. '+
+          'Con ese N el poder real es '+pwPct(logrado)+'.</div>'+
+      '</div>'+
+      '<div class="hint" style="margin-top:8px;">Es el N de pacientes <b>con las dos variables medidas</b>. '+
+        'Sumale las pérdidas de seguimiento y los estudios incompletos para saber cuántos reclutar.'+
+        (c.tipo==='dos' ? ' El cálculo asume los <b>dos grupos del mismo tamaño</b>, que es el reparto más '+
+          'eficiente: si uno queda mucho más chico, el poder lo fija el chico y el total necesario sube.' : '')+
+        (c.tipo==='chi' ? ' Chi² necesita además que ninguna frecuencia esperada quede por debajo de 5, '+
+          'condición que un N total suficiente no garantiza si una categoría es rara.' : '')+
+        (c.tipo==='dos' ? ' Mann-Whitney no supone normalidad, así que el N sale algo mayor que el de una '+
+          'prueba t: es lo que cuesta no asumirla.' : '')+
+      '</div>';
+    pwCurva(c,m,total);
+    pwActual(c,m);
+  };
+
+  /* ¿Cuánto poder tiene lo que YA hay? Se resuelve sobre las asociaciones del corte actual
+     y no sobre un N global: cada par se calcula sobre los pacientes que tienen las DOS
+     variables, que son bastante menos que los del cruce, y usar el total de la cohorte
+     daría un poder que ninguna fila tiene de verdad. */
+  /* Una sola función elige la asociación de referencia, y el texto y el gráfico la
+     consultan. Cuando cada uno la calculaba por su lado, el gráfico marcaba un N que no
+     era el de ninguna fila (la mediana de un número par de filas) y el texto nombraba
+     otro. */
+  function pwFilas(c){
+    return (typeof _results!=='undefined'?_results:[]).filter(r=>r.pw && r.pw.tipo===c.tipo && r.p!=null);
+  }
+  function pwCentral(c){
+    const filas=pwFilas(c); if(!filas.length) return null;
+    const ns=filas.map(r=>r.n).sort((a,b)=>a-b);
+    const med=ns.length%2 ? ns[(ns.length-1)/2] : Math.round((ns[ns.length/2-1]+ns[ns.length/2])/2);
+    return filas.slice().sort((a,b)=>Math.abs(a.n-med)-Math.abs(b.n-med))[0];
+  }
+  /* El N objetivo de la FILA, que en chi² no es el del cuadro de arriba: ahí los grados de
+     libertad los pone el selector (default 1 = tabla 2×2) y acá los pone la tabla de
+     contingencia real de esa asociación. La mayoría de los chi² del catálogo no son 2×2
+     —"Geometría VI → HTA" es 4×2, df=3— y comparar el N observado contra el objetivo de
+     df=1 subestimaba el reclutamiento: decía "hacen falta 785, te faltan 645" cuando el
+     número real para df=3 es 1091. */
+  function pwObjetivoFila(c, fila){
+    if(c.tipo==='corr') return {n:pwCorrN(c.es,c.pot,c.alfa), df:null};
+    if(c.tipo==='chi'){ const df=(fila&&fila.pw&&fila.pw.df)||c.df;
+      return {n:pwChiN(c.es,c.pot,df,c.alfa), df}; }
+    return {n:pwDosN(c.es,c.pot,c.alfa), df:null};
+  }
+
+  function pwActual(c, m){
+    const host=document.getElementById('pw-actual'); if(!host) return;
+    if(!m){ host.innerHTML=''; return; }
+    /* Sobre _results y NO sobre filtered(): los filtros de la pestaña Asociaciones
+       seleccionan por significancia, por N mínimo y por fuerza del coeficiente. Con
+       "sobrevive FDR" activo el panel resumía 12 asociaciones en vez de 18, y las que
+       sobreviven son justamente las de N alto: la mediana quedaba sesgada hacia arriba
+       POR EL RESULTADO, que es la lectura circular que esta pantalla dice evitar. Encima
+       los filtros viven en otra pestaña, así que en ésta no había ninguna pista de que
+       estuvieran puestos. El período y el médico sí siguen aplicando: los aplica estBase()
+       antes de computeAll(), y ésos sí definen la población, no la seleccionan por p. */
+    const filas=pwFilas(c);
+    if(!filas.length){
+      host.innerHTML='<div class="hint" style="padding:10px 12px;background:var(--surface-3);border-radius:6px;">'+
+        'En el corte actual no hay ninguna asociación de tipo <b>'+PW_TIPO_LBL[c.tipo]+'</b> calculada, '+
+        'así que no hay con qué comparar. El N de arriba sigue valiendo para planificar.</div>';
+      return;
+    }
+    const ns=filas.map(r=>r.n).sort((a,b)=>a-b);
+    const med=ns.length%2 ? ns[(ns.length-1)/2] : Math.round((ns[ns.length/2-1]+ns[ns.length/2])/2);
+    const central=pwCentral(c);
+    const potAct=pwDeFila(central, c.ef, c.alfa);
+    const obj=pwObjetivoFila(c, central);
+    const ok = potAct!=null && potAct>=c.pot;
+    let veredicto;
+    if(ok){
+      veredicto='Ya supera el '+Math.round(c.pot*100)+'% que pediste.';
+    } else if(c.tipo==='dos'){
+      /* El poder de una comparación de dos grupos lo fija la media armónica, o sea el grupo
+         CHICO. Restarle a un objetivo balanceado el N total observado da un faltante que no
+         significa nada: acá el total (140) ya superaba el objetivo (134) y sin embargo el
+         poder era 60%, porque el reparto real era ~30/110.
+         Peor: con el grupo grande fijo hay un TECHO de poder que no se cruza por más
+         pacientes que se sumen al chico —la media armónica tiende a 2·n_grande—. Prometer
+         "te faltan X" cuando el objetivo es inalcanzable es exactamente el número plausible
+         y falso que no puede salir de acá. Se calcula el techo antes de prometer nada. */
+      const w=central.pw, chico=Math.min(w.n1,w.n2), grande=Math.max(w.n1,w.n2);
+      const d=PW_EFECTOS.dos[c.ef];
+      const techo=pwDos(d, 1e9, grande, c.alfa);
+      let n1min=null;
+      if(techo!=null && techo>=c.pot){
+        let lo=chico, hi=grande*20;
+        while(lo<hi){ const mid=Math.floor((lo+hi)/2); if((pwDos(d,mid,grande,c.alfa)||0)>=c.pot) hi=mid; else lo=mid+1; }
+        /* La bisección converge a su propio tope cuando la solución queda más allá, y lo
+           devolvía como si fuera el resultado: con grupos 12/33 el techo da 80,1% —pasa la
+           guarda— pero en 20×33=660 el poder todavía es 78,2%, así que el panel prometía
+           "660, te faltan 648" sobre un N que no alcanza. Se verifica la invariante y, si
+           no se cumple, cae en la rama del techo, que dice lo correcto. */
+        n1min = ((pwDos(d,lo,grande,c.alfa)||0) >= c.pot) ? lo : null;
+      }
+      veredicto='Los grupos son de <b>'+w.n1+'</b> y <b>'+w.n2+'</b>, y el poder lo fija el más chico '+
+        '(pesa la media armónica, no la suma). '+
+        (n1min!=null
+          ? 'Manteniendo el grupo de '+grande+', llegar al '+Math.round(c.pot*100)+'% pide <b>'+n1min+
+            '</b> en el de '+chico+' — te faltan <b>'+(n1min-chico)+' paciente'+((n1min-chico)===1?'':'s')+
+            '</b> de ese grupo. Con los dos grupos parejos alcanzaría con '+m.n+' y '+m.n+'.'
+          : 'Con el grupo de '+grande+' fijo, el poder no pasa de <b>'+pwPct(techo)+'</b> por muchos '+
+            'pacientes que sumes al otro: el techo es la media armónica. Para llegar al '+
+            Math.round(c.pot*100)+'% hay que agrandar <b>los dos</b> — con reparto parejo, '+m.n+' cada uno.');
+    } else if(obj.n==null){
+      veredicto='No se pudo calcular el N objetivo para esta asociación.';
+    } else {
+      const faltan=Math.max(0, obj.n-central.n);
+      /* Se aclara cuándo el objetivo de la fila NO es el del cuadro de arriba, porque si no
+         quedan dos números distintos en la misma pantalla sin explicación. */
+      const nota=(c.tipo==='chi' && obj.df!==c.df)
+        ? ' Esa tabla tiene <b>'+obj.df+' grados de libertad</b>, no '+c.df+', así que su objetivo ('+
+          obj.n+') no es el del cuadro de arriba ('+m.n+'): más categorías piden más pacientes.'
+        : '';
+      veredicto = (faltan>0
+        ? 'Para llegar al '+Math.round(c.pot*100)+'% hacen falta <b>'+obj.n+' pacientes</b> con las dos '+
+          'variables medidas — te faltan <b>'+faltan+'</b>.'
+        : 'El N ya alcanza el objetivo calculado pero el poder queda por debajo; revisá los parámetros.')+nota;
+    }
+    host.innerHTML=
+      '<div style="padding:12px 14px;background:var(--surface-3);border-radius:8px;border-left:4px solid '+
+        (ok?'#22c55e':'#eab308')+';">'+
+        '<div style="font-size:13px;line-height:1.6;">Tu muestra actual — asociación con el N más cercano a la '+
+          'mediana (<b>'+esc(central.lbl)+'</b>, N='+central.n+'): el poder para detectar un efecto '+
+          PW_ETIQ[c.ef]+' es <b style="color:'+pwColor(potAct)+';">'+pwPct(potAct)+'</b>. '+veredicto+
+        '</div>'+
+        '<div class="hint" style="margin-top:8px;">Las '+filas.length+' asociaciones de este tipo tienen N entre '+
+          ns[0]+' y '+ns[ns.length-1]+' (mediana '+med+'), así que el poder <b>no es uno solo</b>: '+
+          'la columna «Poder» de la tabla de asociaciones lo muestra fila por fila, ahí siempre a '+
+          '<b>α=0,05</b>.</div>'+
+      '</div>';
+  }
+
+  function pwCurva(c, m, total){
+    if(!HAS_CHART) return;
+    const el=document.getElementById('pw-canvas'); if(!el) return;
+    if(_chPw){ _chPw.destroy(); _chPw=null; }
+    if(!c||!m||m.n==null) return;
+    /* El eje llega a 2× el N objetivo: cortarlo justo en el objetivo esconde que la curva
+       se aplana, que es la lectura importante —duplicar el N después del 80% compra muy
+       poco— y hace parecer que sumar pacientes siempre rinde igual. */
+    const central0=pwCentral(c);
+    let marca0=null;
+    /* En dos grupos la curva es la de un diseño BALANCEADO, así que un diseño 29/111 no
+       está sobre ella: marcar el grupo chico (29) mostraba 46% y marcar la mitad del total
+       (70) mostraba 82%, mientras el texto decía 64%. Se marca el equivalente balanceado
+       —la media armónica 2/(1/n1+1/n2)— que por construcción tiene EXACTAMENTE el mismo
+       poder que los grupos reales, así que el punto cae sobre la curva y a la altura que
+       dice el texto. La etiqueta aclara de dónde sale el número. */
+    if(central0) marca0 = m.porGrupo
+      ? Math.round(2/(1/central0.pw.n1 + 1/central0.pw.n2))
+      : central0.n;
+    /* El eje llega hasta el mayor de los dos puntos que hay que mostrar. Antes se cortaba
+       en 2× el N necesario y la marca de la muestra actual desaparecía sin decirlo cuando
+       la muestra ya era holgada: el gráfico quedaba mostrando sólo el punto verde, como si
+       no hubiera datos, justo cuando sobran. */
+    const hasta=Math.max(10, Math.ceil(m.n*2), marca0!=null?Math.ceil(marca0*1.15):0);
+    const paso=Math.max(1, Math.round(hasta/60));
+    const pts=[];
+    for(let n=Math.max(4,paso); n<=hasta; n+=paso){ const v=m.pot(n); if(v!=null) pts.push({x:n,y:v*100}); }
+    /* La marca sale de la MISMA fila que nombra el texto (pwCentral), no de una mediana
+       recalculada: con un número par de filas la mediana no es el N de ninguna asociación,
+       y el gráfico rotulaba "Tu N actual (60)" mientras el texto hablaba de N=57.
+       En dos grupos se marca el grupo CHICO y no la mitad del total. Dividir 140 por 2
+       daba "Tu N actual (70)" al 82% —el poder de un diseño balanceado que no existe—
+       tres centímetros debajo del texto que decía 65% para los grupos reales 29/111.
+       Eran 17 puntos de diferencia, y el optimista era el del gráfico, que es lo que se
+       mira primero y lo que se le muestra a un colega. */
+    const central=central0;
+    const marcaN=marca0;
+    const marcaLbl = m.porGrupo
+      ? 'Tu muestra ('+central0.pw.n1+'/'+central0.pw.n2+', equivale a '+marca0+' por grupo)'
+      : 'Tu N actual';
+    /* En chi² la curva azul es la del escenario que el médico está PLANIFICANDO —los df
+       que puso en el selector—, pero la asociación de referencia puede tener otros: poner
+       su marca sobre esta curva daba una altura que contradecía al texto (85% arriba, 76%
+       en el gráfico). Cuando los df difieren se dibuja la segunda curva, punteada, y la
+       marca va sobre ELLA. Así la diferencia entre "lo que planificás" y "lo que tenés"
+       queda a la vista en vez de resolverse en dos números que no cierran. */
+    const dfFila = (c.tipo==='chi' && central0 && central0.pw.df) ? central0.pw.df : null;
+    const dosCurvas = dfFila!=null && dfFila!==c.df;
+    const potMarca = dosCurvas ? (n=>pwChi(c.es, n, dfFila, c.alfa)) : m.pot;
+
+    const ds=[{label:'Poder'+(dosCurvas?' — lo que planificás (df='+c.df+')':''),data:pts,
+               borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.12)',
+               fill:true,pointRadius:0,borderWidth:2,tension:.25}];
+    if(dosCurvas){
+      const pts2=[];
+      for(let n=Math.max(4,paso); n<=hasta; n+=paso){ const v=potMarca(n); if(v!=null) pts2.push({x:n,y:v*100}); }
+      ds.push({label:'Tu asociación de referencia (df='+dfFila+')',data:pts2,borderColor:'#a855f7',
+               borderDash:[5,4],fill:false,pointRadius:0,borderWidth:2,tension:.25});
+    }
+    if(marcaN!=null){
+      const v=potMarca(marcaN);
+      if(v!=null) ds.push({label:m.porGrupo?marcaLbl:(marcaLbl+' ('+marcaN+')'),data:[{x:marcaN,y:v*100}],
+        borderColor:'#eab308',backgroundColor:'#eab308',pointRadius:6,pointStyle:'rectRot',showLine:false});
+    }
+    /* En chi² el N necesario que se dibuja es el del selector de df, igual que la curva:
+       las dos cosas describen el escenario que el médico está PLANIFICANDO. El objetivo de
+       la fila observada, que puede tener otros df, lo dice el texto de arriba. */
+    ds.push({label:'N necesario ('+m.n+')',data:[{x:m.n,y:m.pot(m.n)*100}],
+      borderColor:'#22c55e',backgroundColor:'#22c55e',pointRadius:6,showLine:false});
+    _chPw=new Chart(el.getContext('2d'),{type:'line',data:{datasets:ds},options:{
+      responsive:true,maintainAspectRatio:false,parsing:false,
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},
+        tooltip:{callbacks:{label:x=>'N='+x.parsed.x+' → poder '+x.parsed.y.toFixed(0)+'%'}}},
+      scales:{x:{type:'linear',title:{display:true,text:m.porGrupo?'N por grupo':'N (pacientes con las dos variables)',
+                 font:{size:11}},min:0,max:hasta},
+              y:{min:0,max:100,title:{display:true,text:'Poder (%)',font:{size:11}},
+                 ticks:{callback:v=>v+'%'}}}}});
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
      INVESTIGACIÓN — multivariada, ROC y comparación con guías
      Comparten población y accesores con el resto del panel: estBase() ya aplicó el
      período y el médico, y avEcos() deja un estudio por paciente.
@@ -6570,7 +7163,7 @@ function renderCurrent(){
 
   /* Lista única de paneles de la vista Estadística. Sumar un módulo es agregarlo acá
      y en DEST; nada más recorre esta lista a mano. */
-  const ESTP=['asoc','porapp','subpob','subgrupos','ia','caso','logistica','multivar','roc','guiasref'];
+  const ESTP=['asoc','porapp','subpob','subgrupos','ia','caso','logistica','multivar','roc','guiasref','poder'];
   /* Un solo lugar decide qué recalcular al mostrar un panel. Antes esto estaba
      repartido entre estSubtab y avRenderTodo, y el que se olvidara de un módulo
      lo dejaba mostrando el corte anterior sin avisar. */
@@ -6589,6 +7182,7 @@ function renderCurrent(){
     multivar:  ()=>mvRender(),
     roc:       ()=>rocRender(),
     guiasref:  ()=>refGuiasRender(),
+    poder:     ()=>pwRender(),
     /* El panel de IA no se redibuja: su contenido son textos que el médico generó y que
        hay que conservar aunque cambie el corte. Lo que sí depende de la población —el
        estado de la clave y la marca de "este informe es de otra población"— lo ponen
@@ -6750,6 +7344,282 @@ function renderCurrent(){
   window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} /* La columna q y el "sobrevive FDR" van en el archivo: esta planilla se manda a un
        coautor y "Significativo: Sí" sin el q ajustado se lee como hallazgo establecido. */
     const H=['Categoría','Asociación','N','Método','Estadístico','p','q (FDR)','Sobrevive FDR','IC 95%','Semáforo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.q!=null?pTxt(r.q):'—',r.p!=null?((r.q!=null&&r.q<0.05)?'Sí':'No'):'—',r.ci,SIG_TXT(r)])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
+  /* ─────────────────────────────────────────────────────────────────────────
+     Exportación para R / SPSS / Stata
+     Una fila por PACIENTE, no por estudio — el mismo criterio que rebuildCross():
+     tres ecos del mismo paciente no son tres observaciones independientes, y un
+     paquete estadístico no tiene forma de saberlo. Se conserva el más reciente de
+     cada app y se juntan en una fila.
+     Los valores salen de los MISMOS accessors que usan las asociaciones. Releer los
+     campos acá crearía una segunda definición de cada variable, y la que se manda al
+     estadístico sería la que nadie verifica.
+     ───────────────────────────────────────────────────────────────────────── */
+
+  /* Faltante = celda VACÍA, nunca 999, -1 ni 0. R lee la celda vacía como NA y SPSS como
+     system-missing; un centinela numérico entra como dato y arrastra las medias sin que
+     nada falle. Es el modo de error clásico de estas exportaciones. */
+  const _rv = v => (v==null || (typeof v==='number' && !isFinite(v))) ? '' : v;
+  const _rb = v => v==null ? '' : (v?1:0);
+  const _rn = (v,dec) => v==null||!isFinite(v) ? '' : Math.round(v*Math.pow(10,dec))/Math.pow(10,dec);
+
+  const R_GEOM=['Normal','Remodelado concéntrico','Hipertrofia excéntrica','Hipertrofia concéntrica'];
+  /* GEOMS devuelve tal cual el patrón que alguna app haya persistido en `geometria_vi`, sin
+     normalizar. Un indexOf exacto perdía en silencio cualquier variante de acento o de
+     mayúscula —o un "HVI concéntrica"— y la celda salía vacía, indistinguible de "no se
+     evaluó la geometría" cuando en realidad el dato estaba. */
+  const _rNorm = t => String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  function _rGeomIdx(g){
+    if(g==null || g==='') return -1;
+    const t=_rNorm(g);
+    const i=R_GEOM.findIndex(x=>_rNorm(x)===t); if(i>=0) return i;
+    if(/remodelado|concentric.*remodel/.test(t)) return 1;
+    if(/excentric/.test(t)) return 2;
+    if(/concentric|^hvi\b/.test(t)) return 3;
+    if(/normal/.test(t)) return 0;
+    return -1;
+  }
+
+  /* Cada variable declara su nombre, su lectura y su documentación en el MISMO objeto:
+     el diccionario se genera de acá, así que no puede describir una codificación que la
+     columna no usa. Un diccionario escrito aparte se desincroniza en el primer cambio y
+     el error es invisible — el archivo abre igual y los números son plausibles. */
+  function _rVars(){ return [
+    {k:'id_paciente', et:'Identificador anónimo', tipo:'entero', un:'—',
+     cod:'Secuencial dentro de este archivo. NO permite volver al paciente: nombre y documento no se exportan.',
+     org:'—', f:r=>r.i},
+    {k:'edad_anos', et:'Edad', tipo:'continua', un:'años', cod:'—', org:'EcoSmart / ErgoSmart',
+     f:r=>_rn(r.edad,0)},
+    {k:'sexo', et:'Sexo', tipo:'nominal', un:'—', cod:'0 = femenino · 1 = masculino',
+     org:'EcoSmart / ErgoSmart', f:r=>r.sexo==null?'':(r.sexo==='Masculino'?1:0)},
+
+    {k:'hta', et:'Hipertensión arterial', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Antecedentes', f:r=>_rb(r.ant.hta)},
+    {k:'dm', et:'Diabetes', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Antecedentes', f:r=>_rb(r.ant.dm)},
+    {k:'fa', et:'Fibrilación / flutter auricular', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Antecedentes', f:r=>_rb(r.ant.fa)},
+    {k:'tabaquismo', et:'Tabaquismo', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Antecedentes', f:r=>_rb(r.ant.tab)},
+    {k:'dislipemia', et:'Dislipemia', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Antecedentes', f:r=>_rb(r.ant.dlp)},
+    {k:'ant_cv', et:'Antecedente cardiovascular mayor', tipo:'binaria', un:'—',
+     cod:'0 = no · 1 = sí. Incluye IAM, cardiopatía isquémica, revascularización, ACV/AIT, miocardiopatía o valvulopatía.',
+     org:'Antecedentes', f:r=>_rb(r.ant.cv)},
+
+    {k:'fevi_pct', et:'FEVI (Simpson)', tipo:'continua', un:'%', cod:'—', org:'EcoSmart', f:r=>_rn(r.fevi,1)},
+    {k:'ee_prom', et:"E/e' promedio", tipo:'continua', un:'adimensional', cod:'—', org:'EcoSmart', f:r=>_rn(r.ee,2)},
+    {k:'psap_mmhg', et:'Presión sistólica de arteria pulmonar', tipo:'continua', un:'mmHg', cod:'—',
+     org:'EcoSmart', f:r=>_rn(r.psap,1)},
+    {k:'tapse_mm', et:'TAPSE', tipo:'continua', un:'mm', cod:'—', org:'EcoSmart', f:r=>_rn(r.tapse,1)},
+    {k:'lavi_ml_m2', et:'Volumen indexado de aurícula izquierda', tipo:'continua', un:'mL/m²', cod:'—',
+     org:'EcoSmart', f:r=>_rn(r.lavi,1)},
+    {k:'masa_vi_g_m2', et:'Masa ventricular izquierda indexada', tipo:'continua', un:'g/m²', cod:'—',
+     org:'EcoSmart', f:r=>_rn(r.masa,1)},
+
+    /* Derivadas del valor REDONDEADO que se publica, no del crudo: con PSAP 35,04 la fila
+       salía psap_mmhg=35 junto a htp=1, y quien recalculara la derivada desde la columna
+       publicada obtenía otra cosa. El dataset tiene que ser consistente consigo mismo. */
+    {k:'fevi_red', et:'FEVI reducida', tipo:'binaria', un:'—',
+     cod:'0 = FEVI > 40% · 1 = FEVI ≤ 40%. Derivada de fevi_pct (del valor publicado): NO la metas junto a fevi_pct en el mismo modelo.',
+     org:'Derivada', f:r=>{const v=_rn(r.fevi,1); return v===''?'':(v<=40?1:0);}},
+    {k:'htp', et:'Hipertensión pulmonar (PSAP > 35)', tipo:'binaria', un:'—',
+     cod:'0 = no · 1 = sí. Derivada de psap_mmhg (del valor publicado): NO la metas junto a psap_mmhg en el mismo modelo.',
+     org:'Derivada', f:r=>{const v=_rn(r.psap,1); return v===''?'':(v>35?1:0);}},
+    /* Indeterminado va en su PROPIA columna y no como un código más. Con un 2 o un 9 en la
+       misma columna, cualquier modelo que la trate como numérica pone al indeterminado
+       "más enfermo" que la disfunción, y el archivo no da ninguna señal de que pasó. */
+    {k:'diast_disf', et:'Disfunción diastólica', tipo:'binaria', un:'—',
+     cod:'0 = patrón normal · 1 = disfunción · vacío = no evaluado o indeterminado (ver diast_indet)',
+     org:'EcoSmart', f:r=>r.diast==null||r.diast==='Indeterminado'?'':(r.diast==='Disfunción'?1:0)},
+    {k:'diast_indet', et:'Patrón diastólico indeterminado', tipo:'binaria', un:'—',
+     cod:'0 = clasificable · 1 = indeterminado. Indeterminado NO significa normal ni disfunción: es que el patrón no se pudo clasificar.',
+     org:'EcoSmart', f:r=>r.diast==null?'':(r.diast==='Indeterminado'?1:0)},
+    {k:'geom_vi', et:'Geometría ventricular izquierda', tipo:'nominal', un:'—',
+     cod:'0 = normal · 1 = remodelado concéntrico · 2 = hipertrofia excéntrica · 3 = hipertrofia concéntrica. NOMINAL: declarála factor (R) o nominal (SPSS); tratarla como numérica supone un orden que no existe.',
+     org:'EcoSmart', f:r=>{const i=_rGeomIdx(r.geom); return i<0?'':i;}},
+
+    {k:'mets', et:'METs alcanzados', tipo:'continua', un:'METs', cod:'—', org:'ErgoSmart', f:r=>_rn(r.mets,1)},
+    {k:'ergo_positiva', et:'Ergometría positiva para isquemia', tipo:'binaria', un:'—',
+     cod:'0 = negativa · 1 = positiva', org:'ErgoSmart', f:r=>_rb(r.pos)},
+
+    {k:'fevi_reposo_pct', et:'FEVI en reposo (eco estrés)', tipo:'continua', un:'%', cod:'—',
+     org:'EcoEstrés Smart', f:r=>_rn(r.eeRep,1)},
+    {k:'fevi_pico_pct', et:'FEVI en el pico (eco estrés)', tipo:'continua', un:'%', cod:'—',
+     org:'EcoEstrés Smart', f:r=>_rn(r.eeStr,1)},
+    {k:'reserva_pct', et:'Reserva contráctil', tipo:'continua', un:'puntos de FEVI',
+     cod:'FEVI pico − FEVI reposo', org:'EcoEstrés Smart', f:r=>_rn(r.eeRes,1)},
+    {k:'delta_psap_mmhg', et:'Incremento de PSAP con el esfuerzo', tipo:'continua', un:'mmHg', cod:'—',
+     org:'EcoEstrés Smart', f:r=>_rn(r.eePsap,1)},
+
+    /* Sin estas tres columnas, una celda vacía es ambigua: no se distingue "se hizo el eco
+       y no se midió TAPSE" de "este paciente no tiene eco". Son dos mecanismos de dato
+       faltante distintos y el análisis de completitud los tiene que separar. */
+    /* Sin esta columna, la nota "una fila por paciente" es falsa para los no
+       identificables —entran de a un estudio, así que un anónimo con eco y ergo son DOS
+       filas— y no hay forma de verlo desde el archivo. Con ella se pueden excluir o
+       modelar aparte. */
+    {k:'unidad_fila', et:'Qué representa la fila', tipo:'nominal', un:'—',
+     cod:'0 = un paciente identificado (estudios de distintas apps unidos por documento o nombre) · 1 = un estudio suelto sin identificación, que NO se pudo unir con otros del mismo paciente. Las filas con 1 pueden repetir a una misma persona.',
+     org:'Derivada', f:r=>r.suelto?1:0},
+    {k:'desfase_dias', et:'Días entre el estudio más viejo y el más nuevo de la fila', tipo:'continua', un:'días',
+     cod:'0 = todos el mismo día · vacío = un solo estudio. Sirve para verificar cuán transversal es la fila: un desfase grande significa que las variables no se midieron en el mismo momento clínico.',
+     org:'Derivada', f:r=>_rv(r.desfase)},
+    {k:'tiene_eco', et:'Tiene ecocardiograma', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Derivada', f:r=>r.sEco?1:0},
+    {k:'tiene_ergo', et:'Tiene ergometría', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Derivada', f:r=>r.sErgo?1:0},
+    {k:'tiene_ecoestres', et:'Tiene eco estrés', tipo:'binaria', un:'—', cod:'0 = no · 1 = sí',
+     org:'Derivada', f:r=>r.sEE?1:0}
+  ]; }
+
+  /* Cuántos campos trae un estudio, para desempatar dos del mismo día. Con `>` a secas
+     ganaba el primero del array: de un eco incompleto y su repetición completa cargados la
+     misma fecha se publicaba el que estuviera antes en el JSON, y las medidas del otro se
+     descartaban enteras. */
+  const _rPeso = s => s && s.campos ? Object.keys(s.campos).filter(k=>{
+    const v=s.campos[k]; return v!=null && v!=='' && !(Array.isArray(v)&&!v.length); }).length : 0;
+
+  function _rFilas(){
+    const base=estBase();
+    const porPac=new Map(), sueltos=[];
+    base.forEach(s=>{
+      /* CardioSalud no aporta ninguna de las 26 variables clínicas de esta exportación, así
+         que un paciente cuyo único estudio sea una consulta generaba una fila entera vacía
+         que igual contaba como paciente: inflaba el N del toast y el denominador de todos
+         los "% con dato" del diccionario. Se descarta acá y no después, para que el
+         id_paciente quede numerado sobre las filas que de verdad existen. */
+      if(s.app!=='eco' && s.app!=='ergo' && s.app!=='ecoestres') return;
+      const id=s._pid;
+      if(!id || !id.identifiable){ sueltos.push({[s.app]:s, _suelto:true}); return; }
+      let g=porPac.get(id.key); if(!g){ g={}; porPac.set(id.key,g); }
+      const prev=g[s.app];
+      const gana = !prev
+        || (s.fecha && !prev.fecha)
+        || (s.fecha && prev.fecha && s.fecha>prev.fecha)
+        || (String(s.fecha)===String(prev.fecha) && _rPeso(s)>_rPeso(prev));
+      if(gana) g[s.app]=s;
+    });
+    const grupos=[...porPac.values()].concat(sueltos);
+    return grupos.map((g,i)=>{
+      const sEco=g.eco||null, sErgo=g.ergo||null, sEE=g.ecoestres||null;
+      /* Los accessors de par leen pr.eco.campos sin guarda, así que sólo se llaman cuando
+         el estudio existe. Es la misma firma que usa ASSOC (pr, no estudio suelto): ver
+         el comentario de dsFor(). */
+      const pr={eco:sEco, ergo:sErgo, ecoestres:sEE};
+      const sts=[sEco,sErgo,sEE].filter(Boolean);
+      /* ident era `sEco||sErgo||sEE`, o sea SIEMPRE el eco: con un eco de 2019 y una
+         ergometría de 2025 la fila llevaba la edad de 2019 al lado de los METs de 2025.
+         Ahora manda el más reciente, y la edad además encadena entre apps como ya hacía el
+         sexo — EcoSmart la deja opcional, así que se perdía una covariable que estaba
+         cargada en la fila de al lado. */
+      /* Por getTime() y NO por String(fecha): `fecha` es un Date, así que comparar su
+         forma de texto ordena por el nombre del día ("Fri…" antes que "Mon…") y el "más
+         reciente" habría salido alfabético. Los sin fecha van al final. */
+      const _ms=st=>(st.fecha&&st.fecha.getTime)?st.fecha.getTime():-Infinity;
+      const porFecha=sts.slice().sort((a,b)=>_ms(b)-_ms(a));
+      const ident=porFecha[0]||null;
+      const _edad=(()=>{ for(const st of porFecha){ const e=_num(st.edad); if(e!=null) return e; } return null; })();
+      /* Cuántos días separan al estudio más viejo del más nuevo de la fila. Sin esto no hay
+         forma de verificar desde el archivo que la fila sea transversal, y el diccionario
+         afirma que lo es. No es una fecha, así que no reidentifica. */
+      const _desfase=(()=>{ const ds=sts.map(st=>st.fecha&&st.fecha.getTime?st.fecha.getTime():null).filter(v=>v!=null);
+        return ds.length>1 ? Math.round((Math.max(...ds)-Math.min(...ds))/86400000) : (ds.length?0:null); })();
+      const eco = sEco ? {
+        fevi:FEVI(pr), ee:EE(pr), psap:PSAP(pr), tapse:TAPSE(pr),
+        lavi:LAVI(pr), masa:MASA(pr), diast:DIAST(pr), geom:GEOMS(sEco)
+      } : {fevi:null,ee:null,psap:null,tapse:null,lavi:null,masa:null,diast:null,geom:null};
+      return {
+        i:i+1, sEco, sErgo, sEE, suelto:!!g._suelto, desfase:_desfase,
+        edad:_edad,
+        sexo:SEXO(sEco)||SEXO(sErgo)||SEXO(sEE),
+        ant:{hta:_rAnt(sts,RE_HTA), dm:_rAnt(sts,RE_DM), fa:_rAnt(sts,RE_FA),
+             tab:_rAnt(sts,RE_TAB), dlp:_rAnt(sts,RE_DLP), cv:_rAnt(sts,RE_CV)},
+        ...eco,
+        mets:sErgo?METS(pr):null, pos:sErgo?posOf(sErgo):null,
+        eeRep:sEE?FEVIrep(pr):null, eeStr:sEE?FEVIstr(pr):null,
+        eeRes:sEE?RESERVA(pr):null, eePsap:sEE?PSAPstr(pr):null
+      };
+    });
+  }
+  /* Los antecedentes se buscan en TODOS los estudios del paciente y no sólo en el primero:
+     EcoSmart los guarda en un campo y ErgoSmart en otro, y un paciente puede tener el
+     checklist cargado en uno y no en el otro. Preguntándole a uno solo, "no evaluado"
+     terminaba tapando un antecedente que la otra app sí tenía registrado. */
+  function _rAnt(sts, re){
+    let visto=false;
+    for(const s of sts){
+      const v=ANT(s,re);
+      if(v==='Sí') return true;   // marcado en cualquier app basta
+      if(v==='No') visto=true;
+    }
+    /* "No" sólo si alguna app mostró el checklist y el médico no lo marcó. Sin esta
+       distinción, un estudio viejo sin checklist entraría como 0 y el antecedente
+       contaría como ausente en vez de no evaluado — que en un modelo es la diferencia
+       entre un dato y una invención. */
+    return visto ? false : null;
+  }
+
+  window.estExportR=function(){
+    if(typeof XLSX==='undefined'){ toast('❌ Excel (XLSX) no disponible'); return; }
+    let filas;
+    /* _rFilas llama a accessors que leen estructuras anidadas. Sin esta guarda, una
+       excepción ahí aborta el handler del botón: no hay archivo, no hay aviso y el botón
+       simplemente no hace nada. */
+    try{ filas=_rFilas(); }
+    catch(e){ console.error('[estExportR] no se pudo armar la tabla',e);
+      toast('❌ No se pudo generar el archivo (ver consola)'); return; }
+    if(!filas.length){ toast('⚠️ Sin pacientes en este corte'); return; }
+    const V=_rVars();
+    /* El catch avisa por consola en vez de tragar: una celda vacía por excepción se cuenta
+       como dato faltante en el diccionario y queda indistinguible de un dato que no se
+       midió. Al menos tiene que quedar el rastro. */
+    let fallas=0;
+    const aoa=[V.map(v=>v.k), ...filas.map(r=>V.map(v=>{
+      try{ return _rv(v.f(r)); }
+      catch(e){ fallas++; console.warn('[estExportR] falló la variable '+v.k,e); return ''; } }))];
+    const ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols']=V.map(v=>({wch:Math.max(10,v.k.length+2)}));
+
+    const conDato=k=>{ const j=V.findIndex(v=>v.k===k); return aoa.slice(1).filter(f=>f[j]!=='').length; };
+    const dh=['Variable','Etiqueta','Tipo','Unidad','Codificación','N con dato','% con dato','Origen'];
+    const dic=[dh, ...V.map(v=>{ const n=conDato(v.k);
+      return [v.k, v.et, v.tipo, v.un, v.cod, n, Math.round(n/filas.length*100)+'%', v.org]; })];
+    dic.push([]);
+    dic.push(['CORTE EXPORTADO','','','','','','','']);
+    /* El archivo registra su propio corte. La nota decía "anotá el corte junto con el
+       archivo" mientras la app tenía los dos valores a mano y no los escribía, y el nombre
+       de archivo es fijo: dos cortes distintos daban dos planillas indistinguibles. */
+    const _rSel=id=>{const n=document.getElementById(id);
+      return n&&n.selectedIndex>=0 ? n.options[n.selectedIndex].text : '(no disponible)';};
+    [['Período', _rSel('periodSel')],
+     ['Médico', _rSel('est-f-med')],
+     ['Filas', (()=>{ const id=filas.filter(r=>!r.suelto).length, su=filas.length-id;
+       return filas.length+' ('+id+' paciente'+(id===1?'':'s')+' identificado'+(id===1?'':'s')+' · '+
+         su+' estudio'+(su===1?'':'s')+' suelto'+(su===1?'':'s')+' sin identificación)'; })()],
+     ['Apps incluidas','EcoSmart, ErgoSmart y EcoEstrés Smart. CardioSalud no aporta ninguna de estas variables y no genera filas.']
+    ].forEach(n=>dic.push([n[0],n[1],'','','','','','']));
+    dic.push([]);
+    dic.push(['NOTAS','','','','','','','']);
+    [['Unidad de análisis','Una fila por PACIENTE cuando unidad_fila = 0. Se conserva el estudio MÁS RECIENTE de cada app; ante misma fecha, el más completo. Las filas con unidad_fila = 1 son estudios sin identificación que no se pudieron unir: pueden repetir a una misma persona en varias filas. Excluilas o modelalas aparte antes de suponer independencia.'],
+     ['Datos faltantes','Celda VACÍA. No se usan 999, -1 ni 0 como código de faltante — en R entra como NA y en SPSS como system-missing.'],
+     ['Anonimización','No contiene nombre, documento ni fechas, y id_paciente es interno a este archivo. NO es un dato anónimo: la combinación de edad exacta, sexo y variables clínicas puede identificar a un paciente para alguien del servicio, y regenerar la exportación desde los datos de origen reproduce los mismos id. Tratalo como dato de salud seudonimizado.'],
+     ['Variables derivadas','fevi_red, htp y las tiene_* se calculan a partir de otras columnas del mismo archivo. Meter una derivada junto con su variable de origen en el mismo modelo es colinealidad perfecta.'],
+     ['Nominales','geom_vi está codificada 0-3 pero NO es ordinal: declarála factor (R) o nominal (SPSS) antes de modelar.'],
+     ['Alcance','Refleja el período y el filtro por médico activos al exportar, no toda la base. Anotá el corte junto con el archivo.'],
+     ['Diseño','Datos observacionales de la práctica asistencial: no hay aleatorización, protocolo de medición ni control de confusores. La transversalidad no está garantizada — las variables de una fila pueden venir de estudios separados en el tiempo; mirá desfase_dias.']
+    ].forEach(n=>dic.push([n[0],n[1],'','','','','','']));
+    const wd=XLSX.utils.aoa_to_sheet(dic);
+    wd['!cols']=[{wch:18},{wch:38},{wch:12},{wch:14},{wch:70},{wch:11},{wch:11},{wch:20}];
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Datos');
+    XLSX.utils.book_append_sheet(wb,wd,'Diccionario');
+    XLSX.writeFile(wb,'ceiboanalytics_datos_r_spss.xlsx');
+    const idents=filas.filter(r=>!r.suelto).length, suel=filas.length-idents;
+    toast('✅ '+idents+' paciente'+(idents===1?'':'s')+(suel?' + '+suel+' estudio'+(suel===1?'':'s')+' sin identificar':'')+
+      ' · '+V.length+' variables · sin nombre ni documento'+(fallas?' · ⚠️ '+fallas+' celdas fallaron (ver consola)':''));
+  };
+
   window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. SI=sobrevive FDR / si (no FDR)=sig. sin corregir / si (N bajo)=N insuficiente / no=no sig.',mL,y);y+=7; const cols=[['Asociacion',60],['N',11],['Metodo',30],['Estadistico',36],['p',16],['q (FDR)',16],['IC 95%',30],['Sig',18]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=SIG_PDF(r); const vals=[r.lbl,String(r.n),r.method,r.stat,pTxt(r.p),pTxt(r.q),r.ci,sg]; let x=mL; vals.forEach((v,i)=>{doc.text(pdfCelda(doc,v,cols[i][1]),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
 
   // ── Análisis IA ──
