@@ -257,6 +257,34 @@ select, input[type="date"], input[type="text"]{
   border-radius:8px;color:var(--text-1);}
 .guia-app b{color:var(--accent);}
 
+/* ── Manual de uso ── */
+/* Los tabs se envuelven en varias filas: son once y en un portátil no entran en una.
+   Sin flex-wrap la barra desborda y los últimos quedan fuera de la pantalla. */
+.man-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+.man-tabs button{padding:7px 13px;border:1px solid var(--border);background:var(--surface-1);
+  color:var(--text-2);border-radius:8px;font-size:12.5px;cursor:pointer;
+  /* 44px es el mínimo de área táctil de la suite (mobile-first-checker): con once tabs
+     en seis filas, uno de 38 se acierta mal con el pulgar y se abre el de al lado. */
+  min-height:44px;transition:background .15s,color .15s;}
+.man-tabs button:hover{background:var(--surface-2);color:var(--text-1);}
+.man-tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+.man-sec{background:var(--surface-1);box-shadow:var(--shadow);border-radius:10px;
+  padding:18px 20px;font-size:13.5px;line-height:1.7;}
+.man-sec h3{font-family:Georgia,'Times New Roman',serif;font-size:16px;margin:0 0 4px;color:var(--text-1);}
+.man-sec .man-sub{color:var(--text-2);font-size:12.5px;margin:0 0 14px;}
+.man-sec p{color:var(--text-2);margin:8px 0;}
+.man-sec b{color:var(--text-1);}
+.man-paso{display:flex;gap:11px;margin:11px 0;align-items:flex-start;}
+.man-paso .n{flex:0 0 24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+.man-paso .c{flex:1;color:var(--text-2);}
+.man-nota{margin:12px 0;padding:11px 14px;background:var(--surface-2);
+  border-left:3px solid var(--series-3);border-radius:0 8px 8px 0;color:var(--text-1);}
+.man-ojo{margin:12px 0;padding:11px 14px;background:var(--surface-2);
+  border-left:3px solid var(--critical);border-radius:0 8px 8px 0;color:var(--text-2);}
+.man-ojo b{color:var(--critical);}
+@media(max-width:640px){ .man-tabs button{flex:1 1 calc(50% - 6px);} }
+
 /* Título descriptivo de cada gráfica */
 .graf-tit{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:14px;
   color:var(--text-1);margin:0 0 2px;}
@@ -819,6 +847,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
       <div class="nav-sec" aria-hidden="true">Informes</div>
       <nav aria-label="Informes">
         <button class="navbtn" data-dest="informe"><span class="ic">📄</span>Informe PDF</button>
+        <button class="navbtn" data-dest="manual"><span class="ic">📘</span>Manual de uso</button>
         <button class="navbtn" data-dest="guia"><span class="ic">📖</span>Guía estadística</button>
       </nav>
     </div>
@@ -1491,7 +1520,9 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;">
             <div style="flex:1;min-width:260px;">
               <h2 style="margin:0 0 6px;">Cómo leer lo que calcula CeiboAnalytics</h2>
-              <p class="hint" style="margin:0;">Siete capítulos con lo mínimo necesario para interpretar el panel
+              <!-- El número sale de GUIA.length: escrito a mano decía "Siete" con diez
+                   capítulos cargados. Lo llena guiaRender(). -->
+              <p class="hint" style="margin:0;"><span id="guia-n-caps">Los</span> capítulos con lo mínimo necesario para interpretar el panel
               sin haber hecho un curso de bioestadística. Cada uno cierra explicando dónde aparece eso en la app.</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -1503,6 +1534,28 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
           </div>
         </div>
         <div id="guia-cap"></div>
+      </section>
+
+      <!-- ===================== MANUAL DE USO ===================== -->
+      <!-- Distinto de la Guía estadística: aquélla explica los MÉTODOS (qué es un p, qué
+           es un OR); ésta explica la APP (dónde se aprieta qué). Por eso va en tabs y no
+           en acordeones: se entra a buscar una cosa puntual, no a leer de corrido. -->
+      <section class="view" id="view-manual">
+        <div class="card" style="margin-bottom:14px;">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;">
+            <div style="flex:1;min-width:260px;">
+              <h2 style="margin:0 0 6px;">Manual de uso de CeiboAnalytics</h2>
+              <p class="hint" style="margin:0;">Cómo se usa la app, pantalla por pantalla. Si lo que buscás es
+              qué significa un p o un odds ratio, eso está en <b>📖 Guía estadística</b>.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn" onclick="abrirBienvenida()">🧭 Ver «Por dónde empezar»</button>
+              <button class="btn primary" onclick="manualPDF()">📥 Descargar manual (PDF)</button>
+            </div>
+          </div>
+        </div>
+        <div class="man-tabs" id="man-tabs" role="tablist"></div>
+        <div id="man-cuerpo"></div>
       </section>
 
     </div>
@@ -1584,6 +1637,17 @@ const _PDF_MAP = {
   '“':'"','”':'"','„':'"','‘':"'",'’':"'",'…':'...','′':"'",'″':'"',
   'Δ':'D','α':'alfa','β':'beta','σ':'sigma','μ':'micro','κ':'kappa','λ':'lambda','θ':'theta',
   '⚠':'!','✓':'ok','✗':'x','✅':'ok','❌':'x','ℹ':'i','📄':'','📊':'','📥':'','🗑':'',
+  /* Glifos de la interfaz que el Manual de uso NOMBRA para que el lector los encuentre
+     en pantalla. Sin mapear caían en la red final y el PDF imprimía la instrucción como
+     «menú ? -> Exportar para Analytics» o «apretá ? Interpretar mis resultados»: en un
+     manual, eso no es un carácter feo sino un paso que no se puede seguir.
+     '⋯' va a '...' y no a '' porque ES el menú de tres puntos: nombrarlo es la única
+     forma de decir cuál botón hay que apretar. Los íconos que sólo decoran una etiqueta
+     que ya viene escrita al lado ('📚 Comparar con literatura') van a '', como los
+     cuatro de arriba. */
+  '⋯':'...','↻':'','🌙':'','▤':'',        /* '…' ya está mapeado más abajo */
+  '📐':'','🧮':'','📉':'','⚡':'','📕':'','🔍':'','📚':'','💡':'','📝':'','📤':'',
+  '🧭':'','🚀':'','🔗':'','🔬':'','🎯':'','🤖':'','🖼':'','🔎':'','📦':'','📘':'','📖':'',
   '🟢':'[verde]','🟡':'[amarillo]','🔴':'[rojo]','⚫':'[negro]','🟠':'[naranja]','⚪':'[blanco]',
   /* Marcas de las tablas de regresión y de la comparación con guías. Sin mapear caían en
      la red final de pdfSafe y el PDF de la guía imprimía "una marca (? ? ?)". */
@@ -3778,6 +3842,7 @@ const DEST={
   guiasref: {v:'estadistica',p:'guiasref', t:'Comparación con guías ASE/ESC',
              h:'Contrasta los valores de tu laboratorio con los rangos de referencia publicados. Es una comparación descriptiva, no una validación del equipo ni del operador.'},
   informe:  {v:'informe',   t:'Informe anual exportable'},
+  manual:   {v:'manual',    t:'Manual de uso'},
   guia:     {v:'guia',      t:'Guía estadística'}
 };
 let currentDest='dashboard';
@@ -3949,15 +4014,21 @@ const GUIA = [
          'Usar Pearson con una variable muy sesgada o con un outlier: un solo valor extremo puede crear —o borrar— una correlación entera.'],
     app:'En <b>Estadística → Asociaciones</b>, las filas con el símbolo ↔ son correlaciones. Al tocarlas se despliega el gráfico de dispersión con tus pacientes reales: si ves una nube sin forma no hay relación, y si los puntos siguen una pendiente, la hay. La recta de tendencia solo se dibuja cuando el resultado es significativo y su sentido coincide con el del coeficiente.' },
 
-  { ic:'⚖️', t:'Comparación de grupos — Mann-Whitney y Kruskal-Wallis',
-    p:['Estas pruebas responden si una variable numérica toma valores distintos según el grupo al que pertenece el paciente. <b>Mann-Whitney</b> compara <b>dos</b> grupos (con y sin HTA, por ejemplo). <b>Kruskal-Wallis</b> es su extensión para <b>tres o más</b> (los grados de disfunción diastólica).',
-       'Las dos comparan <b>rangos</b>, no promedios: ordenan todos los valores y miran si los de un grupo tienden a quedar más arriba. Por eso el resultado se reporta con la <b>mediana y el rango intercuartílico</b> de cada grupo, y no con la media. Con precisión: no contrastan medianas sino la tendencia de un grupo a quedar por encima del otro, así que si las distribuciones tienen formas muy distintas pueden dar significativo con medianas parecidas.',
-       'Un p significativo dice que los grupos difieren, pero no cuánto. Para eso hay que mirar las medianas: si son 14,2 y 10,1 la diferencia es clínicamente relevante; si son 14,2 y 13,9, probablemente no, por más que el p sea chico.'],
-    ej:'Vol AI indexado según FA: con FA mediana 42 ml/m² (P25–P75 40–46), sin FA mediana 33 (31–37), p<0,001. Los rangos casi no se superponen, así que la diferencia no es solo estadística sino que se ve en el paciente individual.',
-    err:['Mirar solo el p y no las medianas. Con muchos pacientes, una diferencia de 0,3 mmHg puede dar p<0,001 y no cambiar ninguna conducta.',
-         'Usar Kruskal-Wallis y concluir cuál grupo difiere de cuál. La prueba dice que <i>al menos uno</i> difiere; identificar cuál requiere comparaciones adicionales, que a su vez necesitan corrección.',
-         'Comparar grupos muy desbalanceados (40 contra 3) y tratar el resultado como sólido.'],
-    app:'Las filas con → comparan una variable entre grupos. Si la variable es numérica (Mann-Whitney o Kruskal-Wallis) vas a ver la mediana, el P25–P75 y el N de cada grupo, que es exactamente lo que hay que reportar; si las dos son categóricas, el test es un Chi² y lo que se despliega es la tabla de contingencia del capítulo siguiente. En <b>Estadística → Comparación entre subgrupos</b> podés cortar toda la población por HTA, sexo, FA o edad y ver todas las variables a la vez en una tabla, con diagramas de caja de las cinco de menor p.' },
+  { ic:'⚖️', t:'Comparación de grupos — t de Student, ANOVA, Mann-Whitney y Kruskal-Wallis',
+    p:['Estas pruebas responden si una variable numérica toma valores distintos según el grupo al que pertenece el paciente. Hay <b>cuatro</b>, y se reparten en dos ejes: cuántos grupos comparás, y si la variable se distribuye normal dentro de cada grupo.',
+       'Para <b>dos</b> grupos (con y sin HTA): la <b>t de Student</b> si hay normalidad, el <b>Mann-Whitney</b> si no. Para <b>tres o más</b> (los grados de disfunción diastólica): el <b>ANOVA de una vía</b> si hay normalidad, el <b>Kruskal-Wallis</b> si no.',
+       '<b>La diferencia de fondo es qué comparan.</b> La t y el ANOVA comparan <b>medias</b>, y por eso sus resultados se reportan con la media y el desvío estándar. Mann-Whitney y Kruskal-Wallis comparan <b>rangos</b>: ordenan todos los valores y miran si los de un grupo tienden a quedar más arriba, así que se reportan con la <b>mediana y el rango intercuartílico</b>. Con precisión: los no paramétricos no contrastan medianas sino la tendencia de un grupo a quedar por encima del otro, así que con distribuciones de formas muy distintas pueden dar significativo con medianas parecidas.',
+       '<b>Cómo se decide.</b> No lo elegís vos: la app verifica la normalidad de <b>cada grupo por separado</b> con el test de <b>Shapiro-Wilk</b>. Si todos los grupos tienen n ≥ 30 <i>y</i> todos pasan Shapiro-Wilk (p > 0,05), usa el test paramétrico; si falla cualquiera de las dos condiciones, usa el no paramétrico. Por grupo y no sobre la variable entera, porque el supuesto es que los datos son normales <i>dentro</i> de cada grupo: mirando todo junto, tres grupos bien separados dan una distribución con varias jorobas que Shapiro rechazaría, y ése es justo el caso donde el ANOVA es más válido.',
+       '<b>Lo que gana la t sobre Mann-Whitney</b> es el <b>intervalo de confianza de la diferencia de medias</b>: no sólo si los grupos difieren, sino <i>cuánto</i> y con qué margen. Mann-Whitney no produce ese número, y es el que hace falta para decidir si una diferencia importa clínicamente.',
+       '<b>Cuando el ANOVA da significativo, falta la mitad de la respuesta:</b> dice que <i>al menos un</i> grupo difiere, no cuál. Para eso está el <b>post-hoc de Tukey</b>, que compara todos los pares entre sí con el p ya <b>ajustado por la cantidad de pares de ese ANOVA</b>. Ojo con el alcance de ese ajuste: cubre las comparaciones <i>dentro</i> de esa asociación, no las decenas de contrastes del resto de la tabla — de eso se ocupa la columna q. Si la fila no sobrevive al FDR, sus pares de Tukey son hipótesis por más que su p ajustado sea chico.',
+       '<b>La t y el ANOVA piden un supuesto más que la normalidad:</b> que la dispersión sea parecida entre los grupos. La <b>t de Welch</b> —la variante que usa la app— está construida justamente para no necesitarlo. El ANOVA clásico sí lo necesita, así que la app además compara las varianzas de los grupos antes de usarlo: si la mayor supera al doble de la menor, se va a Kruskal-Wallis y lo dice en el tooltip.'],
+    ej:'Vol AI indexado según FA: con FA mediana 42 ml/m² (P25–P75 40–46), sin FA mediana 33 (31–37), p<0,001 por Mann-Whitney. Los rangos casi no se superponen, así que la diferencia no es sólo estadística sino que se ve en el paciente individual. Si esos mismos grupos tuvieran 30 pacientes cada uno y pasaran Shapiro-Wilk, la app informaría en cambio una t de Welch con la diferencia de medias y su IC 95% —por ejemplo 9,1 ml/m² [6,3, 11,9]—, que dice lo mismo y además cuánto.',
+    err:['Mirar sólo el p y no las medias o medianas. Con muchos pacientes, una diferencia de 0,3 mmHg puede dar p<0,001 y no cambiar ninguna conducta.',
+         'Usar Kruskal-Wallis o un ANOVA y concluir cuál grupo difiere de cuál. Los dos dicen que <i>al menos uno</i> difiere; identificar cuál requiere comparaciones adicionales, que a su vez necesitan corrección.',
+         'Comparar grupos muy desbalanceados (40 contra 3) y tratar el resultado como sólido.',
+         'Leer "Shapiro-Wilk p > 0,05" como prueba de que los datos SON normales. Es lo contrario de lo que un test puede decir: significa que no alcanzó la evidencia para descartar la normalidad. Con un grupo chico eso pasa casi siempre, no porque los datos sean normales sino porque hay pocos. Por eso la app además exige n ≥ 30 por grupo antes de fiarse.',
+         'Suponer que con muchos pacientes va a salir siempre la t. Es al revés: cuanto mayor el n, más poder tiene Shapiro-Wilk y más fácil rechaza la normalidad por desviaciones mínimas. Es esperable que la mayoría de tus filas sigan siendo no paramétricas — y no es un defecto, es la opción conservadora.'],
+    app:'Las filas con → comparan una variable entre grupos. La columna <b>Método</b> dice cuál de los cuatro tests se usó, con un <b>°</b> al lado: pasando el mouse por ahí aparece <b>por qué</b> se eligió ése, con el n y el W y el p de Shapiro-Wilk de cada grupo a la vista. Al tocar la fila, si el test fue paramétrico vas a ver <b>media y DS</b> por grupo más la diferencia con su IC 95% (y, en un ANOVA significativo, la tabla de Tukey par por par); si fue no paramétrico, la <b>mediana, el P25–P75</b> y el N, que es lo que hay que reportar. Si las dos variables son categóricas el test es un Chi² y se despliega la tabla de contingencia del capítulo siguiente. En <b>Estadística → Comparación entre subgrupos</b> podés cortar toda la población por HTA, sexo, FA o edad y ver todas las variables a la vez en una tabla, con diagramas de caja de las cinco de menor p.' },
 
   { ic:'🔲', t:'Tablas de contingencia y Chi²',
     p:['Cuando las dos variables son <b>categóricas</b> —tiene o no tiene HTA, grado de disfunción diastólica, sexo— la comparación se hace con una tabla de contingencia: una grilla donde <b>cada celda cuenta los pacientes que tienen esa combinación</b> de características.',
@@ -4047,8 +4118,12 @@ function guiaTexto(t){
   return String(t).replace(/\{\{N5\}\}/g,String(Math.round(n*0.05))).replace(/\{\{N\}\}/g,String(n));
 }
 
+const _NUM_ES=['Cero','Un','Dos','Tres','Cuatro','Cinco','Seis','Siete','Ocho','Nueve','Diez',
+               'Once','Doce','Trece','Catorce','Quince'];
 function guiaRender(){
   const host=document.getElementById('guia-cap'); if(!host) return;
+  { const c=document.getElementById('guia-n-caps');
+    if(c) c.textContent=_NUM_ES[GUIA.length]||String(GUIA.length); }
   if(host.dataset.listo==='1') return;   // contenido estático: se arma una sola vez
   host.innerHTML = GUIA.map((c,i)=>
     '<details class="explica guia-cap"'+(i===0?' open':'')+'>'+
@@ -4130,6 +4205,362 @@ function _guiaPDF(){
   toast('✅ Guía exportada');
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   MANUAL DE USO — cómo se maneja la app (la Guía estadística explica los métodos)
+
+   Una sola fuente para la pantalla y para el PDF. El manual describe dónde se
+   aprieta qué, así que es lo primero que envejece cuando se mueve un botón: con
+   dos copias, la que se actualiza es la de la pantalla y el PDF sale mintiendo
+   sin que nadie lo note hasta que un colega lo sigue al pie de la letra.
+
+   Bloques: {p} párrafo · {h} subtítulo · {pasos} lista numerada · {lista} viñetas
+            {nota} recuadro informativo · {ojo} advertencia
+   ══════════════════════════════════════════════════════════════════════════ */
+const MANUAL = [
+{ id:'que', ic:'🧭', t:'¿Qué es CeiboAnalytics?', sub:'Qué hace, para qué sirve y qué no reemplaza',
+  b:[
+  {p:'CeiboAnalytics es el <b>módulo de análisis</b> de la suite CeiboMed. No genera estudios: <b>lee los que ya hiciste</b> en EcoSmart, ErgoSmart, EcoEstrés y CardioSalud, los junta en una sola base y busca relaciones entre variables que en cada app por separado no se ven.'},
+  {h:'Para qué sirve'},
+  {lista:[
+    '<b>Ver tu laboratorio como población</b>, no como estudios sueltos: cuántos hacés, de qué tipo, cómo evolucionan mes a mes.',
+    '<b>Cruzar apps</b>: relacionar un dato del ecocardiograma con uno de la ergometría del mismo paciente. Eso es lo que ninguna app sola puede hacer.',
+    '<b>Encontrar asociaciones</b> entre variables y saber cuáles resisten un examen estadístico serio y cuáles son ruido.',
+    '<b>Preparar material de investigación</b>: tablas, figuras a 300 DPI, un borrador de abstract y un archivo listo para R o SPSS.'
+  ]},
+  {h:'Qué NO es'},
+  {ojo:'<b>No es una herramienta de decisión clínica.</b> Nada de lo que muestra se aplica a un paciente concreto. Son análisis de <b>población</b>: describen tendencias en tu base, no indican conducta en la consulta.'},
+  {ojo:'<b>No reemplaza a un bioestadístico.</b> La app elige el test correcto y te dice por qué, pero un diseño de estudio, una decisión sobre qué variables ajustar o una publicación revisada por pares necesitan a alguien que sepa. Tratala como un buen primer análisis, no como el análisis final.'},
+  {ojo:'<b>La IA no reemplaza la lectura de la literatura.</b> Lo que devuelve Claude es un borrador para verificar, y puede citar trabajos que no existen. Comprobá cada referencia antes de usarla.'},
+  {h:'Dónde viven tus datos'},
+  {p:'<b>Todo queda en este navegador y en este equipo.</b> No hay servidor, no hay cuenta y nada se sube a ningún lado. Eso tiene dos consecuencias prácticas: si borrás los datos del navegador se pierde la base, y si abrís la app en otra computadora no vas a encontrar nada — tenés que volver a importar los archivos ahí.'},
+  {nota:'La única excepción es el <b>Análisis IA</b>: ahí, y sólo si lo usás, el resumen de tus resultados sale hacia la API de Anthropic. Nunca salen datos identificatorios de pacientes.'}
+]},
+
+{ id:'inicio', ic:'🚀', t:'Inicio rápido', sub:'De cero a tu primer resultado, en tres pasos',
+  b:[
+  {p:'El orden importa: sin el primer paso los otros dos no tienen con qué trabajar.'},
+  {pasos:[
+   '<b>Importá tus datos.</b> En EcoSmart (o la app que sea) abrí el menú <b>⋯ → Exportar para Analytics</b> y guardá el archivo. Volvé acá, al <b>Dashboard</b>, y usá el botón <b>📥 Importar</b> de la app correspondiente en el panel de arriba. Repetí para cada app que uses.',
+   '<b>Mirá el Dashboard.</b> Apenas importás, las tarjetas de arriba te dicen cuántos estudios entraron, de qué apps y cómo se reparten en el tiempo. Si el número no es el que esperabas, ahí ya lo ves.',
+   '<b>Andá a Estadística → Asociaciones.</b> Es la pantalla donde vive el valor de la app: prueba decenas de relaciones entre tus variables y marca cuáles dan significativas. <b>Tocá cualquier fila</b> para ver los datos reales de tu muestra que produjeron ese número.'
+  ]},
+  {nota:'Si es tu primera vez, mirá primero la columna <b>Sig.</b> y quedate sólo con las filas <b>🟢</b>: son las que sobreviven a la corrección por comparaciones múltiples. Las 🟡 son candidatas a azar y conviene tratarlas como hipótesis, no como hallazgos.'},
+  {h:'Cuántos estudios hacen falta'},
+  {p:'La app calcula con lo que haya, pero <b>por debajo de 15 estudios los números no significan gran cosa</b> y te lo avisa arriba de la tabla. Para que aparezcan los tests paramétricos (t de Welch, ANOVA) hacen falta al menos 30 pacientes <i>en cada grupo</i> <b>y</b> que cada grupo pase el test de normalidad de Shapiro-Wilk — son dos condiciones, no una.'},
+  {nota:'<b>Es esperable que la mayoría de tus filas sigan siendo no paramétricas</b> (Mann-Whitney, Kruskal-Wallis), incluso con muchos pacientes. No está roto: cuantos más casos hay, más fácil le resulta a Shapiro-Wilk detectar que la distribución no es exactamente normal, y ante la duda la app elige el test que no lo asume. Cada fila explica su propio caso en el <b>°</b> de la columna Método.'}
+]},
+
+{ id:'importar', ic:'📥', t:'Importar datos', sub:'Cómo sacar los estudios de cada app y meterlos acá',
+  b:[
+  {h:'1. Exportar desde la app de origen'},
+  {p:'Cada app de CeiboMed vive en su propio subdominio, así que <b>Analytics no puede leer sus datos por su cuenta</b>: hay que pasarle un archivo. En todas el camino es el mismo:'},
+  {lista:[
+    '<b>EcoSmart</b> — menú <b>⋯ → Exportar para Analytics</b>',
+    '<b>ErgoSmart</b> — menú <b>⋯ → Exportar para Analytics</b>',
+    '<b>EcoEstrés</b> — menú <b>⋯ → Exportar para Analytics</b>',
+    '<b>CardioSalud</b> — menú <b>⋯ → Exportar para Analytics</b>'
+  ]},
+  {nota:'Es un archivo distinto del PDF del informe y del Excel de la planilla: el de Analytics trae los campos en el formato que esta app entiende. Si exportás el Excel y lo cargás acá, la app lo va a rechazar avisando que ese archivo es de otra cosa.'},
+  {h:'2. Importar acá'},
+  {p:'En el <b>Dashboard</b>, arriba de todo, hay una fila de botones <b>📥 Importar</b>, uno por app. Apretá el de la app que corresponde y elegí el archivo que acabás de guardar. Cada botón muestra al lado cuántos estudios de esa app ya tenés cargados.'},
+  {ojo:'<b>El botón importa a la app que dice.</b> Si cargás un archivo de ErgoSmart con el botón de EcoSmart, la app detecta que la forma del archivo no coincide y lo rechaza en vez de guardar cualquier cosa: no vas a terminar con ergometrías contadas como ecocardiogramas.'},
+  {h:'3. Importación incremental'},
+  {p:'<b>Podés reimportar todas las veces que quieras.</b> No duplica nada: cada estudio se identifica por paciente y fecha, así que la app compara lo que traés con lo que ya tenía y te informa el resultado en tres números:'},
+  {lista:[
+    '<b>Nuevos</b> — estudios que no estaban en la base y se agregaron.',
+    '<b>Actualizados</b> — estudios que ya estaban pero que en el archivo vienen modificados (los editaste en la app de origen después de la última exportación). Se pisa la versión vieja con la nueva.',
+    '<b>Sin cambios</b> — estudios idénticos a los que ya tenías. Se ignoran.'
+  ]},
+  {p:'El flujo normal es entonces: trabajás la semana en EcoSmart, exportás, importás acá, y sólo entran los estudios nuevos. No hace falta llevar la cuenta de qué exportaste la vez pasada.'},
+  {h:'4. Limpiar datos'},
+  {p:'En el mismo panel está <b>🗑 Limpiar</b>, que borra los estudios <b>de una app por vez</b> — no todo junto. Sirve cuando importaste algo mal, o cuando querés rehacer la base de una app desde cero. La app te pide confirmación y te dice cuántos estudios va a borrar.'},
+  {ojo:'Borrar es <b>definitivo</b> y no hay papelera: los datos viven sólo en este navegador. Antes de limpiar, asegurate de tener el archivo de exportación de esa app guardado en algún lado para poder volver a cargarlo.'}
+]},
+
+{ id:'dashboard', ic:'▤', t:'Dashboard', sub:'La foto general de tu laboratorio',
+  b:[
+  {p:'Es la pantalla de entrada (<b>Plataforma</b> en el menú). Responde una sola pregunta: <b>qué hay en tu base</b>.'},
+  {h:'Las tarjetas de arriba'},
+  {lista:[
+    '<b>Estudios totales</b> — cuántos hay en el período elegido, sumando todas las apps.',
+    '<b>Pacientes</b> — cuántas personas distintas. Siempre es menor o igual que los estudios: un paciente puede tener varios.',
+    '<b>Estudios por app</b> — el reparto entre EcoSmart, ErgoSmart, EcoEstrés y CardioSalud. Sirve para ver de un vistazo si una app quedó sin importar.',
+    '<b>Médicos</b> — cuántos firmaron estudios en el período.'
+  ]},
+  {h:'Evolución mensual'},
+  {p:'Una línea por app con el conteo de estudios de cada mes. Es la gráfica que muestra estacionalidad y tendencia: si una línea se corta de golpe, casi siempre es que faltó importar, no que dejaste de trabajar.'},
+  {h:'Los dos filtros de arriba'},
+  {p:'Están en la barra superior y <b>afectan a toda la app</b>, no sólo al dashboard: la tabla de asociaciones, la regresión y los informes usan el mismo recorte.'},
+  {lista:[
+    '<b>Período</b> — últimos 30, 90, 180 o 365 días, todo el histórico, o un rango personalizado con dos fechas. Por defecto está en 365 días, así que <b>si importaste estudios más viejos y no aparecen, es esto</b>: pasalo a «Todo el histórico».',
+    '<b>Médico</b> — dentro de las pantallas de Estadística podés dejar sólo tus estudios o los de un colega. El N de cada análisis cambia en consecuencia.'
+  ]},
+  {nota:'El botón <b>↻ Actualizar datos</b> vuelve a leer lo guardado en el navegador. Sirve si importaste desde otra pestaña y querés refrescar sin recargar la página.'}
+]},
+
+{ id:'asoc', ic:'🔗', t:'Asociaciones', sub:'La pantalla principal: qué se relaciona con qué',
+  b:[
+  {p:'La app prueba automáticamente decenas de relaciones entre las variables de tu base y arma una fila por cada una. No tenés que elegir nada: se calculan todas y vos filtrás.'},
+  {h:'Cómo leer la tabla'},
+  {lista:[
+    '<b>Asociación</b> — qué se está relacionando. Un <b>↔</b> es una correlación entre dos variables numéricas; una <b>→</b> es una comparación entre grupos.',
+    '<b>N</b> — cuántos pacientes entraron en <i>ese</i> cálculo. Cambia de fila en fila, porque no todos los estudios tienen todos los campos cargados.',
+    '<b>Método</b> — qué test se usó. Lleva un <b>°</b> al lado: pasando el mouse te dice <b>por qué se eligió ése</b>, con el n y el resultado de Shapiro-Wilk de cada grupo.',
+    '<b>Estadístico</b> — el valor del test (r, ρ, U, H, χ², t o F).',
+    '<b>p</b> — el p-valor sin corregir.',
+    '<b>q (FDR)</b> — el p corregido por comparaciones múltiples. <b>Es el que hay que mirar.</b>',
+    '<b>IC 95%</b> — el intervalo de confianza, cuando el test produce uno.',
+    '<b>Poder</b> — con ese N, qué probabilidad había de detectar un efecto de referencia. No es el poder del efecto observado.',
+    '<b>Sig.</b> — el semáforo.'
+  ]},
+  {h:'El semáforo de cuatro estados'},
+  {lista:[
+    '<b>🟢</b> — significativa <i>y</i> sobrevive a la corrección por comparaciones múltiples (q &lt; 0,05). Es el único estado en el que un hallazgo se sostiene solo.',
+    '<b>🟡</b> — significativa sin corregir, pero <b>no</b> sobrevive al FDR. Con decenas de contrastes, es candidata a azar: tratala como hipótesis para un estudio futuro, no como resultado.',
+    '<b>🟠</b> — significativa, pero con una reserva: o el N no alcanza para el método, o hay frecuencias esperadas menores a 5 en un Chi². El tooltip de la fila dice cuál de las dos.',
+    '<b>⚫</b> — no significativa, o no calculable con los datos que hay.'
+  ]},
+  {h:'Qué es el FDR y por qué importa'},
+  {p:'La app calcula <b>decenas</b> de asociaciones a la vez. Con un umbral de p &lt; 0,05, por puro azar esperás que <b>una de cada veinte</b> dé «significativa» aunque no exista ninguna relación real. Si probás 60, salen unas 3 falsas de regalo — y no hay forma de saber cuáles mirando el p.'},
+  {p:'La corrección de <b>Benjamini-Hochberg</b> ajusta los p en función de cuántos contrastes se hicieron y produce la columna <b>q</b>. Un q &lt; 0,05 quiere decir que, entre las filas que declarás positivas, esperás menos de un 5% de falsos hallazgos. Por eso el 🟢 exige q y no sólo p.'},
+  {ojo:'El error más común de esta pantalla es <b>filtrar por p &lt; 0,05, exportar la lista y reportarla</b>. Esa lista contiene los falsos positivos que el FDR está para descartar. Si vas a publicar o presentar, usá el filtro <b>«sobrevive FDR»</b>.'},
+  {h:'Tocar una fila'},
+  {p:'Cada fila se despliega y muestra <b>los datos reales de tu muestra</b> que produjeron ese número. Qué aparece depende del tipo de asociación:'},
+  {lista:[
+    '<b>Correlaciones (↔)</b> — un <b>gráfico de dispersión</b> con un punto por paciente, más la media, DS, mediana y P25–P75 de las dos variables. La recta de tendencia sólo se dibuja si el resultado es significativo y su sentido coincide con el del coeficiente.',
+    '<b>Comparación de grupos (→) con variable numérica</b> — la tabla por grupo. Si el test fue <b>no paramétrico</b>, con mediana y P25–P75; si fue <b>paramétrico</b>, con media y DS más la diferencia y su IC 95%, y en un ANOVA significativo la tabla de Tukey par por par.',
+    '<b>Dos variables categóricas (→)</b> — la <b>tabla de contingencia</b> con los conteos por celda, los totales y el porcentaje sobre la fila, más el aviso si alguna frecuencia esperada quedó por debajo de 5.'
+  ]},
+  {nota:'Los dos botones de exportación —Excel y PDF— exportan <b>exactamente lo que está filtrado en pantalla</b>, con la columna q incluida. Si filtraste por FDR, eso es lo que sale.'}
+]},
+
+{ id:'avanzada', ic:'🔬', t:'Estadística avanzada', sub:'Los cuatro módulos de Investigación y cuándo usar cada uno',
+  b:[
+  {p:'Viven en la sección <b>Investigación</b> del menú y sólo aparecen en <b>modo experto</b>. A diferencia de Asociaciones, acá vos elegís las variables.'},
+  {h:'📐 Regresión logística univariada'},
+  {p:'Toma <b>un predictor por vez</b> contra un desenlace binario (por ejemplo: ¿la edad predice tener FEVI reducida?) y devuelve un <b>odds ratio</b> con su IC 95%.'},
+  {p:'<b>Cuándo usarla:</b> como tamizaje, para ver qué variables tienen algo que decir sobre un desenlace antes de armar un modelo.'},
+  {ojo:'Los OR <b>no están ajustados entre sí</b>. Si la edad y la masa del VI predicen las dos lo mismo, cada una se lleva el crédito entero por separado. Para separarlas hace falta la multivariada.'},
+  {h:'🧮 Regresión logística multivariada'},
+  {p:'Varios predictores en <b>un mismo modelo</b>, así que cada OR queda <b>ajustado</b> por los demás: responde «¿esta variable aporta algo <i>más allá</i> de las otras?».'},
+  {p:'<b>Cuándo usarla:</b> cuando querés saber cuál de varios factores correlacionados es el que realmente pesa.'},
+  {ojo:'Pide bastantes más pacientes que la univariada — la regla de bolsillo es <b>al menos 10 eventos por variable</b> incluida. Y no metas en el mismo modelo una variable y otra derivada de ella: eso es colinealidad perfecta y el modelo devuelve números sin sentido.'},
+  {h:'📉 Curvas ROC'},
+  {p:'Mide <b>cuán bien una variable numérica separa</b> a los que tienen un desenlace de los que no, y propone un <b>punto de corte</b>. Devuelve el AUC con IC 95% y, en ese corte, sensibilidad, especificidad, VPP y VPN con los conteos de tu muestra.'},
+  {p:'<b>Cuándo usarla:</b> cuando la pregunta es «¿a partir de qué valor de esta medida conviene preocuparse?».'},
+  {nota:'Detecta sola la dirección: si son los valores <b>bajos</b> los que acompañan al desenlace —como el TAPSE— el corte sale con ≤ y lo dice. Avisa cuando el grupo más chico tiene menos de 30 pacientes y cuando el IC del AUC incluye el 0,50.'},
+  {h:'⚡ Poder estadístico'},
+  {p:'Calcula <b>cuántos pacientes hacen falta</b> para detectar un efecto de un tamaño dado.'},
+  {ojo:'<b>Se planifica ANTES de recoger los datos.</b> Calcular el poder después, usando el efecto que ya observaste, no agrega información: es una función del propio p y sirve sólo para justificar un resultado negativo con un argumento circular.'},
+  {h:'📕 Comparación con guías'},
+  {p:'Contrasta los valores de tu laboratorio con los <b>rangos de referencia publicados</b> (ASE/ESC) y marca con un semáforo si tu mediana cae dentro o fuera.'},
+  {ojo:'Es una comparación <b>descriptiva</b>. Que tu mediana de FEVI caiga fuera del rango no valida ni invalida tu equipo ni tu técnica: tu población no es la de la guía. Sirve para detectar desviaciones llamativas que ameriten revisar cómo se está midiendo, no como control de calidad formal.'}
+]},
+
+{ id:'subpob', ic:'🎯', t:'Subpoblaciones', sub:'Analizar un subgrupo — y por qué es la sección más peligrosa',
+  b:[
+  {p:'Permite quedarse con un subgrupo concreto —los pacientes con <b>FA</b>, con <b>insuficiencia cardíaca</b>, con <b>valvulopatía significativa</b>— y describirlo aparte.'},
+  {h:'Cómo se usa'},
+  {pasos:[
+   'Elegí la subpoblación en el desplegable. Sólo aparecen las combinaciones con <b>10 pacientes o más</b>.',
+   'La app muestra el perfil del subgrupo comparado con los pacientes en quienes ese antecedente está registrado como <b>ausente</b>.',
+   'Con <b>«Ver asociaciones en esta subpoblación»</b> se recalcula la tabla de asociaciones entera dentro del subgrupo.',
+   'Con <b>«📄 Exportar análisis (PDF)»</b> te llevás el informe del subgrupo.'
+  ]},
+  {nota:'El grupo de comparación <b>no es «todo el resto»</b>: los pacientes en los que ese antecedente no está cargado quedan fuera de los dos grupos. Es la decisión correcta —un dato ausente no es un «no»— pero explica por qué los dos N no suman el total de tu base.'},
+  {h:'La advertencia que importa'},
+  {ojo:'<b>Subgroup shopping.</b> Si recorrés subpoblaciones hasta encontrar una donde algo dé significativo y reportás sólo ésa, estás publicando ruido. Mirando diez subgrupos, esperás encontrar algo «significativo» en varios por puro azar — y el FDR que protege la tabla principal <b>no te cubre</b> acá, porque se calcula dentro de cada subpoblación por separado, no sobre todas las que miraste.'},
+  {p:'La forma honesta de usar esta sección es <b>decidir el subgrupo antes de mirar</b>, por una razón clínica, y reportar cuántos subgrupos examinaste. Un hallazgo en subpoblación es una <b>hipótesis</b> para confirmar en otra muestra, casi nunca un resultado.'}
+]},
+
+{ id:'ia', ic:'🤖', t:'Análisis IA', sub:'Los cuatro botones, cuándo usar cada uno y cómo exportar',
+  b:[
+  {p:'Le manda un resumen de tus resultados a Claude y te devuelve texto. Necesita tu <b>API key de Anthropic</b>, que se carga en esa misma pantalla.'},
+  {ojo:'<b>Todo lo que devuelve es un borrador que tenés que verificar.</b> La IA puede inventar referencias con formato perfecto y autores plausibles que no existen. Ninguna cita sale de acá hacia un trabajo sin que la hayas encontrado vos.'},
+  {h:'🔍 Interpretar mis resultados'},
+  {p:'Explica en lenguaje clínico qué significan tus asociaciones significativas.'},
+  {p:'<b>Cuándo:</b> cuando ya tenés la tabla y querés una lectura en prosa, o para chequear que estás entendiendo bien un resultado. Es el más seguro de los cuatro, porque trabaja sobre números que la app ya calculó.'},
+  {h:'📚 Comparar con literatura'},
+  {p:'Contrasta tus hallazgos con lo publicado internacionalmente.'},
+  {p:'<b>Cuándo:</b> para orientarte sobre si lo que encontraste es lo esperable o llamativo.'},
+  {ojo:'Es <b>el más riesgoso de los cuatro</b> y donde más hay que desconfiar: es exactamente la tarea en la que un modelo inventa citas. Usalo para saber <i>qué buscar</i>, y después buscalo de verdad.'},
+  {h:'💡 Proponer hipótesis'},
+  {p:'Sugiere 3 a 5 preguntas de investigación a partir de tus datos.'},
+  {p:'<b>Cuándo:</b> en la etapa de diseño, cuando tenés una base y no sabés todavía qué preguntarle. Como es generación de ideas y no de hechos, el riesgo de inventar es el menos grave: una hipótesis mala se descarta sola.'},
+  {h:'📝 Generar borrador de abstract'},
+  {p:'Redacta un abstract en formato IMRAD listo para adaptar.'},
+  {p:'<b>Cuándo:</b> al final, cuando ya decidiste qué vas a reportar. Sirve para no empezar de la hoja en blanco.'},
+  {ojo:'Revisá <b>número por número</b> contra la tabla antes de mandarlo a ningún lado. Y si el trabajo se publica, la mayoría de las revistas exige declarar el uso de IA en la redacción.'},
+  {h:'📤 Exportar a EvidenceSmart'},
+  {p:'Arma un resumen de tus hallazgos y <b>lo copia al portapapeles</b>. Pegalo en EvidenceSmart como «Contexto de investigación» para buscar trabajos relacionados. <b>No usa la API</b> y no consume créditos: el texto se arma acá.'}
+]},
+
+{ id:'graficas', ic:'🖼', t:'Gráficas', sub:'Cómo sacarlas en calidad de publicación',
+  b:[
+  {p:'Cada gráfica de la app tiene debajo un botón <b>📥 Descargar PNG (300 DPI)</b>.'},
+  {h:'Por qué 300 DPI'},
+  {p:'Es la resolución que piden las revistas y los congresos para figuras. La app no escala la imagen y ya: la genera al tamaño correcto y <b>le escribe la densidad real en el archivo</b>, así que Word, LaTeX o InDesign la colocan con el tamaño físico que corresponde en vez de tratarla como una captura de pantalla gigante.'},
+  {h:'Usá modo claro para exportar'},
+  /* El botón de tema se nombra EN PALABRAS y no sólo por su ícono: 🌙 no tiene etiqueta
+     de texto al lado, y en el PDF los emojis se blanquean, así que «con el botón 🌙» se
+     imprimía como «con el botón de la barra superior» — sin decir cuál. */
+  {ojo:'<b>Antes de descargar, pasá la app a tema claro</b> con el botón de día/noche 🌙 (el último de la barra superior). La gráfica se exporta con los colores que tiene en pantalla, así que en tema oscuro sale con fondo negro y texto blanco: sobre papel eso es una mancha de tinta, y en un proyector se ve peor que bien.'},
+  {p:'El nombre del archivo sale ya armado con el tipo de gráfica, así que si bajás varias no se pisan entre sí.'},
+  {h:'Cada gráfica se explica sola'},
+  {p:'Al lado del título de cada una hay un <b>ℹ️</b> que despliega tres cosas: qué es, cómo se lee, y <b>qué dice tu muestra en particular</b> — esto último calculado sobre la gráfica que estás viendo, no un texto fijo.'}
+]},
+
+{ id:'modos', ic:'🔎', t:'Modo básico / Modo experto', sub:'Qué muestra cada uno y cómo cambiar',
+  b:[
+  {p:'El interruptor está en la barra superior, al lado del selector de período. Cambia <b>cuántas secciones aparecen en el menú</b>; no cambia ningún cálculo.'},
+  {h:'Modo básico'},
+  {p:'Deja a la vista sólo lo esencial: <b>Plataforma</b>, <b>Asociaciones</b>, <b>Análisis IA</b> y este <b>Manual</b>. Es el modo para empezar, o para cuando querés ir directo a la tabla sin pasar por al lado de once módulos.'},
+  {nota:'Nada desaparece en silencio: en modo básico, la pantalla de Estadística muestra arriba un cartel que <b>enumera qué destinos se escondieron</b> y ofrece el cambio a experto ahí mismo.'},
+  {h:'Modo experto'},
+  {p:'Muestra todo: Población, Brechas, Calidad, Por médico, Comparar períodos, Caso individual, Por app, Subpoblaciones, Comparación entre subgrupos, las cuatro pantallas de Investigación y la Comparación con guías.'},
+  {h:'Cuál te toca al abrir'},
+  {p:'La primera vez, la app decide sola: si <b>ya tenés estudios cargados</b> arranca en experto, y si la base está vacía arranca en básico. A partir de que lo cambiás una vez, recuerda tu elección.'}
+]},
+
+{ id:'exportar', ic:'📦', t:'Exportar para R / SPSS', sub:'Cuándo la app se queda corta y hay que salir a un programa estadístico',
+  b:[
+  {p:'En la pantalla de <b>Asociaciones</b>, junto a los botones de Excel y PDF, está la exportación para software estadístico.'},
+  {h:'Qué genera'},
+  {lista:[
+    'Una <b>matriz de datos</b> con una fila por paciente y una columna por variable, que es el formato que esperan R y SPSS — no la tabla de resultados, sino los datos crudos con los que se calcularon.',
+    'Un <b>script de lectura</b> comentado, para que el archivo se abra con los tipos correctos y las variables categóricas entren como factores y no como texto.',
+    'La <b>documentación de las variables</b>: qué significa cada columna, en qué unidades está y cuáles son derivadas de otras.'
+  ]},
+  {h:'Cuándo usarlo'},
+  {lista:[
+    'Cuando necesitás un <b>modelo que la app no hace</b>: supervivencia, medidas repetidas, modelos mixtos, ecuaciones de estimación generalizada.',
+    'Cuando vas a <b>publicar</b> y la revista pide el análisis reproducible con el código a la vista.',
+    'Cuando un <b>bioestadístico</b> se suma al trabajo: pasarle este archivo es mucho mejor que pasarle capturas de pantalla.',
+    'Cuando querés <b>verificar</b> por tu cuenta un resultado de la app en un programa independiente. Es un uso legítimo y sano.'
+  ]},
+  {ojo:'<b>No metas una variable derivada junto con la que la origina</b> en el mismo modelo. Las columnas calculadas a partir de otras del mismo archivo —el grado de FEVI reducida sale de la FEVI, por ejemplo— producen colinealidad perfecta y el modelo devuelve coeficientes enormes con intervalos infinitos. La documentación que acompaña al archivo marca cuáles son derivadas.'},
+  {nota:'La exportación respeta los <b>filtros de pantalla</b>: período, médico y los filtros de la tabla. Si exportás con un filtro puesto, el archivo trae ese recorte — que es lo que casi siempre querés, pero conviene saberlo antes de reportar el N.'}
+]}
+];
+
+let _manTab = MANUAL[0].id;
+/* Un solo renderizador de bloques para pantalla; el PDF recorre los MISMOS bloques
+   con su propio pintor. Así no hay dos versiones del texto que puedan divergir. */
+function manBloqueHTML(b){
+  if(b.p)     return '<p>'+b.p+'</p>';
+  if(b.h)     return '<h4 style="margin:16px 0 2px;font-size:13px;color:var(--accent);">'+esc(b.h)+'</h4>';
+  if(b.nota)  return '<div class="man-nota">'+b.nota+'</div>';
+  if(b.ojo)   return '<div class="man-ojo"><b>⚠️ Ojo.</b> '+b.ojo+'</div>';
+  if(b.lista) return '<ul style="margin:8px 0;padding-left:20px;color:var(--text-2);">'+
+                       b.lista.map(x=>'<li style="margin:5px 0;">'+x+'</li>').join('')+'</ul>';
+  if(b.pasos) return b.pasos.map((x,i)=>'<div class="man-paso"><div class="n">'+(i+1)+'</div><div class="c">'+x+'</div></div>').join('');
+  return '';
+}
+function manualRender(){
+  const tabs=document.getElementById('man-tabs'), cuerpo=document.getElementById('man-cuerpo');
+  if(!tabs||!cuerpo) return;
+  /* Los tabs se repintan en cada render y no una sola vez: el estado activo vive acá,
+     así que armarlos con dataset.listo dejaba el resaltado pegado en el primero. */
+  tabs.innerHTML=MANUAL.map(s=>
+    '<button type="button" role="tab" data-man="'+esc(s.id)+'" aria-selected="'+(s.id===_manTab)+'"'+
+    (s.id===_manTab?' class="on"':'')+'>'+esc(s.ic)+' '+esc(s.t)+'</button>').join('');
+  const s=MANUAL.find(x=>x.id===_manTab)||MANUAL[0];
+  cuerpo.innerHTML='<div class="man-sec"><h3>'+esc(s.ic)+' '+esc(s.t)+'</h3>'+
+    '<p class="man-sub">'+esc(s.sub)+'</p>'+s.b.map(manBloqueHTML).join('')+'</div>';
+}
+/* Delegado en el contenedor y no un listener por botón: manualRender reescribe el
+   innerHTML de los tabs en cada cambio, así que los listeners directos se perderían
+   con el primer clic. */
+document.addEventListener('click',e=>{
+  const b=e.target.closest('#man-tabs button[data-man]');
+  if(!b) return;
+  _manTab=b.dataset.man;
+  manualRender();
+  // El cuerpo puede quedar arriba del pliegue en móvil: se lleva la vista al inicio.
+  const c=document.getElementById('man-cuerpo');
+  if(c && window.innerWidth<=900) c.scrollIntoView({block:'start',behavior:'smooth'});
+});
+
+/* PDF del manual: se arma desde MANUAL, la misma fuente que la pantalla. */
+function manualPDF(){
+  if(!window.jspdf||!window.jspdf.jsPDF){ toast('❌ PDF no disponible (jsPDF no cargó)'); return; }
+  try{ _manualPDF(); }
+  catch(e){ console.error('[manualPDF]',e); toast('❌ No se pudo generar el manual (ver consola)'); }
+}
+function _manualPDF(){
+  const doc=pdfDoc({unit:'pt',format:'a4',compress:true});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight();
+  const M=52, PIE=34; let y=M;
+  const fecha=new Date().toLocaleDateString('es-UY');
+  /* Mismo saneo que la guía: se acotan los tags reales en vez de /<[^>]+>/, porque con
+     esa regex un "p<0,05 como <b>x</b>" matchea desde el < literal hasta el primer > y
+     el PDF imprime una frase distinta de la que se ve en pantalla. */
+  /* El colapso de espacios va DESPUÉS de pdfSafe y sólo acá: los íconos de las etiquetas
+     ('📚 Comparar con literatura') se mapean a cadena vacía y dejan un espacio doble en
+     medio de la frase. Se hace local al manual y no dentro de pdfSafe porque hay
+     exportadores que alinean columnas con espacios y ahí colapsarlos rompería la tabla. */
+  const limpio=t=>pdfSafe(String(t)
+    .replace(/<\/?(?:b|i|em|strong|br)\s*\/?>/gi,'')
+    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+    /* El punto queda FUERA de la clase de puntuación a propósito: '⋯' se mapea a '...'
+       y con el punto adentro la regla se comía el espacio previo, así que «menú ⋯ →
+       Exportar» salía «menú... -> Exportar» y el glifo del menú pasaba a leerse como
+       puntos suspensivos. */
+    .replace(/&amp;/g,'&')).replace(/ {2,}/g,' ').replace(/ +([,;:)])/g,'$1').trim();
+  const salto=h=>{ if(y+h>H-M-PIE){ doc.addPage(); y=M; } };
+  const bloque=(txt,size,bold,color,sangria)=>{
+    const x=M+(sangria||0);
+    doc.setFont('helvetica',bold?'bold':'normal'); doc.setFontSize(size);
+    doc.setTextColor.apply(doc,color||[45,45,45]);
+    doc.splitTextToSize(limpio(txt),W-M-x).forEach(l=>{ salto(size+5); doc.text(l,x,y); y+=size+4; });
+  };
+
+  // Portada
+  doc.setFont('helvetica','bold'); doc.setFontSize(26); doc.setTextColor(26,82,118);
+  doc.text('Manual de uso',M,y+40); y+=68;
+  doc.setFont('helvetica','normal'); doc.setFontSize(13); doc.setTextColor(60,60,60);
+  doc.text('Como se usa CeiboAnalytics, pantalla por pantalla',M,y); y+=24;
+  doc.setFontSize(10); doc.setTextColor(120,120,120);
+  doc.text('CeiboAnalytics · Suite CeiboMed · '+fecha,M,y); y+=34;
+  doc.setDrawColor(220); doc.line(M,y,W-M,y); y+=24;
+  doc.setFontSize(11); doc.setTextColor(45,45,45);
+  MANUAL.forEach((s,i)=>{ salto(17); doc.text(limpio((i+1)+'. '+s.t),M+8,y); y+=17; });
+  y+=10; doc.setFontSize(9.5); doc.setTextColor(120,120,120);
+  doc.splitTextToSize(limpio('Este manual explica el manejo de la app. Para qué significan '+
+    'los métodos estadísticos —el p, el intervalo de confianza, el odds ratio— está la Guía '+
+    'estadística, que se descarga por separado desde su propia pantalla.'),W-2*M)
+    .forEach(l=>{ salto(13); doc.text(l,M,y); y+=13; });
+
+  MANUAL.forEach((s,i)=>{
+    doc.addPage(); y=M;
+    bloque((i+1)+'. '+s.t,17,true,[26,82,118]); y+=2;
+    bloque(s.sub,10,false,[120,120,120]); y+=6;
+    doc.setDrawColor(220); doc.line(M,y,W-M,y); y+=16;
+    /* Reservar el rótulo MÁS un par de líneas: si no, un "OJO" quedaba solo al pie y su
+       texto arrancaba en la página siguiente. */
+    const rotulo=(txt,color)=>{ salto(9+2*14); bloque(txt,9,true,color); };
+    s.b.forEach(b=>{
+      if(b.h){ y+=6; bloque(b.h,12,true,[26,82,118]); y+=3; }
+      else if(b.p){ bloque(b.p,10.5,false); y+=6; }
+      else if(b.nota){ rotulo('NOTA',[23,162,140]); bloque(b.nota,10,false,[60,60,60],10); y+=8; }
+      else if(b.ojo){ rotulo('OJO',[146,43,33]); bloque(b.ojo,10,false,[60,60,60],10); y+=8; }
+      else if(b.lista){ b.lista.forEach(x=>{ bloque('- '+x,10,false,[60,60,60],10); y+=4; }); y+=4; }
+      else if(b.pasos){ b.pasos.forEach((x,k)=>{ bloque((k+1)+'. '+x,10,false,[60,60,60],10); y+=4; }); y+=4; }
+    });
+  });
+
+  const pags=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pags;i++){
+    doc.setPage(i);
+    doc.setDrawColor(235); doc.line(M,H-PIE+6,W-M,H-PIE+6);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text('CeiboAnalytics · Suite CeiboMed · generado el '+fecha,M,H-PIE+20);
+    doc.text('pag. '+i+'/'+pags,W-M-42,H-PIE+20);
+  }
+  doc.save('CeiboAnalytics_manual_de_uso.pdf');
+  toast('✅ Manual exportado');
+}
+
 function renderCurrent(){
   try{
     if(currentView==='dashboard')renderDashboard();
@@ -4140,6 +4571,7 @@ function renderCurrent(){
     else if(currentView==='calidad')renderCalidad();
     else if(currentView==='estadistica' && typeof estRender==='function')estRender();
     else if(currentView==='informe')initReport();
+    else if(currentView==='manual')manualRender();
     else if(currentView==='guia')guiaRender();
   }catch(e){console.error('Error al renderizar',currentView,e);toast('Error al renderizar (ver consola)');}
   // Después del render: los charts ya existen, así que el resumen refleja lo dibujado.
@@ -4260,8 +4692,58 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
 
   // ── distribuciones ──
   const avg=a=>a.reduce((s,b)=>s+b,0)/a.length;
-  const erf=x=>{const s=x<0?-1:1;x=Math.abs(x);const t=1/(1+0.3275911*x);const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return s*y;};
-  const normCdf=z=>0.5*(1+erf(z/Math.SQRT2));
+  /* Φ por el algoritmo de Hart (~1e-15). Reemplaza a la aproximación A&S 7.1.26 que
+     había antes (error 1,5e-7): no se cambió por prolijidad sino porque este mismo Φ se
+     evalúa cientos de miles de veces DENTRO del integrando de la distribución del rango
+     studentizado (Tukey), donde 1,5e-7 por evaluación se acumula hasta mover el tercer
+     decimal del valor crítico. Se unificó en vez de agregar un segundo Φ "de precisión":
+     dos normales acumuladas en la misma app es la receta para que una envejezca sola.
+     El cambio NO mueve ningún p ya publicado: la diferencia máxima sobre el p bilateral
+     en todo el rango es 1,4e-7 y la app muestra tres decimales (umbral visible 5e-4). */
+  const normCdf=x=>{
+    const z=Math.abs(x); let c;
+    if(z>37) c=0;
+    else{
+      const e=Math.exp(-z*z/2);
+      if(z<7.07106781186547){
+        let b=3.52624965998911e-02*z+0.700383064443688;
+        b=b*z+6.37396220353165;  b=b*z+33.912866078383;
+        b=b*z+112.079291497871;  b=b*z+221.213596169931;
+        b=b*z+220.206867912376;
+        let a=8.83883476483184e-02*z+1.75566716318264;
+        a=a*z+16.064177579207;   a=a*z+86.7807322029461;
+        a=a*z+296.564248779674;  a=a*z+637.333633378831;
+        a=a*z+793.826512519948;  a=a*z+440.413735824752;
+        c=e*b/a;
+      }else{
+        let b=z+0.65; b=z+4/b; b=z+3/b; b=z+2/b; b=z+1/b;
+        c=e/(b*2.506628274631);
+      }
+    }
+    return x>0 ? 1-c : c;
+  };
+  /* Φ⁻¹ — Wichura AS241 (PPND16). Lo necesita Shapiro-Wilk: los pesos a_i se arman con
+     los cuantiles normales esperados, así que un Φ⁻¹ flojo se propaga directo al W. */
+  const qnorm=p=>{
+    if(!(p>0&&p<1)) return p<=0 ? -Infinity : Infinity;
+    const q=p-0.5; let r,v;
+    if(Math.abs(q)<=0.425){
+      r=0.180625-q*q;
+      return q*(((((((2509.0809287301226727*r+33430.575583588128105)*r+67265.770927008700853)*r+45921.953931549871457)*r+13731.693765509461125)*r+1971.5909503065514427)*r+133.14166789178437745)*r+3.387132872796366608)
+             /(((((((5226.495278852854561*r+28729.085735721942674)*r+39307.89580009271061)*r+21213.794301586595867)*r+5394.1960214247511077)*r+687.1870074920579083)*r+42.313330701600911252)*r+1);
+    }
+    r=q<0?p:1-p; r=Math.sqrt(-Math.log(r));
+    if(r<=5){
+      r-=1.6;
+      v=(((((((7.7454501427834140764e-4*r+0.0227238449892691845833)*r+0.24178072517745061177)*r+1.27045825245236838258)*r+3.64784832476320460504)*r+5.7694972214606914055)*r+4.6303378461565452959)*r+1.42343711074968357734)
+       /(((((((1.05075007164441684324e-9*r+5.475938084995344946e-4)*r+0.0151986665636164571966)*r+0.14810397642748007459)*r+0.68976733498510000455)*r+1.6763848301838038494)*r+2.05319162663775882187)*r+1);
+    }else{
+      r-=5;
+      v=(((((((2.01033439929228813265e-7*r+2.71155556874348757815e-5)*r+0.0012426609473880784386)*r+0.026532189526576123093)*r+0.29656057182850489123)*r+1.7848265399172913358)*r+5.4637849111641143699)*r+6.6579046435011037772)
+       /(((((((2.04426310338993978564e-15*r+1.4215117583164458887e-7)*r+1.8463183175100546818e-5)*r+7.868691311456132591e-4)*r+0.0148753612908506148525)*r+0.13692988092273580531)*r+0.59983220655588793769)*r+1);
+    }
+    return q<0?-v:v;
+  };
   const gln=x=>{const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];let y=x,tmp=x+5.5;tmp-=(x+0.5)*Math.log(tmp);let ser=1.000000000190015;for(let j=0;j<6;j++){y++;ser+=c[j]/y;}return -tmp+Math.log(2.5066282746310005*ser/x);};
   const gammaP=(a,x)=>{if(x<=0)return 0;if(x<a+1){let ap=a,sum=1/a,del=sum;for(let i=0;i<300;i++){ap++;del*=x/ap;sum+=del;if(Math.abs(del)<Math.abs(sum)*1e-13)break;}return sum*Math.exp(-x+a*Math.log(x)-gln(a));}let b=x+1-a,c=1e300,d=1/b,h=d;for(let i=1;i<300;i++){const an=-i*(i-a);b+=2;d=an*d+b;if(Math.abs(d)<1e-300)d=1e-300;c=b+an/c;if(Math.abs(c)<1e-300)c=1e-300;d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<1e-13)break;}return 1-Math.exp(-x+a*Math.log(x)-gln(a))*h;};
   const chi2p=(x,k)=>x<=0?1:1-gammaP(k/2,x/2);
@@ -4283,6 +4765,329 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
   function mannwhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2;if(n1<1||n2<1)return null;const all=g1.map(v=>[v,0]).concat(g2.map(v=>[v,1]));const r=ranks(all.map(a=>a[0]));let R1=0;for(let i=0;i<N;i++)if(all[i][1]===0)R1+=r[i];const U1=R1-n1*(n1+1)/2,U2=n1*n2-U1,U=Math.min(U1,U2),mU=n1*n2/2;const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const sU=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1)||1)));if(sU===0)return{err:'const',n1,n2};const z=(Math.abs(U-mU)-0.5)/sU;return{U,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n1,n2};}
   function chi2test(tbl){const R=tbl.length,C=tbl[0].length;const rt=tbl.map(r=>r.reduce((a,b)=>a+b,0)),ct=[];for(let c=0;c<C;c++){let s=0;for(let r=0;r<R;r++)s+=tbl[r][c];ct.push(s);}const N=rt.reduce((a,b)=>a+b,0);if(N===0)return null;let chi2=0,minE=Infinity;for(let r=0;r<R;r++)for(let c=0;c<C;c++){const e=rt[r]*ct[c]/N;if(e>0){minE=Math.min(minE,e);chi2+=(tbl[r][c]-e)**2/e;}}const df=(R-1)*(C-1);if(df<1)return null;return{chi2,p:chi2p(chi2,df),df,N,minE};}
   function kruskal(gs){gs=gs.filter(g=>g.length>0);if(gs.length<2)return null;const all=[];gs.forEach((g,gi)=>g.forEach(v=>all.push([v,gi])));const N=all.length;if(N<3)return null;const r=ranks(all.map(a=>a[0]));const Rg=new Array(gs.length).fill(0),ng=gs.map(g=>g.length);for(let i=0;i<N;i++)Rg[all[i][1]]+=r[i];let H=0;for(let g=0;g<gs.length;g++)H+=Rg[g]**2/ng[g];H=12/(N*(N+1))*H-3*(N+1);const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const cf=1-tie/(N**3-N);if(cf===0)return{err:'const',N};if(cf>0)H/=cf;const df=gs.length-1;return{H,p:chi2p(H,df),N,k:gs.length};}
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     TESTS PARAMÉTRICOS — Shapiro-Wilk, t de Welch, ANOVA de una vía y Tukey
+     Verificados antes de entrar acá contra: la tabla normal y de t/F, el ejemplo
+     original de Shapiro & Wilk (1965), PlantGrowth de R (aov y TukeyHSD) y la tabla
+     publicada de valores críticos del rango studentizado; más las identidades
+     t²=F con k=2 y q(2,ν)=t·√2, que cruzan implementaciones escritas por separado.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* Beta incompleta regularizada (Lentz). Da las colas de t y de F. `gln` ya está
+     definido arriba y es el mismo log Γ, así que no se duplica. */
+  function betacf(a,b,x){
+    const FPMIN=1e-300;
+    let qab=a+b, qap=a+1, qam=a-1, c=1, d=1-qab*x/qap;
+    if(Math.abs(d)<FPMIN)d=FPMIN; d=1/d; let h=d;
+    for(let m=1;m<=300;m++){
+      const m2=2*m;
+      let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+      d=1+aa*d; if(Math.abs(d)<FPMIN)d=FPMIN;
+      c=1+aa/c; if(Math.abs(c)<FPMIN)c=FPMIN;
+      d=1/d; h*=d*c;
+      aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+      d=1+aa*d; if(Math.abs(d)<FPMIN)d=FPMIN;
+      c=1+aa/c; if(Math.abs(c)<FPMIN)c=FPMIN;
+      d=1/d; const del=d*c; h*=del;
+      if(Math.abs(del-1)<1e-15)break;
+    }
+    return h;
+  }
+  function betai(a,b,x){
+    if(x<=0)return 0; if(x>=1)return 1;
+    const bt=Math.exp(gln(a+b)-gln(a)-gln(b)+a*Math.log(x)+b*Math.log(1-x));
+    return x<(a+1)/(a+b+2) ? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b;
+  }
+  /* p bilateral de t. Los gl de Welch salen fraccionarios, así que no puede usarse
+     una tabla ni una fórmula que asuma gl entero. */
+  const tP2=(t,df)=>(!(df>0)||!isFinite(t))?null:betai(df/2,0.5,df/(df+t*t));
+  const fP =(f,d1,d2)=>(!(f>0))?1:betai(d2/2,d1/2,d2/(d2+d1*f));
+  const tCrit=(df,alpha)=>{ let lo=0,hi=1e3;
+    for(let i=0;i<200;i++){ const m=(lo+hi)/2; if(tP2(m,df)>alpha)lo=m; else hi=m; }
+    return (lo+hi)/2; };
+
+  /* ── Shapiro-Wilk, Royston AS R94 (1995) ──
+     Válido para 3 ≤ n ≤ 5000; fuera de ese rango Royston no da aproximación, así que
+     se devuelve err y NO un W inventado — quien lo consume tiene que poder distinguir
+     "no se pudo evaluar la normalidad" de "no es normal". */
+  function shapiroWilk(xs){
+    const x=xs.filter(v=>v!=null&&isFinite(v)).slice().sort((a,b)=>a-b);
+    const n=x.length;
+    if(n<3) return {err:'n<3', n};
+    if(n>5000) return {err:'n>5000', n};
+    if(x[n-1]-x[0]===0) return {err:'const', n};
+    const nn2=Math.floor(n/2), m=new Array(nn2+1);
+    let summ2=0;
+    for(let i=1;i<=nn2;i++){ m[i]=qnorm((i-0.375)/(n+0.25)); summ2+=m[i]*m[i]; }
+    summ2*=2;
+    const ssumm2=Math.sqrt(summ2), rsn=1/Math.sqrt(n);
+    const poly=(c,v)=>{ let s=0; for(let i=c.length-1;i>=0;i--) s=s*v+c[i]; return s; };
+    const c1=[0,0.221157,-0.147981,-2.071190,4.434685,-2.706056];
+    const c2=[0,0.042981,-0.293762,-1.752461,5.682633,-3.582633];
+    const a=new Array(nn2+1);
+    let i1, fac;
+    if(n===3){
+      /* AS R94 trata n=3 aparte: el peso es exactamente 1/√2, sin corrección
+         polinómica. Sin este caso, tres valores equiespaciados —lo más normal que
+         un n=3 puede ser— daban W=0,997 y p=0,89 en lugar de W=1 y p=1. */
+      a[1]=Math.SQRT1_2; i1=2; fac=1;
+    }else if(n>5){
+      i1=3;
+      a[1]=-m[1]/ssumm2+poly(c1,rsn);
+      a[2]=-m[2]/ssumm2+poly(c2,rsn);
+      fac=Math.sqrt((summ2-2*m[1]*m[1]-2*m[2]*m[2])/(1-2*a[1]*a[1]-2*a[2]*a[2]));
+    }else{
+      i1=2;
+      a[1]=-m[1]/ssumm2+poly(c1,rsn);
+      fac=Math.sqrt((summ2-2*m[1]*m[1])/(1-2*a[1]*a[1]));
+    }
+    for(let i=i1;i<=nn2;i++) a[i]=-m[i]/fac;
+    let mean=0; for(let i=0;i<n;i++) mean+=x[i]; mean/=n;
+    let ssq=0; for(let i=0;i<n;i++) ssq+=(x[i]-mean)*(x[i]-mean);
+    if(ssq<=0) return {err:'const', n};
+    let num=0; for(let i=1;i<=nn2;i++) num+=a[i]*(x[i-1]-x[n-i]);
+    let W=num*num/ssq; if(W>1) W=1;
+    let p;
+    if(n===3){
+      const pi6=1.90985931710274, stqr=1.047197551196598;
+      p=Math.max(0,Math.min(1,pi6*(Math.asin(Math.sqrt(W))-stqr)));
+    }else{
+      const c3=[0.5440,-0.39978,0.025054,-6.714e-4];
+      const c4=[1.3822,-0.77857,0.062767,-0.0020322];
+      const c5=[-1.5861,-0.31082,-0.083751,0.0038915];
+      const c6=[-0.4803,-0.082676,0.0030302];
+      const g=[-2.273,0.459];
+      let st=Math.log(1-W), mu, sd;
+      if(n<=11){
+        const gma=poly(g,n);
+        if(st>=gma) return {W,p:1e-99,n};
+        st=-Math.log(gma-st); mu=poly(c3,n); sd=Math.exp(poly(c4,n));
+      }else{
+        const u=Math.log(n); mu=poly(c5,u); sd=Math.exp(poly(c6,u));
+      }
+      p=Math.max(0,Math.min(1,1-normCdf((st-mu)/sd)));
+    }
+    return {W,p,n};
+  }
+
+  /* ── t de Welch ──
+     Welch y no la t agrupada: los grupos de esta base casi nunca están balanceados
+     (con FA contra sin FA, valvulopatía contra no), y con n distintos y varianzas
+     distintas la agrupada da un p mal calibrado. Con n y varianzas iguales, Welch
+     colapsa exactamente a la agrupada con gl = n1+n2−2, así que no se pierde nada. */
+  function welchT(g1,g2){
+    const n1=g1.length, n2=g2.length;
+    if(n1<2||n2<2) return {err:'n', n1, n2};
+    const mu=a=>a.reduce((s,v)=>s+v,0)/a.length;
+    const m1=mu(g1), m2=mu(g2);
+    const vr=(a,q)=>a.reduce((s,v)=>s+(v-q)*(v-q),0)/(a.length-1);
+    const v1=vr(g1,m1), v2=vr(g2,m2);
+    const se2=v1/n1+v2/n2;
+    if(!(se2>0)) return {err:'const', n1, n2};
+    const se=Math.sqrt(se2), t=(m1-m2)/se;
+    const df=se2*se2/((v1/n1)*(v1/n1)/(n1-1)+(v2/n2)*(v2/n2)/(n2-1));
+    const tc=tCrit(df,0.05), dif=m1-m2;
+    return {t,df,p:tP2(t,df),n1,n2,m1,m2,sd1:Math.sqrt(v1),sd2:Math.sqrt(v2),
+            dif, ci:[dif-tc*se, dif+tc*se], se};
+  }
+
+  /* ── ANOVA de una vía ──
+     `vrG` se declara ANTES de anova1 y no después: un const usado desde una función
+     declarada más arriba funciona sólo mientras nadie llame a esa función durante la
+     inicialización del módulo. Es la trampa de TDZ que ya cortó un script entero. */
+  const vrG=(a,q)=>a.length<2?0:a.reduce((s,v)=>s+(v-q)*(v-q),0)/(a.length-1);
+  function anova1(groups){
+    const gs=groups.filter(g=>g&&g.length>0);
+    const k=gs.length;
+    if(k<2) return {err:'k<2', k};
+    const ns=gs.map(g=>g.length), N=ns.reduce((a,b)=>a+b,0);
+    if(N-k<1) return {err:'df', k, N};
+    const mu=a=>a.reduce((s,v)=>s+v,0)/a.length;
+    const ms=gs.map(mu), gm=gs.reduce((s,g)=>s+g.reduce((a,v)=>a+v,0),0)/N;
+    let ssb=0; for(let i=0;i<k;i++) ssb+=ns[i]*(ms[i]-gm)*(ms[i]-gm);
+    let ssw=0; for(let i=0;i<k;i++) for(const v of gs[i]) ssw+=(v-ms[i])*(v-ms[i]);
+    const df1=k-1, df2=N-k, msw=ssw/df2;
+    // Varianza intra nula: el F sería ∞. Se corta acá y no se informa "p<0,001".
+    if(!(msw>0)) return {err:'const', k, N};
+    return {F:(ssb/df1)/msw, df1, df2, p:fP((ssb/df1)/msw,df1,df2), k, N,
+            means:ms, ns, msw, ssb, ssw, sds:gs.map((g,i)=>Math.sqrt(vrG(g,ms[i])))};
+  }
+
+  /* ── Distribución del rango studentizado, para Tukey ──
+     P(Q_{k,ν} < q) por doble cuadratura de Gauss-Legendre; no tiene forma cerrada.
+       interior  W(u) = k ∫ φ(z)[Φ(z) − Φ(z−u)]^{k−1} dz   (rango de k normales < u)
+       exterior  ∫ f_ν(s) W(q·s) ds,  con s = √(χ²_ν/ν) */
+  const _GL=(function(){
+    /* 20 nodos y no 64: con 64 un solo valor crítico tardaba 1,3 s y un Tukey de tres
+       grupos casi 4 s, y la tabla de asociaciones recalcula en CADA cambio de filtro —
+       eso congela la pestaña. Con 20 el error contra la tabla publicada de valores
+       críticos queda por debajo de 1e-3, un orden menos que la precisión mostrada. */
+    const n=20, x=new Array(n), w=new Array(n);
+    for(let i=0;i<(n+1)>>1;i++){
+      let z=Math.cos(Math.PI*(i+0.75)/(n+0.5)), pp=0, z1;
+      do{
+        let p1=1,p2=0;
+        for(let j=0;j<n;j++){ const p3=p2; p2=p1; p1=((2*j+1)*z*p2-j*p3)/(j+1); }
+        pp=n*(z*p1-p2)/(z*z-1); z1=z; z=z1-p1/pp;
+      }while(Math.abs(z-z1)>1e-15);
+      x[i]=-z; x[n-1-i]=z;
+      w[i]=2/((1-z*z)*pp*pp); w[n-1-i]=w[i];
+    }
+    return {x,w};
+  })();
+  function _quad(f,a,b){
+    const c=(b-a)/2, d=(a+b)/2; let s=0;
+    for(let i=0;i<_GL.x.length;i++) s+=_GL.w[i]*f(c*_GL.x[i]+d);
+    return s*c;
+  }
+  const _phi=z=>Math.exp(-z*z/2)/Math.sqrt(2*Math.PI);
+  function _rangeCdf(u,k){
+    if(!(u>0)) return 0;
+    const f=z=>_phi(z)*Math.pow(normCdf(z)-normCdf(z-u),k-1);
+    const lo=-8, hi=8+u, seg=Math.max(5,Math.ceil((hi-lo)/4));
+    let s=0;
+    for(let i=0;i<seg;i++) s+=_quad(f, lo+(hi-lo)*i/seg, lo+(hi-lo)*(i+1)/seg);
+    return Math.min(1,Math.max(0,k*s));
+  }
+  function ptukey(q,k,df){
+    if(!(q>0)) return 0;
+    if(!(df>0)||df>25000) return _rangeCdf(q,k);
+    // densidad de s = √(χ²_df/df); en log para no desbordar con df grande
+    const lc=(df/2)*Math.log(df)-gln(df/2)-(df/2-1)*Math.LN2;
+    const fs=s=>Math.exp(lc+(df-1)*Math.log(s)-df*s*s/2);
+    const sd=1/Math.sqrt(2*df);
+    const lo=Math.max(1e-9,1-12*sd), hi=1+12*sd, seg=8;
+    let s=0;
+    for(let i=0;i<seg;i++) s+=_quad(t=>fs(t)*_rangeCdf(q*t,k), lo+(hi-lo)*i/seg, lo+(hi-lo)*(i+1)/seg);
+    return Math.min(1,Math.max(0,s));
+  }
+  /* Memoizado por (prob,k,gl): el valor crítico es el mismo para todos los pares de un
+     ANOVA, y calcularlo dentro del bucle lo repetía k(k−1)/2 veces. */
+  const _qtCache=Object.create(null);
+  function qTukey(prob,k,df){
+    const key=prob+'|'+k+'|'+df;
+    if(key in _qtCache) return _qtCache[key];
+    let lo=0,hi=100;
+    // Sin esta guarda, un ptukey que satura por debajo de `prob` devolvía el techo de
+    // la bisección (100) como si fuera un valor crítico legítimo.
+    if(ptukey(hi,k,df)<prob) return (_qtCache[key]=NaN);
+    for(let i=0;i<40;i++){ const m=(lo+hi)/2; if(ptukey(m,k,df)<prob)lo=m; else hi=m; }
+    return (_qtCache[key]=(lo+hi)/2);
+  }
+
+  /* ── Tukey HSD (Tukey-Kramer: admite n desiguales) ── */
+  function tukeyHSD(groups,labels){
+    const av=anova1(groups);
+    if(av.err) return {err:av.err};
+    const lb=(labels||[]).filter((_,i)=>groups[i]&&groups[i].length>0);
+    const out=[];
+    const qc=qTukey(0.95,av.k,av.df2);   // fuera del bucle: depende sólo de (k, gl)
+    for(let i=0;i<av.k;i++) for(let j=i+1;j<av.k;j++){
+      const se=Math.sqrt(av.msw/2*(1/av.ns[i]+1/av.ns[j]));
+      const dif=av.means[i]-av.means[j];
+      const q=Math.abs(dif)/se;
+      out.push({a:lb[i]!=null?lb[i]:i, b:lb[j]!=null?lb[j]:j, dif, q,
+                p:Math.max(0,Math.min(1,1-ptukey(q,av.k,av.df2))),
+                ci:isNaN(qc)?null:[dif-qc*se, dif+qc*se], na:av.ns[i], nb:av.ns[j]});
+    }
+    return {anova:av, pares:out};
+  }
+
+  /* ══════════════ Selector automático paramétrico / no paramétrico ══════════════
+     Dos condiciones, las DOS por grupo y las dos obligatorias:
+       (1) cada grupo con n ≥ 30
+       (2) cada grupo pasa Shapiro-Wilk (p > 0,05)
+
+     Por grupo y no sobre la variable agrupada, que es el error clásico: el supuesto
+     del ANOVA es que los residuos son normales DENTRO de cada grupo. Evaluado sobre
+     el pool, una variable con tres grupos bien separados da una distribución multimodal
+     que Shapiro rechaza — y ése es justo el caso donde el ANOVA es más válido. El
+     criterio se autosabotearía.
+
+     `normalOk` es un predicado POSITIVO ("se confirmó normalidad") y no la negación de
+     uno estricto. Con `!noEsNormal()`, un grupo constante o con n<3 —donde Shapiro
+     devuelve err— habría contado como normal y habría habilitado la t. Así, todo lo que
+     no se pudo confirmar cae en el test no paramétrico, que es la opción conservadora. */
+  const PARAM_N_MIN = 30;
+  const normalOk = sw => !!(sw && !sw.err && sw.p>0.05);
+  const _pSW = p => p==null?'—':(p<0.001?'<0,001':p.toFixed(3).replace('.',','));
+  const _ERR_SW = {'const':'la variable no varía dentro del grupo',
+                   'n>5000':'el grupo supera los 5000 casos, fuera del rango de validez de Shapiro-Wilk',
+                   'n<3':'el grupo tiene menos de 3 casos'};
+
+  /* Devuelve por qué se eligió lo que se eligió, en palabras y con los números a la
+     vista. La tabla lo muestra como tooltip: si el test cambia solo, el médico tiene
+     que poder ver el motivo sin salir de la fila. */
+  function elegirTest(grupos, etiquetas){
+    const ns=grupos.map(g=>g.length);
+    const sws=grupos.map(g=>shapiroWilk(g));
+    const chicos=ns.map((n,i)=>({n,i})).filter(o=>o.n<PARAM_N_MIN);
+    const detalle=sws.map((sw,i)=>etiquetas[i]+': n='+ns[i]+
+      (sw.err ? ', Shapiro-Wilk no evaluable ('+(sw.err==='const'?'variable constante':sw.err)+')'
+              : ', Shapiro-Wilk W='+sw.W.toFixed(3).replace('.',',')+' p='+_pSW(sw.p))).join(' · ');
+    if(chicos.length){
+      const q=chicos.map(o=>etiquetas[o.i]+' (n='+o.n+')').join(' y ');
+      return {param:false, sws, ns,
+        porque:'No paramétrico porque '+q+(chicos.length>1?' no llegan':' no llega')+
+          ' a n='+PARAM_N_MIN+' por grupo. '+
+          'Con ese n, Shapiro-Wilk casi no tiene poder para detectar que la distribución NO es normal, '+
+          'así que "pasar" el test no sería un aval. — '+detalle};
+    }
+    /* Se separan los dos motivos. Juntarlos hacía que un grupo CONSTANTE —donde
+       Shapiro devuelve err y no hay ningún p— saliera anunciado como "no pasa
+       Shapiro-Wilk (p ≤ 0,05)": un resultado de test que nunca existió. */
+    const nulos=sws.map((sw,i)=>({sw,i})).filter(o=>o.sw&&o.sw.err);
+    if(nulos.length){
+      const q=nulos.map(o=>etiquetas[o.i]).join(' y ');
+      /* Se mapea el err en vez de suponerlo. El `else` que había decía «datos
+         insuficientes», pero acá ya pasaron todos el filtro de n≥30: el único err que
+         puede llegar además de 'const' es 'n>5000' —o sea, DEMASIADOS datos—, así que
+         esa rama afirmaba exactamente lo contrario de lo que pasaba, y se contradecía
+         con el detalle que venía a continuación en la misma frase. */
+      const motivos=[...new Set(nulos.map(o=>_ERR_SW[o.sw.err]||o.sw.err))].join('; ');
+      return {param:false, sws, ns,
+        porque:'No paramétrico porque en '+q+' no se pudo evaluar la normalidad ('+motivos+
+          '). Sin poder confirmarla, se usa el test que no la asume. — '+detalle};
+    }
+    const malos=sws.map((sw,i)=>({sw,i})).filter(o=>!normalOk(o.sw));
+    if(malos.length){
+      const q=malos.map(o=>etiquetas[o.i]).join(' y ');
+      return {param:false, sws, ns,
+        porque:'No paramétrico porque '+q+(malos.length>1?' no pasan':' no pasa')+
+          ' Shapiro-Wilk (p ≤ 0,05): la distribución no es compatible con una normal. — '+detalle};
+    }
+    /* Tercera condición, SÓLO para k≥3. Con dos grupos no hace falta porque welchT no
+       asume varianzas iguales — es la razón por la que se eligió Welch. Pero el ANOVA de
+       una vía usa un MSW agrupado y Tukey-Kramer un único MSW para todos los pares: ésa
+       es exactamente la versión "agrupada" que se descartó para k=2. Con grupos
+       desbalanceados y varianza desigual el F sale liberal (el p, más chico de lo que
+       corresponde) justo en los contrastes típicos de esta base —geometría VI, grado
+       diastólico—, que nunca están balanceados.
+       Sin esto, el tooltip nombraba «se asume normalidad» como si fuera el único supuesto:
+       el que decide la calibración del p no se medía ni se mencionaba. */
+    if(grupos.length>2){
+      const vs=grupos.map(g=>vrG(g,g.reduce((s,v)=>s+v,0)/g.length));
+      const vmin=Math.min(...vs), vmax=Math.max(...vs);
+      const rz = vmin>0 ? vmax/vmin : Infinity;
+      if(!(rz<=2)){
+        return {param:false, sws, ns, varRatio:rz,
+          porque:'No paramétrico porque las varianzas de los grupos son muy desiguales: la '+
+            'mayor es '+(isFinite(rz)?rz.toFixed(1).replace('.',','):'infinitas')+' veces la menor. '+
+            'El ANOVA y el post-hoc de Tukey asumen varianza común entre grupos, y con grupos '+
+            'de tamaños distintos ese desbalance descalibra el p. — '+detalle};
+      }
+      return {param:true, sws, ns, varRatio:rz,
+        porque:'Paramétrico: los '+grupos.length+' grupos tienen n ≥ '+PARAM_N_MIN+
+          ', pasan Shapiro-Wilk (p > 0,05) y sus varianzas son comparables (la mayor es '+
+          rz.toFixed(1).replace('.',',')+' veces la menor, por debajo de 2), así que se asumen '+
+          'normalidad y varianza común. — '+detalle};
+    }
+    return {param:true, sws, ns,
+      porque:'Paramétrico: los dos grupos tienen n ≥ '+PARAM_N_MIN+
+        ' y pasan Shapiro-Wilk (p > 0,05), así que se asume normalidad. Se usa la t de Welch, '+
+        'que NO exige que las dos varianzas sean iguales. — '+detalle};
+  }
 
   /* Semáforo de cuatro estados. Se calcula DESPUÉS de bhQ y no dentro de runOne: el q
      no existe hasta que la corrección corre sobre la familia entera, así que ahí siempre
@@ -4673,18 +5478,69 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     }
     if(d.t==='mw'){
       const g1=[],g2=[]; ds.forEach(pr=>{const v=d.val(pr),gr=d.grp(pr);if(v!=null&&!isNaN(v)&&gr!=null){(gr?g1:g2).push(v);}});
+      const l1=d.gpos||(d.gl?('Con '+d.gl):'Grupo +'), l2=d.gneg||(d.gl?('Sin '+d.gl):'Grupo −');
+      const plot={type:'strip',groups:[{lbl:l1,vals:g1},{lbl:l2,vals:g2}],vl:d.vl||P.izq};
+      /* Selector: sólo se intenta la t si los dos grupos tienen con qué. elegirTest
+         hace la evaluación completa igual, porque su texto explica el motivo del
+         descarte y eso es lo que ve el médico en el tooltip. */
+      const sel=(g1.length>=2&&g2.length>=2) ? elegirTest([g1,g2],[l1,l2]) : null;
+      /* `porque` describe el test que EFECTIVAMENTE corrió. Si el selector habilitó la
+         vía paramétrica pero Welch falla, se cae al no paramétrico y el texto tiene que
+         decir eso: si no, la fila mostraba «Mann-Whitney U» con un tooltip que empezaba
+         «Paramétrico: los 2 grupos … se asume normalidad», describiendo un test que
+         nunca se calculó. */
+      let porque = sel ? sel.porque : null;
+      if(sel && sel.param){
+        const r=welchT(g1,g2);
+        if(!r.err) return {...base,n:r.n1+r.n2,pw:{tipo:'dos',n1:r.n1,n2:r.n2},
+          method:'t de Welch', stat:'t='+r.t.toFixed(2)+' (gl='+r.df.toFixed(1)+')',
+          p:r.p, ci:ciTxt(r.ci), sig:'⚫', nOk:true, coef:null,
+          test:{tipo:'t', ...r, sel, l1, l2}, porque, plot};
+        porque='No paramétrico: los grupos cumplían los supuestos, pero la t no se pudo '+
+          'calcular sobre esta muestra'+(r.err==='const'?' (la varianza de algún grupo es cero)':'')+
+          ', así que se informa el test de rangos. — '+sel.porque;
+      }
       const r=mannwhitney(g1,g2);
       if(!r||r.err)return {...base,n:g1.length+g2.length,method:'Mann-Whitney U',
-        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
-      return {...base,n:r.n1+r.n2,pw:{tipo:'dos',n1:r.n1,n2:r.n2},method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:'⚫',nOk:(r.n1>=8&&r.n2>=8),coef:null,plot:{type:'strip',groups:[{lbl:d.gpos||(d.gl?('Con '+d.gl):'Grupo +'),vals:g1},{lbl:d.gneg||(d.gl?('Sin '+d.gl):'Grupo −'),vals:g2}],vl:d.vl||P.izq}};
+        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null,
+        porque};
+      return {...base,n:r.n1+r.n2,pw:{tipo:'dos',n1:r.n1,n2:r.n2},method:'Mann-Whitney U',stat:'U='+r.U+' ('+r.n1+'/'+r.n2+')',p:r.p,ci:'—',sig:'⚫',nOk:(r.n1>=8&&r.n2>=8),coef:null,porque,plot};
     }
     if(d.t==='kw'){
       const map=Object.create(null); ds.forEach(pr=>{const v=d.val(pr),c=d.catg(pr);if(v!=null&&!isNaN(v)&&c!=null){(map[c]=map[c]||[]).push(v);}});
       const cats=Object.keys(map), gs=cats.map(c=>map[c]);
+      const plot={type:'strip',groups:cats.map((c,i)=>({lbl:c,vals:gs[i]})),vl:d.vl||P.izq};
+      /* Mismo umbral por grupo que la t, y a propósito: pedirle n≥30 a cada grupo para
+         comparar dos y nada para comparar tres sería al revés de lo que corresponde,
+         porque con más grupos hace falta MÁS dato, no menos. */
+      const vivos=gs.filter(g=>g.length>0);
+      const sel=(vivos.length>=2 && vivos.every(g=>g.length>=2))
+        ? elegirTest(vivos, cats.filter((c,i)=>gs[i].length>0)) : null;
+      // Mismo criterio que en la rama de dos grupos: el texto describe lo que corrió.
+      let porque = sel ? sel.porque : null;
+      if(sel && sel.param){
+        const av=anova1(gs);
+        if(av.err){
+          porque='No paramétrico: los grupos cumplían los supuestos, pero el ANOVA no se '+
+            'pudo calcular sobre esta muestra'+(av.err==='const'?' (la varianza dentro de los grupos es cero)':'')+
+            ', así que se informa el test de rangos. — '+sel.porque;
+        }else{
+          /* Tukey sólo si el ANOVA dio significativo: el post-hoc contesta "cuáles
+             difieren", y esa pregunta no existe mientras el ANOVA no diga que alguno
+             difiere. Correrlo igual invita a leer un par significativo bajo un ANOVA
+             que no lo es. */
+          const tk = av.p<0.05 ? tukeyHSD(gs, cats) : null;
+          return {...base,n:av.N,method:'ANOVA de una vía',
+            stat:'F='+av.F.toFixed(2)+' (gl='+av.df1+','+av.df2+')',
+            p:av.p, ci:'—', sig:'⚫', nOk:true, coef:null,
+            test:{tipo:'anova', av, tukey:tk&&!tk.err?tk:null, cats}, porque, plot};
+        }
+      }
       const r=kruskal(gs);
       if(!r||r.err)return {...base,n:(r&&r.N!=null)?r.N:gs.reduce((a,g)=>a+g.length,0),method:'Kruskal-Wallis',
-        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null};
-      return {...base,n:r.N,method:'Kruskal-Wallis',stat:'H='+r.H.toFixed(2)+' (k='+r.k+')',p:r.p,ci:'—',sig:'⚫',nOk:(r.N>=15),coef:null,plot:{type:'strip',groups:cats.map((c,i)=>({lbl:c,vals:gs[i]})),vl:d.vl||P.izq}};
+        stat:(r&&r.err==='const')?'Variable constante':'—',p:null,ci:'—',sig:'⚫',coef:null,err:(r&&r.err)||null,
+        porque};
+      return {...base,n:r.N,method:'Kruskal-Wallis',stat:'H='+r.H.toFixed(2)+' (k='+r.k+')',p:r.p,ci:'—',sig:'⚫',nOk:(r.N>=15),coef:null,porque,plot};
     }
     // chi
     const data=[]; ds.forEach(pr=>{const a=d.ca(pr),b=d.cb(pr);if(a!=null&&b!=null)data.push([String(a),String(b)]);});
@@ -4775,6 +5631,14 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     return pl.coef==null || Math.sign(pl.slope)===Math.sign(pl.coef);
   }
   const _f1 = v => (v==null||isNaN(v)) ? '—' : String(Math.round(v*10)/10);
+  /* Para las cifras que se LEEN CONTRA EL CERO —la diferencia de medias y los extremos de
+     su intervalo—, un decimal fijo miente: un IC de [0,03 · 0,81] se dibujaba «[0 · 0,8]»
+     tres líneas arriba de la nota que dice «si el intervalo incluye el 0, la diferencia no
+     es distinguible de cero». El panel se contradecía solo, y la lectura que inducía era la
+     contraria al p que mostraba al lado. Por debajo de 1 se pasa a cifras significativas. */
+  const _dif = v => (v==null||isNaN(v)) ? '—'
+    : (Math.abs(v)>=1 ? String(Math.round(v*100)/100)
+                      : String(Number(v.toPrecision(2))));
   const _pctFila = (x,tot) => tot>0 ? (Math.round(1000*x/tot)/10).toFixed(1)+'%' : '—';
   const _notaHTML = html => '<div style="margin-top:8px;padding:8px 10px;background:var(--surface-2);'+
     'border-left:3px solid var(--accent);border-radius:4px;font-size:11px;line-height:1.5;'+
@@ -4810,25 +5674,92 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     return h+_notaHTML(nota);
   }
 
-  function detGrupos(pl){
+  /* Recibe también la fila `r` porque el resumen correcto depende del test que se usó:
+     con Mann-Whitney/Kruskal-Wallis se reporta mediana y P25–P75 (comparan rangos), y
+     con t/ANOVA se reporta media ± DS (comparan medias). Mostrar medianas debajo de un
+     ANOVA no es sólo incompleto: la nota al pie decía "se usa la mediana porque la
+     prueba compara rangos, no promedios", que sobre una fila de t es directamente falso. */
+  function detGrupos(pl, r){
     const vl=pl.vl||'Variable';
+    const param=!!(r&&r.test);
     let h='<table style="border-collapse:collapse;font-size:12px;">'+
       '<thead><tr><th style="'+_th+'text-align:left;">Grupo</th>'+
-      '<th style="'+_th+'text-align:right;">Mediana de '+esc(vl)+'</th><th style="'+_th+'text-align:right;">P25–P75</th>'+
+      (param
+        ? '<th style="'+_th+'text-align:right;">Media de '+esc(vl)+'</th><th style="'+_th+'text-align:right;">DS</th>'
+        : '<th style="'+_th+'text-align:right;">Mediana de '+esc(vl)+'</th><th style="'+_th+'text-align:right;">P25–P75</th>')+
       '<th style="'+_th+'text-align:center;">N</th></tr></thead><tbody>';
     pl.groups.forEach(g=>{
       const st=paStats(g.vals);
       h+='<tr style="border-top:1px solid var(--border);">'+
         '<td style="padding:5px 8px;font-weight:600;white-space:nowrap;">'+esc(g.lbl)+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;">'+(st.n?_f1(st.med):'—')+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;white-space:nowrap;">'+(st.n?(_f1(st.p25)+'–'+_f1(st.p75)):'—')+'</td>'+
+        (param
+          ? '<td style="padding:5px 8px;text-align:right;">'+(st.n?_f1(st.mean):'—')+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;">'+(st.n?_f1(st.sd):'—')+'</td>'
+          : '<td style="padding:5px 8px;text-align:right;">'+(st.n?_f1(st.med):'—')+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;white-space:nowrap;">'+(st.n?(_f1(st.p25)+'–'+_f1(st.p75)):'—')+'</td>')+
         '<td style="padding:5px 8px;text-align:center;">'+st.n+'</td></tr>';
     });
     h+='</tbody></table>';
+
+    if(param && r.test.tipo==='t'){
+      const T=r.test;
+      h+='<div style="margin-top:10px;padding:9px 12px;background:var(--surface-2);border-radius:6px;font-size:12px;">'+
+        '<b>Diferencia de medias ('+esc(T.l1)+' − '+esc(T.l2)+'):</b> '+_dif(T.dif)+
+        '  ·  <b>IC 95%:</b> ['+_dif(T.ci[0])+', '+_dif(T.ci[1])+']'+
+        '  ·  <b>t</b>='+T.t.toFixed(2)+', <b>gl</b>='+T.df.toFixed(1)+', <b>p</b>='+pTxt(T.p)+'</div>';
+      return h+_notaHTML('Compara la <b>media</b> de '+esc(vl)+' entre los dos grupos con la '+
+        '<b>t de Welch</b>, que no asume que las dos varianzas sean iguales (por eso los grados de '+
+        'libertad salen con decimales). El intervalo de confianza es lo que hay que mirar: dice '+
+        'entre qué dos valores está la diferencia real con 95% de confianza. <b>Si el intervalo '+
+        'incluye el 0, la diferencia no es distinguible de cero</b> por más que las medias no sean '+
+        'idénticas. Y una diferencia puede ser significativa y clínicamente irrelevante: el p no '+
+        'mide tamaño.<br><br><b>Por qué este test y no Mann-Whitney:</b> '+esc(r.porque||''));
+    }
+    if(param && r.test.tipo==='anova'){
+      const A=r.test.av, tk=r.test.tukey;
+      h+='<div style="margin-top:10px;padding:9px 12px;background:var(--surface-2);border-radius:6px;font-size:12px;">'+
+        '<b>F</b>='+A.F.toFixed(2)+' (gl='+A.df1+', '+A.df2+')  ·  <b>p</b>='+pTxt(A.p)+'</div>';
+      if(tk){
+        h+='<div style="margin-top:10px;font-size:12px;"><b>Post-hoc de Tukey</b> — qué pares difieren:</div>'+
+          '<table style="border-collapse:collapse;font-size:12px;margin-top:5px;"><thead><tr>'+
+          '<th style="'+_th+'text-align:left;">Par</th><th style="'+_th+'text-align:right;">Diferencia</th>'+
+          '<th style="'+_th+'text-align:right;">IC 95%</th><th style="'+_th+'text-align:right;">p ajustado</th>'+
+          '</tr></thead><tbody>';
+        tk.pares.forEach(pp=>{
+          h+='<tr style="border-top:1px solid var(--border);">'+
+            '<td style="padding:5px 8px;white-space:nowrap;">'+esc(pp.a)+' vs '+esc(pp.b)+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;">'+_dif(pp.dif)+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;white-space:nowrap;" title="'+
+              (pp.ci?'':esc('No se pudo calcular el valor crítico del rango studentizado con estos grados de libertad, así que no se informa intervalo.'))+'">'+
+              (pp.ci?('['+_dif(pp.ci[0])+', '+_dif(pp.ci[1])+']'):'—')+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;'+(pp.p<0.05?'font-weight:600;':'')+'">'+pTxt(pp.p)+'</td></tr>';
+        });
+        h+='</tbody></table>';
+      }
+      return h+_notaHTML('Compara la <b>media</b> de '+esc(vl)+' entre los '+A.k+' grupos con un '+
+        '<b>ANOVA de una vía</b>. El p del ANOVA dice si <i>al menos uno</i> de los grupos difiere, '+
+        'pero no cuál.'+
+        /* «se lee directo contra 0,05 sin corregir nada más» era falso a nivel de la tabla:
+           el p de Tukey está ajustado por los pares de ESTE ANOVA, pero la tabla corre
+           decenas de contrastes y les aplica FDR. Una fila 🟡 —que no sobrevive al FDR—
+           ofrecía pares con la instrucción explícita de no corregir nada más, y el par se
+           llevaba como hallazgo. Ahora la nota se encadena con el estado de la fila. */
+        (tk ? ' Para eso está el <b>post-hoc de Tukey</b>: compara todos los pares y su p ya viene '+
+              '<b>ajustado por los pares de este ANOVA</b> — pero no por las decenas de contrastes '+
+              'del resto de la tabla, que es lo que corrige la columna q.'+
+              ((r.q!=null && r.q>=0.05)
+                ? ' <b>Como esta asociación no sobrevive al FDR (q='+pTxt(r.q)+'), los pares de '+
+                  'abajo se leen como hipótesis, no como hallazgos.</b>'
+                : '')
+            : ' <b>No se muestra el post-hoc de Tukey porque el ANOVA no dio significativo:</b> '+
+              'buscar qué par difiere cuando el test global no detectó diferencias es salir a pescar.')+
+        '<br><br><b>Por qué este test y no Kruskal-Wallis:</b> '+esc(r.porque||''));
+    }
     return h+_notaHTML('Compara el valor típico de '+esc(vl)+' entre los grupos. Se usa la '+
       '<b>mediana</b> y no la media porque la prueba compara rangos, no promedios. El P25–P75 es '+
       'el rango donde cae la mitad central de cada grupo: si los rangos se superponen mucho, la '+
-      'diferencia es chica aunque el p sea significativo.');
+      'diferencia es chica aunque el p sea significativo.'+
+      (r&&r.porque ? '<br><br><b>Por qué este test y no el paramétrico:</b> '+esc(r.porque) : ''));
   }
 
   function detScatter(pl, sig){
@@ -4908,10 +5839,29 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
       partes.push('En tus '+n+' casos, las dos variables se acompañan de forma <b>'+f+'</b>: '+dir+'.');
     } else if(/Chi²/.test(r.method)){
       partes.push('En tus '+n+' casos se comparó cómo se reparten las categorías entre los grupos.');
-    } else if(/Kruskal/.test(r.method)){
-      partes.push('En tus '+n+' casos se comparó el valor típico de la variable entre los grupos comparados.');
     } else {
-      partes.push('En tus '+n+' casos se comparó el valor típico de la variable entre los dos grupos.');
+      /* Una rama por método, con predicado propio y sin `else` mudo al final. El `else`
+         que había decía «entre los DOS grupos» y era la rama a la que caía todo lo que no
+         fuera Chi² ni Kruskal: desde que el selector puede elegir ANOVA, un contraste de
+         tres o más grupos aterrizaba ahí y la lectura en lenguaje simple afirmaba que se
+         habían comparado dos. Además, «valor típico» es correcto para los tests de rangos
+         pero no para la t ni el ANOVA, que comparan MEDIAS. */
+      const k = (r.plot && r.plot.groups) ? r.plot.groups.length : null;
+      const cuantos = k==null ? 'los grupos comparados'
+                    : k===2   ? 'los dos grupos'
+                              : ('los '+k+' grupos');
+      if(/ANOVA/.test(r.method)){
+        partes.push('En tus '+n+' casos se comparó la <b>media</b> de la variable entre '+cuantos+'.');
+      } else if(/Welch|t de Student/.test(r.method)){
+        partes.push('En tus '+n+' casos se comparó la <b>media</b> de la variable entre '+cuantos+'.');
+      } else if(/Kruskal/.test(r.method)){
+        partes.push('En tus '+n+' casos se comparó el valor típico de la variable entre '+cuantos+'.');
+      } else if(/Mann-Whitney/.test(r.method)){
+        partes.push('En tus '+n+' casos se comparó el valor típico de la variable entre '+cuantos+'.');
+      } else {
+        // Método no previsto: se describe lo que se sabe y no se inventa el resto.
+        partes.push('En tus '+n+' casos se comparó la variable entre '+cuantos+'.');
+      }
     }
 
     if(sig){
@@ -4954,7 +5904,7 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
         ? 'No hay detalle para graficar: la variable no varía en esta muestra.'
         : 'Sin datos suficientes para mostrar el detalle de esta asociación.')+'</div>';
     if(r.plot.type==='bar')   return detChi(r.plot);
-    if(r.plot.type==='strip') return detGrupos(r.plot);
+    if(r.plot.type==='strip') return detGrupos(r.plot, r);
     return detScatter(r.plot, r.p!=null && r.p<0.05);
   }
 
@@ -5135,9 +6085,12 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     const ref=refSel?refSel.value:'med';
     const verPw = ref!=='off';
     const pwCel = r=>{
+      /* El mensaje nombraba a Kruskal-Wallis fijo. Desde que el selector puede elegir
+         ANOVA, las filas de k grupos también caen acá y el tooltip habría nombrado un
+         test que esa fila no usó. Se nombra el método real. */
       if(!r.pw || r.p==null) return '<td style="text-align:right;color:var(--text-2);" title="'+
-        (r.p==null?'La asociación no se pudo calcular en este corte':
-         'El motor de poder no cubre Kruskal-Wallis con k grupos: estimarlo con la fórmula de dos grupos sería un número inventado')+'">—</td>';
+        esc(r.p==null?'La asociación no se pudo calcular en este corte':
+         'El motor de poder no cubre '+r.method+' con k grupos: estimarlo con la fórmula de dos grupos sería un número inventado')+'">—</td>';
       /* α fijo en 0,05 A PROPÓSITO, y dicho en el encabezado: es el mismo α con el que se
          calcularon el p y el q de esta tabla. Colgarlo del selector de la pestaña Poder
          haría que una columna cambie de valor por algo que el médico tocó en otra pantalla
@@ -5153,7 +6106,14 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     };
     let body='';
     rows.forEach((r,idx)=>{ body+='<tr class="asoc-fila" data-ri="'+idx+'" tabindex="0" aria-expanded="false" style="cursor:pointer;">'+
-      '<td><span class="asoc-chev" style="display:inline-block;width:12px;color:var(--text-2);">▸</span> '+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td>'+r.method+'</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td style="text-align:right;">'+pTxt(r.q)+'</td><td>'+r.ci+'</td>'+(verPw?pwCel(r):'')+'<td style="text-align:center;font-size:15px;" title="'+esc(SIG_TIT(r))+'">'+r.sig+'</td></tr>'; });
+      '<td><span class="asoc-chev" style="display:inline-block;width:12px;color:var(--text-2);">▸</span> '+r.lbl+'</td><td style="text-align:center;">'+r.n+'</td><td'+/* El método de las filas de comparación ya no es fijo: lo elige el selector según la
+   normalidad y el n de CADA grupo. Un test que cambia solo y no dice por qué es una
+   caja negra, así que el motivo viaja como tooltip en la propia celda, con los W y los
+   p de Shapiro-Wilk a la vista. El ° avisa que hay algo para leer: sin una marca
+   visible, un title no lo descubre nadie. */
+      (r.porque?' title="'+esc(r.porque)+'" style="cursor:help;"':'')+'>'+r.method+
+      (r.porque?'<span style="color:var(--text-2);font-size:10px;vertical-align:super;">&nbsp;°</span>':'')+
+      '</td><td>'+r.stat+'</td><td style="text-align:right;">'+pTxt(r.p)+'</td><td style="text-align:right;">'+pTxt(r.q)+'</td><td>'+r.ci+'</td>'+(verPw?pwCel(r):'')+'<td style="text-align:center;font-size:15px;" title="'+esc(SIG_TIT(r))+'">'+r.sig+'</td></tr>'; });
     host.innerHTML='<table class="est-tbl"><thead><tr><th>Asociación</th><th>N</th><th>Método</th><th>Estadístico</th><th>p</th><th title="p ajustado por comparaciones múltiples (Benjamini-Hochberg)">q (FDR)</th><th>IC 95%</th>'+
       (verPw?'<th title="'+esc('Análisis de sensibilidad: con el N de esa fila, probabilidad de detectar un efecto de referencia '+PW_ETIQ[ref]+
         '. NO es el poder del efecto observado, que sería una función del propio p y no agregaría información.')+
@@ -7597,7 +8557,15 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
   // ── exportar ──
   window.estExportXLSX=function(){ if(typeof XLSX==='undefined'){toast('❌ Excel (XLSX) no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} /* La columna q y el "sobrevive FDR" van en el archivo: esta planilla se manda a un
        coautor y "Significativo: Sí" sin el q ajustado se lee como hallazgo establecido. */
-    const H=['Categoría','Asociación','N','Método','Estadístico','p','q (FDR)','Sobrevive FDR','IC 95%','Semáforo']; const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.stat,pTxt(r.p),r.q!=null?pTxt(r.q):'—',r.p!=null?((r.q!=null&&r.q<0.05)?'Sí':'No'):'—',r.ci,SIG_TXT(r)])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
+    /* Dos columnas nuevas desde que el método lo elige el selector. «Motivo del método» es
+       la sección de Métodos entera (el n y el W/p de Shapiro-Wilk por grupo) y hasta ahora
+       vivía sólo como title= en pantalla: el coautor que recibe la planilla no tenía cómo
+       justificar por qué una fila usó una t y la siguiente un test de rangos. Y «Magnitud
+       del IC» separa el IC de un coeficiente del de una diferencia de medias en unidades
+       clínicas, que hasta ahora compartían la columna «IC 95%» sin distinguirse. */
+    const H=['Categoría','Asociación','N','Método','Motivo del método','Estadístico','p','q (FDR)','Sobrevive FDR','IC 95%','Magnitud del IC','Semáforo'];
+    const magIC=r=>(!r.ci||r.ci==='—')?'—':(r.coef!=null?'coeficiente':(r.test&&r.test.tipo==='t'?'diferencia de medias':'—'));
+    const aoa=[H,...rows.map(r=>[r.cat,r.lbl,r.n,r.method,r.porque||'—',r.stat,pTxt(r.p),r.q!=null?pTxt(r.q):'—',r.p!=null?((r.q!=null&&r.q<0.05)?'Sí':'No'):'—',r.ci,magIC(r),SIG_TXT(r)])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=H.map(h=>({wch:Math.max(12,h.length+2)})); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Asociaciones'); XLSX.writeFile(wb,'ceiboanalytics_asociaciones.xlsx'); toast('✅ Excel exportado'); };
   /* ─────────────────────────────────────────────────────────────────────────
      Exportación para R / SPSS / Stata
      Una fila por PACIENTE, no por estudio — el mismo criterio que rebuildCross():
@@ -8126,6 +9094,18 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
         nota_filtro_medico: medTxt ? 'Con filtro por profesional, un par cruzado entra sólo si ambos estudios son suyos; por eso el N cruzado es menor que el del servicio.' : null
       },
       descriptivas: desc,
+      /* Una sola nota global y NO el motivo fila por fila: sin esto, el modelo ve una
+         mezcla de métodos paramétricos y de rangos sin ninguna explicación y redacta la
+         sección de métodos como si los tests se hubieran elegido a dedo. El detalle por
+         fila (los W y los p de Shapiro-Wilk) está en la app, pero mandarlo multiplicaría
+         el payload por cada una de las asociaciones para decir casi siempre lo mismo. */
+      nota_seleccion_de_test: 'El método de cada comparación lo elige la app, no el autor: '+
+        'para cada variable continua se verifica la normalidad DENTRO de cada grupo con '+
+        'Shapiro-Wilk. Si todos los grupos tienen n>=30 y todos dan p>0,05, se usa el test '+
+        'paramétrico (t de Welch para dos grupos, ANOVA de una vía con post-hoc de Tukey '+
+        'para tres o más); si falla cualquiera de las dos condiciones, se usa el no '+
+        'paramétrico (Mann-Whitney o Kruskal-Wallis). Por eso conviven los dos tipos de '+
+        'test en la misma tabla, y así hay que describirlo en la sección de métodos.',
       asociaciones: _results.map(r=>({
         ambito: SCOPE_LBL[r.sc]||r.sc,
         asociacion: r.lbl, categoria: r.cat, metodo: r.method,
@@ -8135,6 +9115,15 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
            API y de ahí al abstract. */
         q_fdr: r.q!=null ? +r.q.toPrecision(3) : null,
         ic95: (r.ci&&r.ci!=='—') ? r.ci : null,
+        /* Sin esto, ic95:"[6.30, 11.90]" (ml/m² de diferencia de medias) y
+           ic95:"[0.12, 0.44]" (un ρ) llegan indistinguibles al mismo campo. */
+        ic95_magnitud: (!r.ci||r.ci==='—') ? null
+                     : (r.coef!=null ? 'coeficiente'
+                     : (r.test&&r.test.tipo==='t' ? 'diferencia de medias' : null)),
+        /* La dirección deja de ser inventable: va en el JSON o no se puede afirmar. */
+        medias_por_grupo: (r.test&&r.test.tipo==='t')
+          ? {[r.test.l1]: +r.test.m1.toPrecision(4), [r.test.l2]: +r.test.m2.toPrecision(4)}
+          : null,
         significativa: r.p!=null && r.p<0.05,
         sobrevive_fdr: sobreviveFDR(r),
         reserva: reservaTxt(r),
@@ -8156,7 +9145,18 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     '- Tené en cuenta el campo reserva: un Chi² con frecuencias esperadas menores a 5 no se arregla con más pacientes sino con test exacto.',
     '- Son datos de un solo servicio del interior de Uruguay: no generalices a la población nacional.',
     '- No cites literatura, autores, guías, revistas ni años salvo que se te pida explícitamente compararlos. Si citás, no inventes: si no estás seguro de una referencia, decilo. Una cita inventada en un borrador que después se publica es un problema serio para quien lo firma.',
-    '- Cuando el estadístico sea U (Mann-Whitney), H (Kruskal-Wallis) o χ² (Chi²), el JSON NO trae la dirección ni el tamaño del efecto. Decí que hay diferencia entre los grupos y nada más: no afirmes cuál grupo tiene el valor más alto ni en qué sentido va la asociación, porque no lo sabés y el sentido clínico esperable puede ser el contrario al de estos datos.',
+    /* La enumeración cubría los tres métodos que existían antes del selector automático.
+       Desde que puede elegir ANOVA, una fila manda "F=5.31 (gl=2,211)" y nada más: F es
+       siempre positivo y con k grupos no hay sentido posible, así que la regla no la
+       alcanzaba y el modelo quedaba habilitado a escribir "los pacientes con hipertrofia
+       alcanzaron menos METs" en el borrador de abstract, que es lo que se publica. */
+    '- Cuando el estadístico sea U (Mann-Whitney), H (Kruskal-Wallis), χ² (Chi²) o F (ANOVA de una vía), el JSON NO trae la dirección ni el tamaño del efecto. Decí que hay diferencia entre los grupos y nada más: no afirmes cuál grupo tiene el valor más alto ni en qué sentido va la asociación, porque no lo sabés y el sentido clínico esperable puede ser el contrario al de estos datos. Con F, además, el test dice sólo que AL MENOS UN grupo difiere: no nombres cuál ni cuántos.',
+    /* ic95 dejó de significar una sola cosa: en Pearson/Spearman es el IC de un
+       coeficiente adimensional, y en las filas de t de Welch es el IC de la diferencia de
+       medias en las unidades clínicas de la variable. Mismo nombre de campo, magnitudes
+       incomparables — y el modelo no tiene cómo distinguirlas sin que se lo digan. */
+    '- El campo ic95_magnitud dice qué mide el intervalo de esa fila: "coeficiente" es adimensional y va entre -1 y 1; "diferencia de medias" está en las unidades clínicas de la variable (ml/m², METs, mmHg, %). No los compares entre sí ni describas una diferencia de medias como si fuera una fuerza de asociación. Si ic95_magnitud es null, no hay intervalo y no lo inventes.',
+    '- En las filas donde el método sea "t de Welch", el JSON SÍ trae medias_por_grupo con el nombre de cada grupo: ahí la dirección se lee de esos dos números y sólo de ahí, nunca del signo del estadístico.',
     '- El total de estudios no es el total de pacientes: para el N usá pacientes_unicos_por_app y aclará la diferencia.',
     '- Escribí en español rioplatense, registro médico formal.'
   ].join('\n');
@@ -8735,7 +9735,12 @@ function modoActual(){
    —y no la que se esconde— porque un módulo nuevo tiene que aparecer en experto y
    NO en básico por omisión: al revés, cada módulo que sumáramos se colaría en el
    modo pensado para no abrumar. */
-const MODO_BASICO_VISIBLE = ['dashboard','asoc','ia'];
+/* `manual` es una excepción deliberada a la regla de arriba: el modo básico existe para
+   el que recién empieza, y esconderle justo el documento que explica cómo se usa la app
+   sería al revés. No agrega ruido analítico —no calcula nada— y es la salida natural
+   cuando alguien se traba. La Guía estadística sí queda fuera: explica métodos, no la
+   app, y en básico todavía no hay nada que interpretar. */
+const MODO_BASICO_VISIBLE = ['dashboard','asoc','ia','manual'];
 /* Lo que el modo básico esconde, en el orden del menú y con el nombre que se lee
    en él: la nota de abajo los enumera desde acá para no poder quedar vieja. */
 function modoOcultos(){
